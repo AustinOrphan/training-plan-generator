@@ -455,7 +455,12 @@ export interface WorkoutSegment {
   description: string;
   cadenceTarget?: number;
   heartRateTarget?: { min: number; max: number };
-  paceTarget?: { min: number; max: number }; // min/km
+  paceTarget?: { 
+    min: number; 
+    max: number; // min/km
+    effortBased?: boolean; // For Lydiard methodology - use effort over rigid pace
+    perceivedEffort?: number; // 1-10 scale for effort-based training
+  };
 }
 
 export interface WorkoutMetrics {

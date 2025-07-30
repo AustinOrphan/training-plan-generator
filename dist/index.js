@@ -24,13 +24,16 @@ __export(index_exports, {
   ENVIRONMENTAL_FACTORS: () => ENVIRONMENTAL_FACTORS,
   INTENSITY_MODELS: () => INTENSITY_MODELS,
   LOAD_THRESHOLDS: () => LOAD_THRESHOLDS,
+  METHODOLOGY_PHASE_TARGETS: () => METHODOLOGY_PHASE_TARGETS,
   PHASE_DURATION: () => PHASE_DURATION,
   PROGRESSION_RATES: () => PROGRESSION_RATES,
   RACE_DISTANCES: () => RACE_DISTANCES,
   RECOVERY_MULTIPLIERS: () => RECOVERY_MULTIPLIERS,
+  TRAINING_METHODOLOGIES: () => TRAINING_METHODOLOGIES,
   TRAINING_ZONES: () => TRAINING_ZONES,
   TrainingPlanGenerator: () => TrainingPlanGenerator,
   WORKOUT_DURATIONS: () => WORKOUT_DURATIONS,
+  WORKOUT_EMPHASIS: () => WORKOUT_EMPHASIS,
   WORKOUT_TEMPLATES: () => WORKOUT_TEMPLATES,
   analyzeWeeklyPatterns: () => analyzeWeeklyPatterns,
   calculateCriticalSpeed: () => calculateCriticalSpeed,
@@ -344,6 +347,149 @@ var ENVIRONMENTAL_FACTORS = {
     // 40-60%
     high: 0.95
     // >60%
+  }
+};
+var TRAINING_METHODOLOGIES = {
+  daniels: {
+    name: "Jack Daniels",
+    intensityDistribution: { easy: 80, moderate: 10, hard: 10 },
+    workoutPriorities: ["tempo", "vo2max", "threshold", "easy", "long_run"],
+    recoveryEmphasis: 0.7,
+    phaseTransitions: {
+      base: { duration: 8, focus: "aerobic" },
+      build: { duration: 6, focus: "threshold" },
+      peak: { duration: 3, focus: "vo2max" },
+      taper: { duration: 2, focus: "maintenance" }
+    }
+  },
+  lydiard: {
+    name: "Arthur Lydiard",
+    intensityDistribution: { easy: 85, moderate: 10, hard: 5 },
+    workoutPriorities: ["easy", "long_run", "hill_repeats", "tempo", "speed"],
+    recoveryEmphasis: 0.9,
+    phaseTransitions: {
+      base: { duration: 12, focus: "aerobic" },
+      build: { duration: 4, focus: "hills" },
+      peak: { duration: 4, focus: "speed" },
+      taper: { duration: 2, focus: "maintenance" }
+    }
+  },
+  pfitzinger: {
+    name: "Pete Pfitzinger",
+    intensityDistribution: { easy: 75, moderate: 15, hard: 10 },
+    workoutPriorities: ["threshold", "long_run", "tempo", "vo2max", "easy"],
+    recoveryEmphasis: 0.8,
+    phaseTransitions: {
+      base: { duration: 6, focus: "aerobic" },
+      build: { duration: 8, focus: "threshold" },
+      peak: { duration: 3, focus: "race_pace" },
+      taper: { duration: 2, focus: "maintenance" }
+    }
+  },
+  hudson: {
+    name: "Brad Hudson",
+    intensityDistribution: { easy: 70, moderate: 20, hard: 10 },
+    workoutPriorities: ["tempo", "fartlek", "long_run", "vo2max", "easy"],
+    recoveryEmphasis: 0.75,
+    phaseTransitions: {
+      base: { duration: 8, focus: "aerobic" },
+      build: { duration: 6, focus: "tempo" },
+      peak: { duration: 4, focus: "race_pace" },
+      taper: { duration: 2, focus: "maintenance" }
+    }
+  },
+  custom: {
+    name: "Custom",
+    intensityDistribution: { easy: 75, moderate: 15, hard: 10 },
+    workoutPriorities: ["easy", "tempo", "long_run", "vo2max", "threshold"],
+    recoveryEmphasis: 0.8,
+    phaseTransitions: {
+      base: { duration: 8, focus: "aerobic" },
+      build: { duration: 6, focus: "threshold" },
+      peak: { duration: 3, focus: "vo2max" },
+      taper: { duration: 2, focus: "maintenance" }
+    }
+  }
+};
+var WORKOUT_EMPHASIS = {
+  daniels: {
+    recovery: 1,
+    easy: 1.2,
+    tempo: 1.5,
+    threshold: 1.4,
+    vo2max: 1.3,
+    speed: 1.1,
+    long_run: 1.2
+  },
+  lydiard: {
+    recovery: 1,
+    easy: 1.5,
+    tempo: 1.1,
+    threshold: 1,
+    vo2max: 0.8,
+    speed: 0.9,
+    long_run: 1.4,
+    hill_repeats: 1.3
+  },
+  pfitzinger: {
+    recovery: 1,
+    easy: 1.3,
+    tempo: 1.2,
+    threshold: 1.5,
+    vo2max: 1.1,
+    speed: 1,
+    long_run: 1.3
+  },
+  hudson: {
+    recovery: 1,
+    easy: 1.2,
+    tempo: 1.4,
+    threshold: 1.2,
+    vo2max: 1.1,
+    speed: 1,
+    long_run: 1.2,
+    fartlek: 1.3
+  },
+  custom: {
+    recovery: 1,
+    easy: 1.2,
+    tempo: 1.2,
+    threshold: 1.2,
+    vo2max: 1.1,
+    speed: 1,
+    long_run: 1.2
+  }
+};
+var METHODOLOGY_PHASE_TARGETS = {
+  daniels: {
+    base: ["aerobic_capacity", "mitochondrial"],
+    build: ["lactate_threshold", "aerobic_power"],
+    peak: ["vo2max", "neuromuscular"],
+    taper: ["maintenance", "freshness"]
+  },
+  lydiard: {
+    base: ["aerobic_capacity", "capillarization"],
+    build: ["hill_strength", "aerobic_power"],
+    peak: ["speed", "neuromuscular"],
+    taper: ["maintenance", "freshness"]
+  },
+  pfitzinger: {
+    base: ["aerobic_capacity", "mitochondrial"],
+    build: ["lactate_threshold", "marathon_pace"],
+    peak: ["race_pace", "aerobic_power"],
+    taper: ["maintenance", "race_readiness"]
+  },
+  hudson: {
+    base: ["aerobic_capacity", "mitochondrial"],
+    build: ["tempo_endurance", "lactate_buffering"],
+    peak: ["race_pace", "neuromuscular"],
+    taper: ["maintenance", "freshness"]
+  },
+  custom: {
+    base: ["aerobic_capacity", "mitochondrial"],
+    build: ["lactate_threshold", "aerobic_power"],
+    peak: ["vo2max", "race_pace"],
+    taper: ["maintenance", "freshness"]
   }
 };
 
@@ -1139,13 +1285,16 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
   ENVIRONMENTAL_FACTORS,
   INTENSITY_MODELS,
   LOAD_THRESHOLDS,
+  METHODOLOGY_PHASE_TARGETS,
   PHASE_DURATION,
   PROGRESSION_RATES,
   RACE_DISTANCES,
   RECOVERY_MULTIPLIERS,
+  TRAINING_METHODOLOGIES,
   TRAINING_ZONES,
   TrainingPlanGenerator,
   WORKOUT_DURATIONS,
+  WORKOUT_EMPHASIS,
   WORKOUT_TEMPLATES,
   analyzeWeeklyPatterns,
   calculateCriticalSpeed,

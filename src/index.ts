@@ -4,3 +4,4 @@ export * from './generator';
 export * from './workouts';
 export * from './zones';
 export * from './constants';
+export * from './philosophies';
