@@ -273,7 +273,7 @@ declare class TrainingPlanGenerator {
     /**
      * Generate weekly microcycles for a training block
      */
-    private generateMicrocycles;
+    protected generateMicrocycles(block: TrainingBlock): WeeklyMicrocycle[];
     /**
      * Calculate progression factor for volume
      */

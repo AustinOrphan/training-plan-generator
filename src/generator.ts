@@ -167,7 +167,7 @@ export class TrainingPlanGenerator {
   /**
    * Generate weekly microcycles for a training block
    */
-  private generateMicrocycles(block: TrainingBlock): WeeklyMicrocycle[] {
+  protected generateMicrocycles(block: TrainingBlock): WeeklyMicrocycle[] {
     const microcycles: WeeklyMicrocycle[] = [];
     const baseVolume = this.fitness.weeklyMileage;
 
