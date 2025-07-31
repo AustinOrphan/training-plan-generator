@@ -3985,7 +3985,7 @@ class PfitsingerPhilosophy extends BaseTrainingPhilosophy {
    * Convert long run to tune-up race
    */
   private convertToRace(workout: PlannedWorkout, weeksToGoal: number): PlannedWorkout {
-    const raceDistance = weeksToGoal > 6 ? '15K' : '10K'; // Longer race earlier
+    const raceDistance = weeksToGoal > 6 ? '15k' : '10k'; // Longer race earlier
     
     const raceWorkout: Workout = {
       type: 'race_pace',

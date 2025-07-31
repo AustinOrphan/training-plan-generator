@@ -555,7 +555,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
         recovery: ['Active recovery', 'Reflection', 'Planning']
       },
       // Add other distances with reasonable defaults
-      '15K': {
+      '15k': {
         base: ['Aerobic capacity', 'Threshold', 'Mileage'],
         build: ['Threshold', 'Tempo', 'Race pace'],
         peak: ['Race pace', 'Endurance', 'Speed'],
@@ -623,7 +623,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
     const baseRecovery: Record<RaceDistance, number> = {
       '5k': 1,
       '10k': 1,
-      '15K': 1,
+      '15k': 1,
       'half-marathon': 2,
       'marathon': 3,
       '50K': 4,
@@ -645,7 +645,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
     const basePrep: Record<RaceDistance, number> = {
       '5k': 4,
       '10k': 6,
-      '15K': 8,
+      '15k': 8,
       'half-marathon': 8,
       'marathon': 12,
       '50K': 16,
@@ -786,7 +786,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
     const durations: Record<RaceDistance, number> = {
       '5k': 25,
       '10k': 50,
-      '15K': 80,
+      '15k': 80,
       'half-marathon': 110,
       'marathon': 240,
       '50K': 360,
@@ -805,7 +805,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
     const distances: Record<RaceDistance, number> = {
       '5k': 5,
       '10k': 10,
-      '15K': 15,
+      '15k': 15,
       'half-marathon': 21.1,
       'marathon': 42.2,
       '50K': 50,
@@ -824,7 +824,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
     const tssValues: Record<RaceDistance, number> = {
       '5k': 60,
       '10k': 100,
-      '15K': 140,
+      '15k': 140,
       'half-marathon': 180,
       'marathon': 300,
       '50K': 400,
@@ -893,7 +893,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
     const tuneUpMap: Record<RaceDistance, number> = {
       '5k': 5,
       '10k': 8,
-      '15K': 10,
+      '15k': 10,
       'half-marathon': 12,
       'marathon': 15,
       '50K': 20,
@@ -931,8 +931,9 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
         ...config.preferences
       },
       methodology: config.methodology || 'custom',
-      intensityDistribution: config.intensityDistribution,
-      periodization: config.periodization,
+      intensityDistribution: config.intensityDistribution || { easy: 80, moderate: 15, hard: 5 },
+      periodization: config.periodization || 'linear',
+      targetRaces: config.targetRaces || [],
       adaptationEnabled: config.adaptationEnabled || false,
       recoveryMonitoring: config.recoveryMonitoring || false,
       progressTracking: config.progressTracking || true,

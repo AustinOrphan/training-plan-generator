@@ -707,7 +707,7 @@ export const createMultiRacePlanConfig = (): AdvancedPlanConfig => {
     ...baseConfig,
     targetRaces: [
       createMockTargetRace({
-        distance: '10K',
+        distance: '10k',
         date: addDays(baseConfig.startDate, 8 * 7), // 8 weeks from start
         priority: 'B',
         location: 'Local 10K Race'
@@ -724,7 +724,7 @@ export const createMultiRacePlanConfig = (): AdvancedPlanConfig => {
       seasonEnd: addDays(baseConfig.startDate, 20 * 7), // 20 weeks total
       races: [
         createMockTargetRace({
-          distance: '10K',
+          distance: '10k',
           date: addDays(baseConfig.startDate, 8 * 7),
           priority: 'B'
         }),

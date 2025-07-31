@@ -569,7 +569,7 @@ export type TrainingMethodology = 'daniels' | 'lydiard' | 'pfitzinger' | 'hudson
 
 export type ExportFormat = 'pdf' | 'ical' | 'csv' | 'json';
 
-export type RaceDistance = '5k' | '10k' | 'half-marathon' | 'marathon' | 'ultra';
+export type RaceDistance = '5k' | '10k' | '15k' | 'half-marathon' | 'marathon' | '50K' | 'ultra';
 
 export interface TargetRace {
   distance: RaceDistance;
@@ -588,7 +588,7 @@ export interface TargetRace {
 export interface AdvancedPlanConfig extends TrainingPlanConfig {
   methodology: TrainingMethodology;
   intensityDistribution: IntensityDistribution;
-  periodization: 'linear' | 'block' | 'undulating';
+  periodization: 'linear' | 'block' | 'undulating' | 'reverse';
   targetRaces: TargetRace[];
   seasonGoals?: string[];
   adaptationEnabled?: boolean;
