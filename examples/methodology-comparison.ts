@@ -24,7 +24,8 @@ async function compareMethodologies() {
       vdot: 50, // Experienced runner
       weeklyMileage: 50, // Solid base
       longestRecentRun: 20,
-      trainingAge: 5
+      trainingAge: 5,
+      overallScore: 73 // VDOT: 62.5 + Volume: 50 + Experience: 100 + Recovery: 75 * weights = 73
     },
     
     preferences: {

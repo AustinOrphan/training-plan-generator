@@ -61,7 +61,8 @@ async function performanceMonitoringExample() {
       weeklyMileage: 45,
       longestRecentRun: 20,
       trainingAge: 4,
-      recoveryRate: 75
+      recoveryRate: 75,
+      overallScore: 55 // VDOT: 60 + Volume: 45 + Experience: 40 + Recovery: 75 * weights = 55
     },
     
     preferences: {

@@ -589,6 +589,13 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
         peak: ['Mental preparation', 'Logistics', 'Strategy'],
         taper: ['Complete rest', 'Recovery', 'Mental prep'],
         recovery: ['Extended recovery', 'Adaptation', 'Planning']
+      },
+      'ultra': {
+        base: ['Ultra endurance', 'Time on feet', 'Base building'],
+        build: ['Long sustained efforts', 'Nutrition', 'Mental training'],
+        peak: ['Race preparation', 'Strategy', 'Fueling'],
+        taper: ['Recovery', 'Preparation', 'Rest'],
+        recovery: ['Extended recovery', 'Regeneration']
       }
     };
     
@@ -629,7 +636,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '50k': 4,
       '50-mile': 6,
       '100k': 8,
-      '100-mile': 12
+      '100-mile': 12,
+      'ultra': 10
     };
     
     // Adjust based on priority (harder effort = more recovery)
@@ -651,7 +659,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '50k': 16,
       '50-mile': 20,
       '100k': 24,
-      '100-mile': 32
+      '100-mile': 32,
+      'ultra': 20
     };
     
     // Adjust based on priority
@@ -792,7 +801,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '50k': 360,
       '50-mile': 600,
       '100k': 840,
-      '100-mile': 1800
+      '100-mile': 1800,
+      'ultra': 600
     };
     
     return durations[distance] || 60;
@@ -811,7 +821,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '50k': 50,
       '50-mile': 80.5,
       '100k': 100,
-      '100-mile': 161
+      '100-mile': 161,
+      'ultra': 50
     };
     
     return distances[distance] || 10;
@@ -830,7 +841,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '50k': 400,
       '50-mile': 600,
       '100k': 800,
-      '100-mile': 1200
+      '100-mile': 1200,
+      'ultra': 500
     };
     
     return tssValues[distance] || 100;
@@ -899,7 +911,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '50k': 20,
       '50-mile': 30,
       '100k': 30,
-      '100-mile': 45
+      '100-mile': 45,
+      'ultra': 25
     };
     
     return tuneUpMap[distance] || 10;
@@ -931,7 +944,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
         ...config.preferences
       },
       methodology: config.methodology || 'custom',
-      intensityDistribution: config.intensityDistribution || { easy: 80, moderate: 15, hard: 5 },
+      intensityDistribution: config.intensityDistribution || { easy: 80, moderate: 15, hard: 5, veryHard: 0 },
       periodization: config.periodization || 'linear',
       targetRaces: config.targetRaces || [],
       adaptationEnabled: config.adaptationEnabled || false,

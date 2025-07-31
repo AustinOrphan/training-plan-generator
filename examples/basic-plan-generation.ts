@@ -29,7 +29,8 @@ async function basicPlanGeneration() {
       longestRecentRun: 15, // km
       trainingAge: 2, // years of consistent running
       injuryHistory: [], // No recent injuries
-      recoveryRate: 75 // Good recovery capacity
+      recoveryRate: 75, // Good recovery capacity
+      overallScore: 65 // VDOT: 56.3 + Volume: 30 + Experience: 40 + Recovery: 75 * weights = 65
     },
     
     // Training preferences

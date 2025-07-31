@@ -514,6 +514,7 @@ export interface IntensityDistribution {
   easy: number; // percentage
   moderate: number;
   hard: number;
+  veryHard: number;
 }
 
 // Run data for analysis

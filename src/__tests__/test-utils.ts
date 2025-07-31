@@ -165,22 +165,17 @@ export const createMockAdvancedPlanConfig = (overrides?: Partial<AdvancedPlanCon
   startDate: testDateUtils.createTestDate('2024-01-01'),
   // Add advanced features that tests expect
   multiRaceConfig: {
-    seasonStart: testDateUtils.createTestDate('2024-01-01'),
-    seasonEnd: testDateUtils.createTestDate('2024-12-31'),
-    races: [createMockTargetRace()],
-    buildPhaseLength: 8,
-    recoveryBetweenRaces: 2,
-    priorityRaceEmphasis: 70
+    primaryRace: 'half-marathon-april',
+    secondaryRaces: ['5k-march', '10k-june'],
+    peakingStrategy: 'single'
   },
   adaptationSettings: {
-    enabled: true,
-    sensitivityLevel: 'medium',
-    recoveryThreshold: 70,
-    workloadThreshold: 1.3,
-    autoAdjustments: false,
-    userApprovalRequired: true,
-    maxVolumeReduction: 20,
-    maxIntensityReduction: 15
+    sensitivity: 'medium',
+    autoAdjust: false,
+    thresholds: {
+      fatigue: 70,
+      improvement: 1.3
+    }
   },
   ...overrides
 });
@@ -218,68 +213,47 @@ export const createMockProgressData = (overrides?: Partial<ProgressData>): Progr
   // Create a strict ProgressData interface compliant object
   const strictProgressData: ProgressData = {
     date: startOfDay(new Date()),
-    completedWorkout: createMockCompletedWorkout(),
+    adherenceRate: 0.85,
+    completedWorkouts: [createMockCompletedWorkout()],
+    totalWorkouts: 5,
+    performanceTrend: 'improving',
+    volumeProgress: {
+      weeklyAverage: 40,
+      trend: 'increasing'
+    },
+    intensityDistribution: {
+      easy: 80,
+      moderate: 15,
+      hard: 4,
+      veryHard: 1
+    },
+    currentFitness: {
+      vdot: 52,
+      weeklyMileage: 40,
+      longestRecentRun: 20,
+      trainingAge: 3
+    },
+    lastUpdateDate: startOfDay(new Date()),
     perceivedExertion: 6,
     heartRateData: {
       resting: 55,
       average: 150,
-      maximum: 175,
-      zones: {
-        'RECOVERY': 5,
-        'EASY': 25,
-        'STEADY': 10,
-        'TEMPO': 5,
-        'THRESHOLD': 0,
-        'VO2_MAX': 0,
-        'NEUROMUSCULAR': 0
-      },
-      hrv: 45
+      maximum: 175
     },
-    recoveryMetrics: createMockRecoveryMetrics(),
     performanceMetrics: {
       vo2max: 52,
       lactateThreshold: 11.5,
-      runningEconomy: 185,
-      criticalSpeed: 13.0,
-      powerAtThreshold: 280,
-      recentRaceTimes: {
-        '5K': { hours: 0, minutes: 20, seconds: 30 },
-        '10K': { hours: 0, minutes: 42, seconds: 15 }
-      }
+      runningEconomy: 185
     },
     notes: 'Good workout, felt strong',
     ...overrides
   };
 
   // Add backward compatibility fields for existing tests that expect them
-  // These are not part of the interface but some tests may still reference them
   const extendedData = createExtendedProgressData(strictProgressData, {
     fitnessChange: 2.5,
     trend: 'improving'
   });
-  extendedData.consistencyScore = 85;
-  extendedData.adherenceRate = 0.9;
-  extendedData.overreachingRisk = 25;
-  extendedData.recoveryTrend = 'stable';
-  extendedData.completedWorkouts = [];
-  extendedData.totalWorkouts = 20;
-  extendedData.currentFitness = {
-    vdot: 52,
-    weeklyMileage: 40,
-    longestRecentRun: 20,
-    trainingAge: 3
-  };
-  extendedData.lastUpdateDate = startOfDay(new Date());
-  extendedData.volumeProgress = {
-    weeklyAverage: 40,
-    trend: 'increasing'
-  };
-  extendedData.intensityDistribution = {
-    easy: 80,
-    moderate: 15,
-    hard: 5
-  };
-  extendedData.performanceTrend = 'improving';
 
   return extendedData;
 };
@@ -302,13 +276,10 @@ export const createMockCompletedWorkout = (overrides?: Partial<CompletedWorkout>
   };
 
   // Add backward compatibility fields for existing tests that expect them
-  // These are not part of the interface but some tests may still reference them
   const extendedData = createExtendedCompletedWorkout(strictCompletedWorkout, {
     workoutId: `workout-${Date.now()}`,
     date: startOfDay(new Date())
   });
-  extendedData.notes = 'Workout completed successfully';
-  extendedData.perceivedEffort = 6;
   // Note: plannedDuration is NOT included - tests should use plannedWorkout.targetMetrics.duration
 
   return extendedData;
@@ -328,14 +299,10 @@ export const createMockRecoveryMetrics = (overrides?: Partial<RecoveryMetrics>):
   };
 
   // Add backward compatibility fields for existing tests that expect them
-  // These are not part of the interface but some tests may still reference them
   const extendedData = createExtendedRecoveryMetrics(strictRecoveryMetrics, {
     injuryStatus: 'healthy',
     restingHR: 55
   });
-  extendedData.hrv = 45;
-  extendedData.notes = 'Feeling good';
-  extendedData.date = new Date();
   // Note: illnessStatus is NOT included - it's not part of RecoveryMetrics interface
 
   return extendedData;
@@ -355,23 +322,22 @@ export const generateProgressSequence = (
     const improvement = week * 0.5; // Gradual VDOT improvement
     const recoveryVariation = Math.sin(week * 0.5) * 10; // Variation in recovery
     
-    progressData.push(createMockProgressData({
+    const baseProgressData = createMockProgressData({
       date: startOfDay(subDays(new Date(), (weeks - week) * 7)),
       performanceMetrics: {
         vo2max: startingVDOT + improvement,
         lactateThreshold: 11.0 + (improvement * 0.1),
-        runningEconomy: 190 - improvement,
-        criticalSpeed: 12.0 + (improvement * 0.1)
+        runningEconomy: 190 - improvement
       },
-      recoveryMetrics: createMockRecoveryMetrics({
-        recoveryScore: 75 + recoveryVariation,
-        energyLevel: 7 + Math.floor(recoveryVariation / 10),
-        motivation: 8 + Math.floor(recoveryVariation / 10)
-      }),
-      fitnessChange: improvement,
-      trend: improvement > 0 ? 'improving' : 'stable',
       adherenceRate: 0.85 + (week * 0.01)
-    }));
+    });
+    
+    const extendedProgressData = createExtendedProgressData(baseProgressData, {
+      fitnessChange: improvement,
+      trend: improvement > 0 ? 'improving' : 'stable'
+    });
+    
+    progressData.push(extendedProgressData);
   }
   
   return progressData;
@@ -397,14 +363,9 @@ export const generateCompletedWorkouts = (
       const duration = 30 + Math.random() * 60; // 30-90 min
       const distance = duration * 0.2; // ~12min/mile average pace
       
-      completedWorkouts.push(createMockCompletedWorkout({
-        workoutId: `workout-${week}-${workout}`,
-        date: workoutDate,
+      const baseWorkout = createMockCompletedWorkout({
         actualDuration: duration,
         actualDistance: distance,
-        perceivedEffort: effortLevel,
-        plannedDuration: duration + (Math.random() * 10 - 5), // ±5 min variance
-        notes: effortLevel > 7 ? 'Challenging workout' : 'Good workout',
         avgHeartRate: 130 + (effortLevel * 10),
         plannedWorkout: createMockPlannedWorkout({
           id: `planned-${week}-${workout}`,
@@ -417,11 +378,22 @@ export const generateCompletedWorkouts = (
             load: duration * 0.8
           }
         })
-      }));
+      });
+      
+      const extendedWorkout = createExtendedCompletedWorkout(baseWorkout, {
+        workoutId: `workout-${week}-${workout}`,
+        date: workoutDate
+      });
+      
+      completedWorkouts.push(extendedWorkout);
     }
   }
   
-  return completedWorkouts.sort((a, b) => a.date.getTime() - b.date.getTime());
+  return completedWorkouts.sort((a, b) => {
+    const aDate = (a as any).date || a.plannedWorkout.date;
+    const bDate = (b as any).date || b.plannedWorkout.date;
+    return aDate.getTime() - bDate.getTime();
+  });
 };
 
 /**
@@ -474,28 +446,26 @@ export const createMockPlannedWorkout = (overrides?: Partial<PlannedWorkout>): P
     duration: 45,
     distance: 8,
     intensity: 65,
-    pace: { min: 5.0, max: 5.5 },
-    heartRate: { min: 140, max: 155 },
     tss: 50,
     load: 50
   },
   workout: {
     type: 'easy',
-    primaryZone: { name: 'EASY' },
+    primaryZone: { name: 'EASY', rpe: 2, description: 'Easy aerobic pace', purpose: 'Aerobic base development' },
     segments: [{
       duration: 5,
       intensity: 60,
-      zone: { name: 'EASY' },
+      zone: { name: 'EASY', rpe: 2, description: 'Easy aerobic pace', purpose: 'Aerobic base development' },
       description: 'Warm-up'
     }, {
       duration: 35,
       intensity: 65,
-      zone: { name: 'EASY' },
+      zone: { name: 'EASY', rpe: 2, description: 'Easy aerobic pace', purpose: 'Aerobic base development' },
       description: 'Main set'
     }, {
       duration: 5,
       intensity: 60,
-      zone: { name: 'EASY' },
+      zone: { name: 'EASY', rpe: 2, description: 'Easy aerobic pace', purpose: 'Aerobic base development' },
       description: 'Cool-down'
     }],
     adaptationTarget: 'Aerobic base',
@@ -672,28 +642,28 @@ export const createMockPlanSummary = (weeks: number): any => ({
       weeks: Math.floor(weeks * 0.4),
       focus: ['aerobic', 'base building'],
       volumeProgression: [30, 35, 40, 45],
-      intensityDistribution: { easy: 85, moderate: 10, hard: 5 }
+      intensityDistribution: { easy: 85, moderate: 10, hard: 4, veryHard: 1 }
     },
     {
       phase: 'build' as const,
       weeks: Math.floor(weeks * 0.4),
       focus: ['threshold', 'tempo'],
       volumeProgression: [45, 50, 55, 50],
-      intensityDistribution: { easy: 75, moderate: 20, hard: 5 }
+      intensityDistribution: { easy: 75, moderate: 20, hard: 4, veryHard: 1 }
     },
     {
       phase: 'peak' as const,
       weeks: Math.floor(weeks * 0.15),
       focus: ['speed', 'race pace'],
       volumeProgression: [55, 60, 50],
-      intensityDistribution: { easy: 70, moderate: 15, hard: 15 }
+      intensityDistribution: { easy: 70, moderate: 15, hard: 12, veryHard: 3 }
     },
     {
       phase: 'taper' as const,
       weeks: Math.floor(weeks * 0.05) || 1,
       focus: ['recovery', 'race preparation'],
       volumeProgression: [40, 30],
-      intensityDistribution: { easy: 80, moderate: 15, hard: 5 }
+      intensityDistribution: { easy: 80, moderate: 15, hard: 4, veryHard: 1 }
     }
   ]
 });
@@ -721,23 +691,9 @@ export const createMultiRacePlanConfig = (): AdvancedPlanConfig => {
       })
     ],
     multiRaceConfig: {
-      seasonStart: baseConfig.startDate,
-      seasonEnd: addDays(baseConfig.startDate, 20 * 7), // 20 weeks total
-      races: [
-        createMockTargetRace({
-          distance: '10k',
-          date: addDays(baseConfig.startDate, 8 * 7),
-          priority: 'B'
-        }),
-        createMockTargetRace({
-          distance: 'half-marathon',
-          date: addDays(baseConfig.startDate, 16 * 7),
-          priority: 'A'
-        })
-      ],
-      buildPhaseLength: 6,
-      recoveryBetweenRaces: 2,
-      priorityRaceEmphasis: 75 // 75% emphasis on A races
+      primaryRace: 'half-marathon-goal',
+      secondaryRaces: ['10k-mid', 'marathon-end'],
+      peakingStrategy: 'multiple'
     }
   };
 };
@@ -842,16 +798,18 @@ export const validateDateRange = (startDate: Date, endDate: Date, expectedWeeks:
 
 export const validateIntensityDistribution = (
   workouts: PlannedWorkout[], 
-  expectedDistribution: { easy: number; moderate: number; hard: number }
+  expectedDistribution: { easy: number; moderate: number; hard: number; veryHard: number }
 ) => {
   const total = workouts.length;
   const easyCount = workouts.filter(w => ['recovery', 'easy'].includes(w.type)).length;
   const moderateCount = workouts.filter(w => ['steady', 'tempo'].includes(w.type)).length;
   const hardCount = workouts.filter(w => ['threshold', 'vo2max', 'speed'].includes(w.type)).length;
+  const veryHardCount = workouts.filter(w => ['hill_repeats', 'fartlek'].includes(w.type)).length;
   
   const actualEasy = (easyCount / total) * 100;
   const actualModerate = (moderateCount / total) * 100;
   const actualHard = (hardCount / total) * 100;
+  const actualVeryHard = (veryHardCount / total) * 100;
   
   // Allow much higher tolerance for generated plans - they may not exactly match theoretical distributions
   // Easy workouts should be at least 50% and no more than 90%
@@ -2104,11 +2062,7 @@ export const createCompliantMockData = {
    * Create compliant ProgressData using the updated generator
    */
   progressData: (overrides?: Partial<ProgressData>): ProgressData => {
-    return createMockProgressData({
-      ...overrides,
-      // Ensure we use compliant recovery metrics
-      recoveryMetrics: overrides?.recoveryMetrics || createMockRecoveryMetrics()
-    });
+    return createMockProgressData(overrides);
   },
 
   /**

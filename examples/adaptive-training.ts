@@ -24,7 +24,8 @@ async function adaptiveTrainingExample() {
       weeklyMileage: 40,
       longestRecentRun: 22,
       trainingAge: 4,
-      recoveryRate: 72
+      recoveryRate: 72,
+      overallScore: 69 // VDOT: 58.8 + Volume: 40 + Experience: 80 + Recovery: 72 * weights = 69
     },
     
     preferences: {
