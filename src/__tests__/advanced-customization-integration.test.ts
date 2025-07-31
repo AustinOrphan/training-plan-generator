@@ -426,7 +426,7 @@ describe('Advanced Customization Integration Tests', () => {
     it('should provide safe customization options when conflicts arise', async () => {
       // Create a configuration that conflicts with Lydiard principles
       const conflictingConfig = createCustomizationTestConfig('lydiard', {
-        intensity: { easy: 60, moderate: 20, hard: 20 }, // Violates 85%+ easy
+        intensity: { easy: 60, moderate: 20, hard: 15, veryHard: 5 }, // Violates 85%+ easy
         volume: { weeklyHours: 15, progressionRate: 0.20 } // Too aggressive
       });
       
@@ -1073,7 +1073,7 @@ describe('Advanced Customization Integration Tests', () => {
     it('should handle invalid or extreme customization requests gracefully', async () => {
       // Test extreme intensity request
       const extremeIntensityConfig = createCustomizationTestConfig('lydiard', {
-        intensity: { easy: 20, moderate: 30, hard: 50 } // Completely wrong for Lydiard
+        intensity: { easy: 20, moderate: 30, hard: 40, veryHard: 10 } // Completely wrong for Lydiard
       });
       
       const conflicts = conflictResolver.resolveConflicts(extremeIntensityConfig, 'lydiard');

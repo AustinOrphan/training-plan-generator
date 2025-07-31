@@ -636,6 +636,11 @@ export interface ProgressData {
   };
   lastUpdateDate: Date;
   
+  // Additional analysis metrics
+  consistencyScore?: number; // 0-100 training consistency rating
+  overreachingRisk?: number; // 0-100 risk of overreaching
+  recoveryTrend?: 'improving' | 'stable' | 'declining'; // Recovery pattern analysis
+  
   // Optional legacy fields for backward compatibility
   perceivedExertion?: number; // 1-10
   heartRateData?: {
@@ -661,6 +666,10 @@ export interface CompletedWorkout {
   completionRate: number; // 0-1
   adherence: 'none' | 'partial' | 'complete';
   difficultyRating: number; // 1-10
+  date: Date; // When the workout was completed
+  perceivedEffort?: number; // 1-10 RPE scale
+  notes?: string; // User notes about the workout
+  workoutId?: string; // Reference to planned workout ID
 }
 
 export interface RecoveryMetrics {
@@ -671,4 +680,8 @@ export interface RecoveryMetrics {
   muscleSoreness: number; // 1-10
   energyLevel: number; // 1-10
   motivation: number; // 1-10
+  hrv?: number; // Heart rate variability
+  restingHR?: number; // Resting heart rate
+  notes?: string; // Additional recovery notes
+  date?: Date; // Date of recovery measurement
 }

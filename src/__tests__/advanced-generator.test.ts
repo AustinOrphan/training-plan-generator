@@ -94,7 +94,7 @@ describe('AdvancedTrainingPlanGenerator', () => {
       // Use the configured intensity distribution instead of accessing private philosophy
       validateIntensityDistribution(
         plan.workouts, 
-        mockConfig.intensityDistribution || { easy: 80, moderate: 15, hard: 5 }
+        mockConfig.intensityDistribution || { easy: 80, moderate: 15, hard: 4, veryHard: 1 }
       );
     });
 

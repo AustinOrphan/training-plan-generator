@@ -400,24 +400,28 @@ export class SmartAdaptationEngine implements AdaptationEngine {
     easy: number;
     moderate: number;
     hard: number;
+    veryHard: number;
   } {
     let easy = 0;
     let moderate = 0;
     let hard = 0;
+    let veryHard = 0;
     
     completed.forEach(workout => {
       const effort = workout.perceivedEffort || 5;
-      if (effort <= 4) easy++;
-      else if (effort <= 7) moderate++;
-      else hard++;
+      if (effort <= 3) easy++;
+      else if (effort <= 6) moderate++;
+      else if (effort <= 8) hard++;
+      else veryHard++;
     });
     
-    const total = easy + moderate + hard || 1;
+    const total = easy + moderate + hard + veryHard || 1;
     
     return {
       easy: Math.round((easy / total) * 100),
       moderate: Math.round((moderate / total) * 100),
-      hard: Math.round((hard / total) * 100)
+      hard: Math.round((hard / total) * 100),
+      veryHard: Math.round((veryHard / total) * 100)
     };
   }
   

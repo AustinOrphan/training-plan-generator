@@ -48,7 +48,7 @@ describe('MethodologyConflictResolver', () => {
     it('should identify intensity distribution conflicts for Daniels methodology', () => {
       const config = createMockAdvancedPlanConfig({
         methodology: 'daniels',
-        intensity: { easy: 70, moderate: 20, hard: 10 } // Below 80% easy
+        intensity: { easy: 70, moderate: 20, hard: 9, veryHard: 1 } // Below 80% easy
       });
 
       const result = resolver.resolveConflicts(config, 'daniels');
@@ -63,7 +63,7 @@ describe('MethodologyConflictResolver', () => {
     it('should identify intensity distribution conflicts for Lydiard methodology', () => {
       const config = createMockAdvancedPlanConfig({
         methodology: 'lydiard',
-        intensity: { easy: 75, moderate: 15, hard: 10 } // Below 85% easy
+        intensity: { easy: 75, moderate: 15, hard: 9, veryHard: 1 } // Below 85% easy
       });
 
       const result = resolver.resolveConflicts(config, 'lydiard');
@@ -91,7 +91,7 @@ describe('MethodologyConflictResolver', () => {
     it('should identify safety violations for high volume + high intensity', () => {
       const config = createMockAdvancedPlanConfig({
         volume: { weeklyHours: 20 },
-        intensity: { easy: 70, moderate: 5, hard: 25 } // High intensity
+        intensity: { easy: 70, moderate: 5, hard: 20, veryHard: 5 } // High intensity
       });
 
       const result = resolver.resolveConflicts(config, 'daniels');
@@ -248,7 +248,7 @@ describe('MethodologyConflictResolver', () => {
     it('should check principle preservation for Daniels methodology', () => {
       const config = createMockAdvancedPlanConfig({
         methodology: 'daniels',
-        intensity: { easy: 80, moderate: 15, hard: 5 } // Good Daniels distribution
+        intensity: { easy: 80, moderate: 15, hard: 4, veryHard: 1 } // Good Daniels distribution
       });
 
       const preservation = resolver.checkPrinciplePreservation(config, 'daniels');
@@ -262,7 +262,7 @@ describe('MethodologyConflictResolver', () => {
     it('should check principle preservation for Lydiard methodology', () => {
       const config = createMockAdvancedPlanConfig({
         methodology: 'lydiard',
-        intensity: { easy: 85, moderate: 10, hard: 5 } // Good Lydiard distribution
+        intensity: { easy: 85, moderate: 10, hard: 4, veryHard: 1 } // Good Lydiard distribution
       });
 
       const preservation = resolver.checkPrinciplePreservation(config, 'lydiard');
@@ -274,7 +274,7 @@ describe('MethodologyConflictResolver', () => {
     it('should identify principle violations', () => {
       const config = createMockAdvancedPlanConfig({
         methodology: 'lydiard',
-        intensity: { easy: 60, moderate: 20, hard: 20 } // Major violations
+        intensity: { easy: 60, moderate: 20, hard: 15, veryHard: 5 } // Major violations
       });
 
       const preservation = resolver.checkPrinciplePreservation(config, 'lydiard');
@@ -287,7 +287,7 @@ describe('MethodologyConflictResolver', () => {
       // High integrity config
       const goodConfig = createMockAdvancedPlanConfig({
         methodology: 'daniels',
-        intensity: { easy: 80, moderate: 15, hard: 5 }
+        intensity: { easy: 80, moderate: 15, hard: 4, veryHard: 1 }
       });
 
       const goodPreservation = resolver.checkPrinciplePreservation(goodConfig, 'daniels');
@@ -296,7 +296,7 @@ describe('MethodologyConflictResolver', () => {
       // Poor integrity config
       const badConfig = createMockAdvancedPlanConfig({
         methodology: 'daniels',
-        intensity: { easy: 50, moderate: 25, hard: 25 }
+        intensity: { easy: 50, moderate: 25, hard: 20, veryHard: 5 }
       });
 
       const badPreservation = resolver.checkPrinciplePreservation(badConfig, 'daniels');
@@ -347,7 +347,7 @@ describe('MethodologyConflictResolver', () => {
     it('should recommend proceed for safe configurations', () => {
       const safeConfig = createMockAdvancedPlanConfig({
         methodology: 'daniels',
-        intensity: { easy: 80, moderate: 15, hard: 5 },
+        intensity: { easy: 80, moderate: 15, hard: 4, veryHard: 1 },
         volume: { progressionRate: 0.08 }
       });
 
@@ -380,7 +380,7 @@ describe('MethodologyConflictResolver', () => {
   describe('Customization Validation', () => {
     it('should validate customizations against methodology principles', () => {
       const customization = {
-        intensity: { easy: 85, moderate: 10, hard: 5 }
+        intensity: { easy: 85, moderate: 10, hard: 4, veryHard: 1 }
       };
 
       const validation = resolver.validateCustomization(customization, 'lydiard');
@@ -417,7 +417,7 @@ describe('MethodologyConflictResolver', () => {
     it('should handle configurations with no conflicts', () => {
       const perfectConfig = createMockAdvancedPlanConfig({
         methodology: 'daniels',
-        intensity: { easy: 80, moderate: 15, hard: 5 },
+        intensity: { easy: 80, moderate: 15, hard: 4, veryHard: 1 },
         volume: { progressionRate: 0.08 },
         recovery: { emphasis: 0.8 }
       });
@@ -472,7 +472,7 @@ describe('MethodologyConflictResolver', () => {
     it('should maintain performance with complex configurations', () => {
       const complexConfig = createMockAdvancedPlanConfig({
         methodology: 'pfitzinger',
-        intensity: { easy: 75, moderate: 15, hard: 10 },
+        intensity: { easy: 75, moderate: 15, hard: 9, veryHard: 1 },
         volume: { weeklyHours: 12, progressionRate: 0.12 },
         recovery: { emphasis: 0.75, restDays: 2 }
       });
