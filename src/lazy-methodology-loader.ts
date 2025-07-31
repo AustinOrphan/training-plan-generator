@@ -5,6 +5,20 @@
  * and performance monitoring to meet strict performance requirements.
  */
 
+// Missing type definitions
+export interface PerformanceMetrics {
+  loadTime: number;
+  memoryUsage: number;
+  cacheHits: number;
+  cacheMisses: number;
+}
+
+export interface MethodologyFeatureSet {
+  features: string[];
+  level: 'basic' | 'intermediate' | 'advanced';
+  capabilities: Record<string, boolean>;
+}
+
 import { TrainingMethodology, TrainingPhase, FitnessAssessment, AdvancedPlanConfig } from './types';
 import { TrainingPhilosophy } from './philosophies';
 import { CalculationProfiler, MemoryMonitor } from './calculation-cache';

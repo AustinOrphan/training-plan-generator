@@ -17,10 +17,50 @@ import { calculateVDOTCached } from './calculation-cache';
 import { TRAINING_ZONES, calculateTrainingPaces } from './zones';
 import { differenceInWeeks } from 'date-fns';
 
-// Temporary type definitions for missing types
-type DanielsTrainingPaces = Record<string, number>;
-type WeeklyMicrocycle = any; // Will be defined properly later
-type TrainingZone = any; // Will be defined properly later
+// Training methodology type definitions
+export type DanielsTrainingPaces = Record<string, number>;
+export type PfitzingerTrainingPaces = Record<string, number>;
+export type WeeklyMicrocycle = any; // Will be defined properly later
+export type TrainingZone = any; // Will be defined properly later
+
+// Weekly variation types
+export interface WeeklyVariation {
+  week: number;
+  volumeMultiplier: number;
+  intensityFocus: string[];
+  restDays: number;
+  keyWorkouts: string[];
+}
+
+// Pfitzinger specific types
+export interface PfitzingerWeeklyStructure {
+  baseVolume: number;
+  qualityDays: number;
+  recoveryDays: number;
+  mediumLongRuns: number;
+}
+
+export interface RaceSpecificIntegration {
+  raceDistance: string;
+  preparationWeeks: number;
+  tapering: {
+    duration: number;
+    volumeReduction: number;
+  };
+}
+
+export interface PaceRange {
+  min: number;
+  max: number;
+}
+
+// Temporary WorkoutSegment definition (should be imported from types)
+export interface WorkoutSegment {
+  duration: number;
+  intensity: number;
+  description: string;
+  zone?: any;
+}
 
 /**
  * Core interface for training philosophies

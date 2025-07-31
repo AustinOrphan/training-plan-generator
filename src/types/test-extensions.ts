@@ -41,8 +41,6 @@ export interface ExtendedProgressData extends ProgressData {
 export interface ExtendedCompletedWorkout extends CompletedWorkout {
   /** Legacy workout ID field for backward compatibility */
   workoutId?: string;
-  /** Explicit date field for tests */
-  date?: Date;
   /** Test-specific validation markers */
   testMarkers?: {
     isValidationTest?: boolean;

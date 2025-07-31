@@ -8,7 +8,8 @@
  * @fileoverview Type definitions for methodology caching system with generic constraints
  */
 
-import { TrainingMethodology, TrainingPhilosophy } from '../types.js';
+import { TrainingMethodology } from '../types.js';
+import { TrainingPhilosophy } from '../philosophies.js';
 
 /**
  * Generic cache entry interface with typed value and metadata

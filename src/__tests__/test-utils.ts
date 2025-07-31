@@ -273,14 +273,15 @@ export const createMockCompletedWorkout = (overrides?: Partial<CompletedWorkout>
     completionRate: 1.0,
     adherence: 'complete',
     difficultyRating: 6,
+    date: startOfDay(new Date()), // Required field in CompletedWorkout interface
+    perceivedEffort: 6,
+    notes: 'Test workout completion',
+    workoutId: `workout-${Date.now()}`,
     ...overrides
   };
 
   // Add backward compatibility fields for existing tests that expect them
-  const extendedData = createExtendedCompletedWorkout(strictCompletedWorkout, {
-    workoutId: `workout-${Date.now()}`,
-    date: startOfDay(new Date())
-  });
+  const extendedData = createExtendedCompletedWorkout(strictCompletedWorkout, {});
   // Note: plannedDuration is NOT included - tests should use plannedWorkout.targetMetrics.duration
 
   return extendedData;
@@ -1129,6 +1130,8 @@ export const trainingPlanConfigMockGenerator: MockGenerator<TrainingPlanConfig> 
   },
   
   schema: {
+    name: 'TrainingPlanConfig',
+    required: ['name', 'goal', 'startDate', 'targetDate', 'currentFitness'],
     validate: (data: unknown): TypedResult<TrainingPlanConfig, TypeValidationError> => {
       if (typeof data !== 'object' || data === null) {
         return { success: false, error: new TypeValidationError('Expected object', 'TrainingPlanConfig', data) };
@@ -1180,6 +1183,8 @@ export const advancedPlanConfigMockGenerator: MockGenerator<AdvancedPlanConfig> 
   },
   
   schema: {
+    name: 'AdvancedPlanConfig',
+    required: ['methodology', 'name', 'goal', 'startDate', 'targetDate', 'currentFitness'],
     validate: (data: unknown): TypedResult<AdvancedPlanConfig, TypeValidationError> => {
       const baseValidation = trainingPlanConfigMockGenerator.schema.validate(data);
       if (!baseValidation.success) {
@@ -1231,6 +1236,8 @@ export const plannedWorkoutMockGenerator: MockGenerator<PlannedWorkout> = {
   },
   
   schema: {
+    name: 'PlannedWorkout',
+    required: ['id', 'date', 'type', 'name', 'description', 'workout', 'targetMetrics'],
     validate: (data: unknown): TypedResult<PlannedWorkout, TypeValidationError> => {
       if (typeof data !== 'object' || data === null) {
         return { success: false, error: new TypeValidationError('Expected object', 'PlannedWorkout', data) };
