@@ -454,12 +454,14 @@ export class TrainingPlanGenerator {
     let easy = 0;
     let moderate = 0;
     let hard = 0;
+    let veryHard = 0;
 
     workouts.forEach(workout => {
       const intensity = workout.targetMetrics.intensity;
       if (intensity < 75) easy++;
       else if (intensity < 88) moderate++;
-      else hard++;
+      else if (intensity < 95) hard++;
+      else veryHard++;
     });
 
     const total = workouts.length;
@@ -467,6 +469,7 @@ export class TrainingPlanGenerator {
       easy: Math.round((easy / total) * 100),
       moderate: Math.round((moderate / total) * 100),
       hard: Math.round((hard / total) * 100),
+      veryHard: Math.round((veryHard / total) * 100),
     };
   }
 

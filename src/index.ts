@@ -23,3 +23,8 @@ export * from './philosophies';
 // Export with explicit name resolution for conflicting types
 export * from './export';
 export { ValidationResult as CoreValidationResult } from './validation';
+
+// Workout Progression and Selection System
+export * from './workout-progression-system';
+export * from './methodology-workout-selector';
+export * from './custom-workout-generator';
