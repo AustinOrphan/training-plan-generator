@@ -15,6 +15,7 @@ import {
   TrainingMethodology,
   ExportFormat
 } from '../types';
+import { TypedResult, TypeValidationError } from '../types/base-types';
 import type { 
   MockGenerator, 
   TestConfig, 
@@ -385,7 +386,7 @@ export const generateCompletedWorkouts = (
         date: workoutDate
       });
       
-      completedWorkouts.push(extendedWorkout);
+      completedWorkouts.push(extendedWorkout as CompletedWorkout);
     }
   }
   
@@ -845,19 +846,19 @@ export const adaptationMethodMappings: AdaptationMethodMapping[] = [
   {
     testMethod: 'assessFatigueLevel',
     actualMethod: 'analyzeProgress',
-    parameterTransform: (params) => {
+    parameterTransform: <T extends unknown[], R extends unknown[]>(params: T): R => {
       // Transform test parameters to actual method parameters
       const [completedWorkouts, plannedWorkouts] = params;
-      return [completedWorkouts || [], plannedWorkouts || []];
+      return [completedWorkouts || [], plannedWorkouts || []] as R;
     }
   },
   {
     testMethod: 'recommendModifications',
     actualMethod: 'suggestModifications',
-    parameterTransform: (params) => {
+    parameterTransform: <T extends unknown[], R extends unknown[]>(params: T): R => {
       // Transform test parameters to actual method parameters
       const [plan, progress, recovery] = params;
-      return [plan, progress, recovery];
+      return [plan, progress, recovery] as R;
     }
   }
 ];
@@ -1017,7 +1018,7 @@ export const testHelpers = {
   createViaFactory: <T>(type: 'philosophy' | 'adaptation' | 'exporter', ...args: unknown[]): T => {
     switch (type) {
       case 'philosophy':
-        return PhilosophyFactory.create(args[0]) as unknown as T;
+        return PhilosophyFactory.create(args[0] as TrainingMethodology) as unknown as T;
       case 'adaptation':
         return new SmartAdaptationEngine() as unknown as T;
       case 'exporter':
@@ -1064,19 +1065,36 @@ export const fitnessAssessmentMockGenerator: MockGenerator<FitnessAssessment> = 
   },
   
   validate: (instance: FitnessAssessment): boolean => {
-    return instance.vdot > 0 && 
-           instance.criticalSpeed > 0 && 
-           instance.lactateThreshold > 0 && 
+    return (instance.vdot ?? 0) > 0 && 
+           (instance.criticalSpeed ?? 0) > 0 && 
+           (instance.lactateThreshold ?? 0) > 0 && 
            instance.weeklyMileage >= 0 &&
-           instance.trainingAge >= 0;
+           (instance.trainingAge ?? 0) >= 0;
   },
   
   schema: {
-    validate: (data: unknown): data is FitnessAssessment => {
-      return typeof data === 'object' && data !== null &&
-             'vdot' in data && 'criticalSpeed' in data && 'lactateThreshold' in data;
+    validate: (data: unknown): TypedResult<FitnessAssessment, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'FitnessAssessment', data) };
+      }
+      if (!('vdot' in data) || !('criticalSpeed' in data) || !('lactateThreshold' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'FitnessAssessment', data) };
+      }
+      return { success: true, data: data as FitnessAssessment };
     },
-    properties: ['vdot', 'criticalSpeed', 'lactateThreshold', 'runningEconomy', 'weeklyMileage', 'longestRecentRun', 'trainingAge', 'injuryHistory', 'recoveryRate']
+    properties: {
+      vdot: 'number',
+      criticalSpeed: 'number', 
+      lactateThreshold: 'number',
+      runningEconomy: 'number',
+      weeklyMileage: 'number',
+      longestRecentRun: 'number',
+      trainingAge: 'number',
+      injuryHistory: 'string[]',
+      recoveryRate: 'number'
+    },
+    required: ['weeklyMileage', 'longestRecentRun'],
+    name: 'FitnessAssessment'
   },
   
   metadata: {
@@ -1111,11 +1129,25 @@ export const trainingPlanConfigMockGenerator: MockGenerator<TrainingPlanConfig> 
   },
   
   schema: {
-    validate: (data: unknown): data is TrainingPlanConfig => {
-      return typeof data === 'object' && data !== null &&
-             'name' in data && 'goal' in data && 'startDate' in data;
+    validate: (data: unknown): TypedResult<TrainingPlanConfig, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'TrainingPlanConfig', data) };
+      }
+      if (!('name' in data) || !('goal' in data) || !('startDate' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'TrainingPlanConfig', data) };
+      }
+      return { success: true, data: data as TrainingPlanConfig };
     },
-    properties: ['name', 'description', 'goal', 'startDate', 'targetDate', 'currentFitness', 'preferences', 'environment']
+    properties: {
+      name: 'string',
+      description: 'string',
+      goal: 'TrainingGoal',
+      startDate: 'Date',
+      targetDate: 'Date',
+      currentFitness: 'FitnessAssessment',
+      preferences: 'TrainingPreferences',
+      environment: 'EnvironmentalFactors'
+    }
   },
   
   metadata: {
@@ -1148,12 +1180,24 @@ export const advancedPlanConfigMockGenerator: MockGenerator<AdvancedPlanConfig> 
   },
   
   schema: {
-    validate: (data: unknown): data is AdvancedPlanConfig => {
-      return trainingPlanConfigMockGenerator.schema.validate(data) &&
-             typeof data === 'object' && data !== null &&
-             'methodology' in data;
+    validate: (data: unknown): TypedResult<AdvancedPlanConfig, TypeValidationError> => {
+      const baseValidation = trainingPlanConfigMockGenerator.schema.validate(data);
+      if (!baseValidation.success) {
+        return baseValidation as TypedResult<AdvancedPlanConfig, TypeValidationError>;
+      }
+      if (typeof data !== 'object' || data === null || !('methodology' in data)) {
+        return { success: false, error: new TypeValidationError('Missing methodology property', 'AdvancedPlanConfig', data) };
+      }
+      return { success: true, data: data as AdvancedPlanConfig };
     },
-    properties: [...trainingPlanConfigMockGenerator.schema.properties, 'methodology', 'intensityDistribution', 'periodization', 'targetRaces', 'adaptationEnabled']
+    properties: {
+      ...trainingPlanConfigMockGenerator.schema.properties,
+      methodology: 'TrainingMethodology',
+      intensityDistribution: 'IntensityDistribution',
+      periodization: 'string',
+      targetRaces: 'TargetRace[]',
+      adaptationEnabled: 'boolean'
+    }
   },
   
   metadata: {
@@ -1187,11 +1231,24 @@ export const plannedWorkoutMockGenerator: MockGenerator<PlannedWorkout> = {
   },
   
   schema: {
-    validate: (data: unknown): data is PlannedWorkout => {
-      return typeof data === 'object' && data !== null &&
-             'id' in data && 'date' in data && 'targetMetrics' in data && 'workout' in data;
+    validate: (data: unknown): TypedResult<PlannedWorkout, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'PlannedWorkout', data) };
+      }
+      if (!('id' in data) || !('date' in data) || !('targetMetrics' in data) || !('workout' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'PlannedWorkout', data) };
+      }
+      return { success: true, data: data as PlannedWorkout };
     },
-    properties: ['id', 'date', 'type', 'name', 'description', 'targetMetrics', 'workout']
+    properties: {
+      id: 'string',
+      date: 'Date',
+      type: 'WorkoutType',
+      name: 'string',
+      description: 'string',
+      targetMetrics: 'WorkoutMetrics',
+      workout: 'Workout'
+    }
   },
   
   metadata: {
@@ -1224,11 +1281,28 @@ export const completedWorkoutMockGenerator: MockGenerator<CompletedWorkout> = {
   },
   
   schema: {
-    validate: (data: unknown): data is CompletedWorkout => {
-      return typeof data === 'object' && data !== null &&
-             'plannedWorkout' in data && 'actualDuration' in data;
+    validate: (data: unknown): TypedResult<CompletedWorkout, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'CompletedWorkout', data) };
+      }
+      if (!('plannedWorkout' in data) || !('actualDuration' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'CompletedWorkout', data) };
+      }
+      return { success: true, data: data as CompletedWorkout };
     },
-    properties: ['plannedWorkout', 'actualDuration', 'actualDistance', 'actualPace', 'avgHeartRate', 'maxHeartRate', 'completionRate', 'adherence', 'difficultyRating']
+    properties: {
+      plannedWorkout: 'PlannedWorkout',
+      actualDuration: 'number',
+      actualDistance: 'number',
+      actualPace: 'number',
+      avgHeartRate: 'number',
+      maxHeartRate: 'number',
+      completionRate: 'number',
+      adherence: 'string',
+      difficultyRating: 'number'
+    },
+    required: ['plannedWorkout', 'actualDuration'],
+    name: 'CompletedWorkout'
   },
   
   metadata: {
@@ -1309,9 +1383,14 @@ export const trainingPreferencesMockGenerator: MockGenerator<TrainingPreferences
   },
   
   schema: {
-    validate: (data: unknown): data is TrainingPreferences => {
-      return typeof data === 'object' && data !== null &&
-             'availableDays' in data && 'timeConstraints' in data;
+    validate: (data: unknown): TypedResult<TrainingPreferences, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'TrainingPreferences', data) };
+      }
+      if (!('availableDays' in data) || !('timeConstraints' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'TrainingPreferences', data) };
+      }
+      return { success: true, data: data as TrainingPreferences };
     },
     properties: ['availableDays', 'preferredIntensity', 'crossTraining', 'strengthTraining', 'timeConstraints']
   },
@@ -1347,9 +1426,14 @@ export const targetRaceMockGenerator: MockGenerator<TargetRace> = {
   },
   
   schema: {
-    validate: (data: unknown): data is TargetRace => {
-      return typeof data === 'object' && data !== null &&
-             'distance' in data && 'date' in data && 'priority' in data;
+    validate: (data: unknown): TypedResult<TargetRace, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'TargetRace', data) };
+      }
+      if (!('distance' in data) || !('date' in data) || !('priority' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'TargetRace', data) };
+      }
+      return { success: true, data: data as TargetRace };
     },
     properties: ['distance', 'date', 'goalTime', 'priority', 'location', 'terrain', 'conditions']
   },
@@ -1384,9 +1468,14 @@ export const recoveryMetricsMockGenerator: MockGenerator<RecoveryMetrics> = {
   },
   
   schema: {
-    validate: (data: unknown): data is RecoveryMetrics => {
-      return typeof data === 'object' && data !== null &&
-             'recoveryScore' in data && 'sleepQuality' in data && 'sleepDuration' in data;
+    validate: (data: unknown): TypedResult<RecoveryMetrics, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'RecoveryMetrics', data) };
+      }
+      if (!('recoveryScore' in data) || !('sleepQuality' in data) || !('sleepDuration' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'RecoveryMetrics', data) };
+      }
+      return { success: true, data: data as RecoveryMetrics };
     },
     properties: ['recoveryScore', 'sleepQuality', 'sleepDuration', 'stressLevel', 'muscleSoreness', 'energyLevel', 'motivation']
   },
@@ -1422,9 +1511,14 @@ export const runDataMockGenerator: MockGenerator<RunData> = {
   },
   
   schema: {
-    validate: (data: unknown): data is RunData => {
-      return typeof data === 'object' && data !== null &&
-             'date' in data && 'distance' in data && 'duration' in data && 'avgPace' in data;
+    validate: (data: unknown): TypedResult<RunData, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'RunData', data) };
+      }
+      if (!('date' in data) || !('distance' in data) || !('duration' in data) || !('avgPace' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'RunData', data) };
+      }
+      return { success: true, data: data as RunData };
     },
     properties: ['date', 'distance', 'duration', 'avgPace', 'avgHeartRate', 'maxHeartRate', 'elevation', 'effortLevel', 'notes', 'temperature', 'isRace']
   },
@@ -1919,9 +2013,14 @@ export const calculatorTestDataMockGenerator: MockGenerator<CalculatorTestData> 
   },
   
   schema: {
-    validate: (data: unknown): data is CalculatorTestData => {
-      return typeof data === 'object' && data !== null &&
-             'runs' in data && 'expectedVDOT' in data && 'tolerance' in data;
+    validate: (data: unknown): TypedResult<CalculatorTestData, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'CalculatorTestData', data) };
+      }
+      if (!('runs' in data) || !('expectedVDOT' in data) || !('tolerance' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'CalculatorTestData', data) };
+      }
+      return { success: true, data: data as CalculatorTestData };
     },
     properties: ['runs', 'expectedVDOT', 'tolerance', 'expectedCriticalSpeed', 'expectedLactateThreshold', 'context']
   },
@@ -1952,9 +2051,14 @@ export const validationTestCaseMockGenerator: MockGenerator<ValidationTestCase> 
   },
   
   schema: {
-    validate: (data: unknown): data is ValidationTestCase => {
-      return typeof data === 'object' && data !== null &&
-             'input' in data && 'expectedErrors' in data && 'shouldPass' in data;
+    validate: (data: unknown): TypedResult<ValidationTestCase, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'ValidationTestCase', data) };
+      }
+      if (!('input' in data) || !('expectedErrors' in data) || !('shouldPass' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'ValidationTestCase', data) };
+      }
+      return { success: true, data: data as ValidationTestCase };
     },
     properties: ['input', 'expectedErrors', 'expectedWarnings', 'description', 'shouldPass', 'testCategory']
   },
@@ -1985,9 +2089,14 @@ export const workoutTestScenarioMockGenerator: MockGenerator<WorkoutTestScenario
   },
   
   schema: {
-    validate: (data: unknown): data is WorkoutTestScenario => {
-      return typeof data === 'object' && data !== null &&
-             'type' in data && 'duration' in data && 'intensity' in data;
+    validate: (data: unknown): TypedResult<WorkoutTestScenario, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'WorkoutTestScenario', data) };
+      }
+      if (!('type' in data) || !('duration' in data) || !('intensity' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'WorkoutTestScenario', data) };
+      }
+      return { success: true, data: data as WorkoutTestScenario };
     },
     properties: ['type', 'duration', 'intensity', 'expectedTSS', 'expectedRecovery', 'segments', 'description']
   },
@@ -2018,9 +2127,14 @@ export const zoneTestDataMockGenerator: MockGenerator<ZoneTestData> = {
   },
   
   schema: {
-    validate: (data: unknown): data is ZoneTestData => {
-      return typeof data === 'object' && data !== null &&
-             'maxHR' in data && 'thresholdPace' in data && 'expectedZones' in data;
+    validate: (data: unknown): TypedResult<ZoneTestData, TypeValidationError> => {
+      if (typeof data !== 'object' || data === null) {
+        return { success: false, error: new TypeValidationError('Expected object', 'ZoneTestData', data) };
+      }
+      if (!('maxHR' in data) || !('thresholdPace' in data) || !('expectedZones' in data)) {
+        return { success: false, error: new TypeValidationError('Missing required properties', 'ZoneTestData', data) };
+      }
+      return { success: true, data: data as ZoneTestData };
     },
     properties: ['maxHR', 'thresholdPace', 'vdot', 'expectedZones', 'tolerances']
   },
