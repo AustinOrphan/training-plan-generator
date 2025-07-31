@@ -202,10 +202,10 @@ function getPlanGenerationCacheKey(config: AdvancedPlanConfig): string {
   const key = [
     config.methodology,
     config.goal,
-    config.targetDate.getTime(),
+    config.targetDate?.getTime() || 0,
     config.startDate.getTime(),
-    config.currentFitness.vdot || 0,
-    config.currentFitness.weeklyMileage || 0,
+    config.currentFitness?.vdot || 0,
+    config.currentFitness?.weeklyMileage || 0,
     config.experience || 'intermediate'
   ].join('-');
   

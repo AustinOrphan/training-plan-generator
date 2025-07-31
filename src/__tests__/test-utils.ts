@@ -1513,8 +1513,8 @@ export const runDataMockGenerator: MockGenerator<RunData> = {
     return instance.date instanceof Date &&
            instance.distance > 0 &&
            instance.duration > 0 &&
-           instance.avgPace > 0 &&
-           instance.effortLevel >= 1 && instance.effortLevel <= 10;
+           (instance.avgPace !== undefined && instance.avgPace > 0) &&
+           (instance.effortLevel !== undefined && instance.effortLevel >= 1 && instance.effortLevel <= 10);
   },
   
   schema: {
