@@ -146,6 +146,8 @@ export interface FitnessAssessment {
   injuryHistory?: string[];
   /** Recovery rate score 0-100 based on HRV trends or subjective assessment */
   recoveryRate?: number;
+  /** Overall fitness score combining multiple metrics */
+  overallScore: number;
 }
 
 /**
@@ -563,7 +565,7 @@ export interface TrainingLoad {
 }
 
 // Advanced Configuration Types
-export type TrainingMethodology = 'daniels' | 'lydiard' | 'pfitzinger' | 'hanson' | 'custom';
+export type TrainingMethodology = 'daniels' | 'lydiard' | 'pfitzinger' | 'hudson' | 'custom';
 
 export type ExportFormat = 'pdf' | 'ical' | 'csv' | 'json';
 
@@ -611,18 +613,40 @@ export interface AdvancedPlanConfig extends TrainingPlanConfig {
 
 export interface ProgressData {
   date: Date;
-  perceivedExertion: number; // 1-10
-  heartRateData: {
+  adherenceRate: number; // 0-1 percentage of planned workouts completed
+  completedWorkouts: CompletedWorkout[]; // Array of completed workouts
+  totalWorkouts: number; // Total number of planned workouts
+  performanceTrend: 'improving' | 'maintaining' | 'declining'; // Performance trend analysis
+  volumeProgress: {
+    weeklyAverage: number;
+    trend: 'increasing' | 'stable' | 'decreasing';
+  };
+  intensityDistribution: {
+    easy: number; // percentage
+    moderate: number;
+    hard: number;
+    veryHard: number;
+  };
+  currentFitness: {
+    vdot: number;
+    weeklyMileage: number;
+    longestRecentRun: number;
+    trainingAge: number; // years
+  };
+  lastUpdateDate: Date;
+  
+  // Optional legacy fields for backward compatibility
+  perceivedExertion?: number; // 1-10
+  heartRateData?: {
     resting: number;
     average: number;
     maximum: number;
   };
-  performanceMetrics: {
+  performanceMetrics?: {
     vo2max: number;
     lactateThreshold: number;
     runningEconomy: number;
   };
-  completedWorkouts?: CompletedWorkout[];
   notes?: string;
 }
 

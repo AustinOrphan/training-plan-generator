@@ -6,13 +6,10 @@
  * and precise pace calculations.
  */
 
-import {
-  AdvancedTrainingPlanGenerator,
-  PhilosophyFactory,
-  calculateVDOTCached,
-  type AdvancedPlanConfig,
-  type TrainingPlan
-} from '../src/index';
+import { AdvancedTrainingPlanGenerator } from '../src/advanced-generator';
+import { PhilosophyFactory } from '../src/philosophies';
+import { calculateVDOTCached } from '../src/calculation-cache';
+import type { AdvancedPlanConfig, TrainingPlan } from '../src/types';
 
 class DanielsTrainingExamples {
   

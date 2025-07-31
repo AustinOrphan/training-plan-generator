@@ -144,7 +144,7 @@ export const TRAINING_METHODOLOGIES = {
   lydiard: {
     name: 'Arthur Lydiard',
     intensityDistribution: { easy: 85, moderate: 10, hard: 5 },
-    workoutPriorities: ['easy', 'long_run', 'hill_repeats', 'tempo', 'speed'],
+    workoutPriorities: ['easy', 'steady', 'long_run', 'hill_repeats', 'tempo'],
     recoveryEmphasis: 0.9,
     phaseTransitions: {
       base: { duration: 12, focus: 'aerobic' },
@@ -241,6 +241,48 @@ export const WORKOUT_EMPHASIS = {
     vo2max: 1.1,
     speed: 1.0,
     long_run: 1.2
+  }
+} as const;
+
+/**
+ * Methodology-specific intensity distributions by training phase
+ * Each methodology has different emphasis on easy vs. hard training across phases
+ */
+export const METHODOLOGY_INTENSITY_DISTRIBUTIONS = {
+  daniels: {
+    base: { easy: 85, moderate: 10, hard: 5 },   // 80/20 approach with slight emphasis on aerobic base
+    build: { easy: 80, moderate: 15, hard: 5 },  // Standard Daniels distribution
+    peak: { easy: 75, moderate: 15, hard: 10 },  // More VO2max work for race preparation
+    taper: { easy: 80, moderate: 15, hard: 5 },  // Return to more conservative distribution
+    recovery: { easy: 95, moderate: 5, hard: 0 } // Complete aerobic recovery
+  },
+  lydiard: {
+    base: { easy: 90, moderate: 8, hard: 2 },    // Lydiard's signature 85%+ easy running in base
+    build: { easy: 85, moderate: 12, hard: 3 },  // Maintain heavy aerobic emphasis
+    peak: { easy: 80, moderate: 15, hard: 5 },   // Limited speed work after base building
+    taper: { easy: 85, moderate: 12, hard: 3 },  // Conservative approach to taper
+    recovery: { easy: 100, moderate: 0, hard: 0 } // Complete rest philosophy
+  },
+  pfitzinger: {
+    base: { easy: 75, moderate: 20, hard: 5 },   // Higher moderate emphasis (threshold work)
+    build: { easy: 70, moderate: 25, hard: 5 },  // Significant lactate threshold volume
+    peak: { easy: 70, moderate: 20, hard: 10 },  // Race-specific pace work increase
+    taper: { easy: 75, moderate: 20, hard: 5 },  // Maintain some threshold work
+    recovery: { easy: 90, moderate: 10, hard: 0 } // Active recovery approach
+  },
+  hudson: {
+    base: { easy: 80, moderate: 15, hard: 5 },   // Balanced approach with tempo emphasis
+    build: { easy: 75, moderate: 20, hard: 5 },  // Tempo endurance focus
+    peak: { easy: 70, moderate: 20, hard: 10 },  // Race pace and neuromuscular work
+    taper: { easy: 80, moderate: 15, hard: 5 },  // Return to base distribution
+    recovery: { easy: 90, moderate: 10, hard: 0 } // Moderate recovery approach
+  },
+  custom: {
+    base: { easy: 80, moderate: 15, hard: 5 },   // Default polarized approach
+    build: { easy: 75, moderate: 20, hard: 5 },  // Moderate build phase
+    peak: { easy: 70, moderate: 20, hard: 10 },  // Increased intensity for peaking
+    taper: { easy: 80, moderate: 15, hard: 5 },  // Return to conservative distribution
+    recovery: { easy: 90, moderate: 10, hard: 0 } // Standard recovery distribution
   }
 } as const;
 

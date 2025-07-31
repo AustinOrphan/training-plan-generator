@@ -526,14 +526,14 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
    */
   private getRaceFocusAreas(phase: TrainingPhase, distance: RaceDistance): string[] {
     const distanceFocus: Record<RaceDistance, Record<TrainingPhase, string[]>> = {
-      '5K': {
+      '5k': {
         base: ['Speed development', 'Running economy', 'Aerobic power'],
         build: ['VO2max', 'Lactate threshold', 'Speed endurance'],
         peak: ['Race pace', 'Speed', 'Mental preparation'],
         taper: ['Maintenance', 'Sharpening', 'Recovery'],
         recovery: ['Active recovery', 'Regeneration']
       },
-      '10K': {
+      '10k': {
         base: ['Aerobic capacity', 'Threshold development', 'Speed'],
         build: ['Threshold', 'VO2max', 'Race pace'],
         peak: ['Race simulation', 'Speed endurance', 'Tactics'],
@@ -621,8 +621,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
    */
   private getRecoveryWeeks(distance: RaceDistance, priority: 'A' | 'B' | 'C'): number {
     const baseRecovery: Record<RaceDistance, number> = {
-      '5K': 1,
-      '10K': 1,
+      '5k': 1,
+      '10k': 1,
       '15K': 1,
       'half-marathon': 2,
       'marathon': 3,
@@ -643,8 +643,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
    */
   private getMinimalPreparationWeeks(distance: RaceDistance, priority: 'A' | 'B' | 'C'): number {
     const basePrep: Record<RaceDistance, number> = {
-      '5K': 4,
-      '10K': 6,
+      '5k': 4,
+      '10k': 6,
       '15K': 8,
       'half-marathon': 8,
       'marathon': 12,
@@ -784,8 +784,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
   private estimateRaceDuration(distance: RaceDistance): number {
     // Rough estimates for planning purposes
     const durations: Record<RaceDistance, number> = {
-      '5K': 25,
-      '10K': 50,
+      '5k': 25,
+      '10k': 50,
       '15K': 80,
       'half-marathon': 110,
       'marathon': 240,
@@ -803,8 +803,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
    */
   private getRaceDistanceKm(distance: RaceDistance): number {
     const distances: Record<RaceDistance, number> = {
-      '5K': 5,
-      '10K': 10,
+      '5k': 5,
+      '10k': 10,
       '15K': 15,
       'half-marathon': 21.1,
       'marathon': 42.2,
@@ -822,8 +822,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
    */
   private estimateRaceTSS(distance: RaceDistance): number {
     const tssValues: Record<RaceDistance, number> = {
-      '5K': 60,
-      '10K': 100,
+      '5k': 60,
+      '10k': 100,
       '15K': 140,
       'half-marathon': 180,
       'marathon': 300,
@@ -891,8 +891,8 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
    */
   private getTuneUpDistance(distance: RaceDistance): number {
     const tuneUpMap: Record<RaceDistance, number> = {
-      '5K': 5,
-      '10K': 8,
+      '5k': 5,
+      '10k': 8,
       '15K': 10,
       'half-marathon': 12,
       'marathon': 15,

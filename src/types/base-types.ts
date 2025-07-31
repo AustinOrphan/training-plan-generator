@@ -9,17 +9,52 @@
  * Type guard function that validates data at runtime
  */
 export interface TypeGuard<T> {
-  (data: unknown): data is T;
+  check: (data: unknown) => data is T;
+  name: string;
+}
+
+/**
+ * Schema definition for structured data validation
+ */
+export interface TypedSchema<T> {
+  validate: (data: unknown) => TypedResult<T, TypeValidationError>;
+  properties: Record<string, unknown>;
+  required: string[];
+  name: string;
+}
+
+/**
+ * Type-safe collection with metadata
+ */
+export interface TypedCollection<T> {
+  items: T[];
+  count: number;
+  metadata: {
+    type: string;
+    indexed: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+}
+
+/**
+ * Extract element type from array
+ */
+export type ArrayElement<T> = T extends (infer U)[] ? U : never;
+
+/**
+ * Generic options type for type-safe configurations
+ */
+export interface TypedOptions {
+  [key: string]: unknown;
 }
 
 /**
  * Result type for type-safe operations
  */
-export interface TypedResult<T> {
-  success: boolean;
-  data: T;
-  error: TypeValidationError;
-}
+export type TypedResult<T, E = TypeValidationError> = 
+  | { success: true; data: T }
+  | { success: false; error: E };
 
 /**
  * Type validation error for runtime type checking failures
@@ -27,9 +62,9 @@ export interface TypedResult<T> {
 export class TypeValidationError extends Error {
   constructor(
     message: string,
-    public readonly field?: string,
-    public readonly expectedType?: string,
-    public readonly actualValue?: unknown
+    public readonly expectedType: string,
+    public readonly actualValue: unknown,
+    public readonly validationContext?: string
   ) {
     super(message);
     this.name = 'TypeValidationError';
@@ -41,9 +76,9 @@ export class TypeValidationError extends Error {
   static missingField(field: string): TypeValidationError {
     return new TypeValidationError(
       `Missing required field: ${field}`,
-      field,
       'required',
-      undefined
+      undefined,
+      field
     );
   }
 
@@ -53,9 +88,9 @@ export class TypeValidationError extends Error {
   static incorrectType(field: string, expected: string, actual: unknown): TypeValidationError {
     return new TypeValidationError(
       `Field '${field}' expected ${expected}, got ${typeof actual}`,
-      field,
       expected,
-      actual
+      actual,
+      field
     );
   }
 
@@ -65,31 +100,45 @@ export class TypeValidationError extends Error {
   static invalidValue(field: string, value: unknown, constraint: string): TypeValidationError {
     return new TypeValidationError(
       `Field '${field}' has invalid value: ${constraint}`,
-      field,
       constraint,
-      value
+      value,
+      field
     );
+  }
+}
+
+/**
+ * Schema validation error for object structure validation failures
+ */
+export class SchemaValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly schemaName: string,
+    public readonly failedProperties: string[],
+    public readonly actualValue: unknown,
+    public readonly validationContext?: string
+  ) {
+    super(message);
+    this.name = 'SchemaValidationError';
   }
 }
 
 /**
  * Success result factory
  */
-export function createSuccessResult<T>(data: T): TypedResult<T> {
+export function createSuccessResult<T, E = TypeValidationError>(data: T): TypedResult<T, E> {
   return {
     success: true,
-    data,
-    error: null as any // Will not be accessed when success is true
+    data
   };
 }
 
 /**
  * Error result factory
  */
-export function createErrorResult<T>(error: TypeValidationError): TypedResult<T> {
+export function createErrorResult<T, E = TypeValidationError>(error: E): TypedResult<T, E> {
   return {
     success: false,
-    data: null as any, // Will not be accessed when success is false
     error
   };
 }

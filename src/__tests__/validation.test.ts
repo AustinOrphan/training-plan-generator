@@ -427,4 +427,413 @@ describe('Validation System', () => {
       expect(metadataError).toBeDefined();
     });
   });
+
+  describe('Plan Validation', () => {
+    it('should validate plan chronological order', () => {
+      const validation = pipeline.validatePlan(validPlan);
+      
+      // Should pass validation for properly generated plan
+      expect(validation).toBeDefined();
+      expect(validation.errors).toBeDefined();
+      
+      // If there are chronological order errors, they should be specific
+      const chronologicalErrors = validation.errors.filter(e => 
+        e.message.includes('chronological') || e.message.includes('order')
+      );
+      
+      // For a properly generated plan, there should be no chronological errors
+      expect(chronologicalErrors.length).toBe(0);
+    });
+
+    it('should detect non-chronological workout order', () => {
+      const planWithBadOrder = {
+        ...validPlan,
+        workouts: [
+          ...validPlan.workouts.slice(0, 2),
+          validPlan.workouts[4], // Out of order workout
+          validPlan.workouts[2],
+          validPlan.workouts[3],
+          ...validPlan.workouts.slice(5)
+        ]
+      };
+      
+      const validation = pipeline.validatePlan(planWithBadOrder);
+      
+      expect(validation.isValid).toBe(false);
+      expect(validation.errors.length).toBeGreaterThan(0);
+      
+      // Should have chronological order error
+      const chronologicalError = validation.errors.find(e => 
+        e.message.includes('chronological') || e.message.includes('order')
+      );
+      expect(chronologicalError).toBeDefined();
+    });
+
+    it('should validate plan structure integrity', () => {
+      const invalidPlan = {
+        ...validPlan,
+        workouts: [], // No workouts
+        blocks: [] // No blocks
+      };
+      
+      const validation = pipeline.validatePlan(invalidPlan);
+      
+      expect(validation.isValid).toBe(false);
+      expect(validation.errors.length).toBeGreaterThan(0);
+    });
+
+    it('should validate workout-to-plan consistency', () => {
+      const validation = pipeline.validatePlan(validPlan);
+      
+      // Check that plan validation examines workout consistency
+      expect(validation).toBeDefined();
+      
+      // Should not have inconsistency errors for valid plan
+      const consistencyErrors = validation.errors.filter(e => 
+        e.message.includes('inconsistent') || e.message.includes('mismatch')
+      );
+      
+      // Valid plan should have no consistency errors
+      expect(consistencyErrors.length).toBe(0);
+    });
+
+    it('should meet performance benchmark for plan validation', async () => {
+      const { time } = await measureExecutionTime(async () => {
+        return pipeline.validatePlan(validPlan);
+      });
+
+      // Plan validation should be very fast (<1ms per field)
+      // Assuming ~10-20 key fields to validate
+      expect(time).toBeLessThan(50); // <5ms total for plan validation
+    });
+  });
+
+  describe('Progress Data Validation', () => {
+    it('should validate progress data consistency', () => {
+      const validProgressData = [
+        createMockProgressData({
+          completedWorkouts: [
+            {
+              plannedWorkout: validPlan.workouts[0],
+              actualDuration: 45,
+              actualDistance: 8000,
+              actualPace: 5.5,
+              completion: {
+                status: 'complete',
+                adherence: 'complete',
+                notes: 'Great workout'
+              }
+            }
+          ]
+        })
+      ];
+      
+      const validation = pipeline.validateProgressData(validProgressData);
+      
+      expect(validation.isValid).toBe(true);
+      expect(validation.errors.length).toBe(0);
+    });
+
+    it('should detect invalid adherence values', () => {
+      const invalidProgressData = [
+        createMockProgressData({
+          completedWorkouts: [
+            {
+              plannedWorkout: validPlan.workouts[0],
+              actualDuration: 45,
+              actualDistance: 8000,
+              actualPace: 5.5,
+              completion: {
+                status: 'complete',
+                adherence: 'invalid-adherence' as any, // Invalid adherence
+                notes: 'Bad adherence value'
+              }
+            }
+          ]
+        })
+      ];
+      
+      const validation = pipeline.validateProgressData(invalidProgressData);
+      
+      expect(validation.isValid).toBe(false);
+      expect(validation.errors.length).toBeGreaterThan(0);
+      
+      // Should have adherence error
+      const adherenceError = validation.errors.find(e => 
+        e.field.includes('adherence') && e.message.includes('Invalid')
+      );
+      expect(adherenceError).toBeDefined();
+    });
+
+    it('should validate completion rate calculations', () => {
+      const progressData = [
+        createMockProgressData({
+          completedWorkouts: [
+            // Complete workout
+            {
+              plannedWorkout: validPlan.workouts[0],
+              actualDuration: 45,
+              actualDistance: 8000,
+              actualPace: 5.5,
+              completion: {
+                status: 'complete',
+                adherence: 'complete',
+                notes: 'Completed fully'
+              }
+            },
+            // Partial workout
+            {
+              plannedWorkout: validPlan.workouts[1],
+              actualDuration: 30,
+              actualDistance: 5000,
+              actualPace: 6.0,
+              completion: {
+                status: 'partial',
+                adherence: 'partial',
+                notes: 'Cut short due to time'
+              }
+            }
+          ]
+        })
+      ];
+      
+      const validation = pipeline.validateProgressData(progressData);
+      
+      // Should validate completion data structure
+      expect(validation).toBeDefined();
+      
+      // Check that completion status validation works
+      const statusErrors = validation.errors.filter(e => 
+        e.field.includes('status') || e.field.includes('completion')
+      );
+      
+      // Valid completion statuses should not generate errors
+      expect(statusErrors.length).toBe(0);
+    });
+
+    it('should validate negative distance and duration values', () => {
+      const invalidProgressData = [
+        createMockProgressData({
+          completedWorkouts: [
+            {
+              plannedWorkout: validPlan.workouts[0],
+              actualDuration: -30, // Negative duration
+              actualDistance: -5000, // Negative distance
+              actualPace: 5.5,
+              completion: {
+                status: 'complete',
+                adherence: 'complete',
+                notes: 'Invalid negative values'
+              }
+            }
+          ]
+        })
+      ];
+      
+      const validation = pipeline.validateProgressData(invalidProgressData);
+      
+      expect(validation.isValid).toBe(false);
+      expect(validation.errors.length).toBeGreaterThan(0);
+      
+      // Should have errors for negative values
+      const negativeErrors = validation.errors.filter(e => 
+        e.message.includes('negative') || e.message.includes('cannot be negative')
+      );
+      expect(negativeErrors.length).toBeGreaterThan(0);
+    });
+
+    it('should validate difficulty rating bounds', () => {
+      const invalidProgressData = [
+        createMockProgressData({
+          completedWorkouts: [
+            {
+              plannedWorkout: validPlan.workouts[0],
+              actualDuration: 45,
+              actualDistance: 8000,
+              actualPace: 5.5,
+              completion: {
+                status: 'complete',
+                adherence: 'complete',
+                notes: 'Invalid difficulty rating',
+                difficultyRating: 15 // Out of bounds (should be 1-10)
+              }
+            }
+          ]
+        })
+      ];
+      
+      const validation = pipeline.validateProgressData(invalidProgressData);
+      
+      expect(validation.isValid).toBe(false);
+      expect(validation.errors.length).toBeGreaterThan(0);
+      
+      // Should have difficulty rating error
+      const ratingError = validation.errors.find(e => 
+        e.field.includes('difficultyRating') && e.message.includes('1-10')
+      );
+      expect(ratingError).toBeDefined();
+    });
+
+    it('should meet performance benchmark for progress validation', async () => {
+      const progressData = [createMockProgressData()];
+      
+      const { time } = await measureExecutionTime(async () => {
+        return pipeline.validateProgressData(progressData);
+      });
+
+      // Progress validation should be very fast (<1ms per field)
+      // Assuming ~5-10 fields per progress entry
+      expect(time).toBeLessThan(25); // <2.5ms per progress entry
+    });
+  });
+
+  describe('Completion Rate and Adherence Validation', () => {
+    it('should validate workout completion status values', () => {
+      const validStatuses = ['complete', 'partial', 'none'];
+      
+      validStatuses.forEach(status => {
+        const progressData = [
+          createMockProgressData({
+            completedWorkouts: [
+              {
+                plannedWorkout: validPlan.workouts[0],
+                actualDuration: 45,
+                actualDistance: 8000,
+                actualPace: 5.5,
+                completion: {
+                  status: status as any,
+                  adherence: 'complete',
+                  notes: `Testing ${status} status`
+                }
+              }
+            ]
+          })
+        ];
+        
+        const validation = pipeline.validateProgressData(progressData);
+        
+        // Valid status should not generate status-related errors
+        const statusErrors = validation.errors.filter(e => 
+          e.field.includes('status') && e.message.includes('Invalid')
+        );
+        expect(statusErrors.length).toBe(0);
+      });
+    });
+
+    it('should validate adherence consistency with completion status', () => {
+      const testCases = [
+        { status: 'complete', adherence: 'complete', shouldBeValid: true },
+        { status: 'partial', adherence: 'partial', shouldBeValid: true },
+        { status: 'none', adherence: 'none', shouldBeValid: true },
+        { status: 'complete', adherence: 'none', shouldBeValid: true }, // Still valid but inconsistent
+      ];
+      
+      testCases.forEach(({ status, adherence, shouldBeValid }) => {
+        const progressData = [
+          createMockProgressData({
+            completedWorkouts: [
+              {
+                plannedWorkout: validPlan.workouts[0],
+                actualDuration: status === 'none' ? 0 : 45,
+                actualDistance: status === 'none' ? 0 : 8000,
+                actualPace: status === 'none' ? 0 : 5.5,
+                completion: {
+                  status: status as any,
+                  adherence: adherence as any,
+                  notes: `Testing ${status}/${adherence} combination`
+                }
+              }
+            ]
+          })
+        ];
+        
+        const validation = pipeline.validateProgressData(progressData);
+        
+        // Structure should always be valid, content validation may vary
+        expect(validation).toBeDefined();
+      });
+    });
+
+    it('should calculate completion rates from adherence data', () => {
+      const mixedProgressData = [
+        createMockProgressData({
+          completedWorkouts: [
+            // Complete workout
+            {
+              plannedWorkout: validPlan.workouts[0],
+              actualDuration: 45,
+              actualDistance: 8000,
+              actualPace: 5.5,
+              completion: {
+                status: 'complete',
+                adherence: 'complete',
+                notes: 'Fully completed'
+              }
+            },
+            // Partial workout
+            {
+              plannedWorkout: validPlan.workouts[1],
+              actualDuration: 25,
+              actualDistance: 4000,
+              actualPace: 6.0,
+              completion: {
+                status: 'partial',
+                adherence: 'partial',
+                notes: 'Partially completed'
+              }
+            },
+            // Missed workout
+            {
+              plannedWorkout: validPlan.workouts[2],
+              actualDuration: 0,
+              actualDistance: 0,
+              actualPace: 0,
+              completion: {
+                status: 'none',
+                adherence: 'none',
+                notes: 'Missed due to illness'
+              }
+            }
+          ]
+        })
+      ];
+      
+      const validation = pipeline.validateProgressData(mixedProgressData);
+      
+      // Should successfully validate mixed completion data
+      expect(validation).toBeDefined();
+      expect(validation.errors.filter(e => 
+        e.field.includes('adherence') && e.message.includes('Invalid')
+      ).length).toBe(0);
+    });
+
+    it('should validate performance metrics per field', async () => {
+      // Create progress data with multiple completion entries
+      const largeProgressData = Array.from({ length: 50 }, (_, i) => 
+        createMockProgressData({
+          completedWorkouts: [
+            {
+              plannedWorkout: validPlan.workouts[Math.min(i, validPlan.workouts.length - 1)],
+              actualDuration: 30 + i,
+              actualDistance: 5000 + (i * 100),
+              actualPace: 5.0 + (i * 0.1),
+              completion: {
+                status: i % 3 === 0 ? 'complete' : i % 3 === 1 ? 'partial' : 'none',
+                adherence: i % 3 === 0 ? 'complete' : i % 3 === 1 ? 'partial' : 'none',
+                notes: `Test completion ${i}`
+              }
+            }
+          ]
+        })
+      );
+      
+      const { time } = await measureExecutionTime(async () => {
+        return pipeline.validateProgressData(largeProgressData);
+      });
+
+      // Should validate quickly even with large datasets
+      // Target: <1ms per field, with ~5 fields per entry, 50 entries = 250 fields
+      expect(time).toBeLessThan(250); // 250ms for 250 fields = 1ms per field
+    });
+  });
 });

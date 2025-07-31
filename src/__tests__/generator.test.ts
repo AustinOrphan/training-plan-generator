@@ -29,6 +29,17 @@ describe('TrainingPlanGenerator', () => {
   let baseConfig: TrainingPlanConfig;
   let dataBuilder: GeneratorTestDataBuilder;
 
+  // Helper function to create config with duration
+  const createConfigWithDuration = (duration: number, overrides?: Partial<TrainingPlanConfig>): TrainingPlanConfig => {
+    const startDate = testDateUtils.createTestDate('2024-01-01');
+    const targetDate = addWeeks(startDate, duration);
+    return createMockTrainingPlanConfig({
+      startDate,
+      targetDate,
+      ...overrides
+    });
+  };
+
   beforeEach(() => {
     baseConfig = createMockTrainingPlanConfig();
     generator = new TrainingPlanGenerator(baseConfig);
@@ -60,11 +71,12 @@ describe('TrainingPlanGenerator', () => {
       expect(plan.blocks).toBeInstanceOf(Array);
       plan.blocks.forEach((block: TrainingBlock) => {
         expect(block.phase).toBeDefined();
-        expect(block.weeks).toBeInstanceOf(Array);
-        expect(block.weeks.length).toBeGreaterThan(0);
+        expect(block.microcycles).toBeInstanceOf(Array);
+        expect(block.microcycles.length).toBeGreaterThan(0);
+        expect(block.weeks).toBeGreaterThan(0);
         
         // Verify week structure
-        block.weeks.forEach((week: WeeklyMicrocycle) => {
+        block.microcycles.forEach((week: WeeklyMicrocycle) => {
           expect(week.weekNumber).toBeGreaterThan(0);
           expect(week.workouts).toBeInstanceOf(Array);
           expect(week.totalVolume).toBeGreaterThan(0);
@@ -92,15 +104,14 @@ describe('TrainingPlanGenerator', () => {
       expect(summary.totalWeeks).toBeGreaterThan(0);
       expect(summary.totalWorkouts).toBe(plan.workouts.length);
       expect(summary.totalDistance).toBeGreaterThan(0);
-      expect(summary.peakWeekVolume).toBeGreaterThan(0);
-      expect(summary.averageWeeklyVolume).toBeGreaterThan(0);
+      expect(summary.peakWeeklyDistance).toBeGreaterThan(0);
+      expect(summary.averageWeeklyDistance).toBeGreaterThan(0);
     });
   });
 
   describe('Volume Progression Patterns', () => {
     it('should implement progressive volume increase', () => {
-      const config = createMockTrainingPlanConfig({
-        duration: 12, // 12 weeks for clear progression
+      const config = createConfigWithDuration(12, {
         goal: 'marathon'
       });
       const progressionGenerator = new TrainingPlanGenerator(config);
@@ -108,7 +119,7 @@ describe('TrainingPlanGenerator', () => {
       
       // Extract weekly volumes
       const weeklyVolumes = plan.blocks.flatMap(block => 
-        block.weeks.map(week => week.totalVolume)
+        block.microcycles.map(week => week.totalVolume)
       );
       
       expect(weeklyVolumes.length).toBeGreaterThan(4);
@@ -133,7 +144,7 @@ describe('TrainingPlanGenerator', () => {
       const plan = progressionGenerator.generatePlan();
       
       const weeklyVolumes = plan.blocks.flatMap(block => 
-        block.weeks.map(week => week.totalVolume)
+        block.microcycles.map(week => week.totalVolume)
       );
       
       // Look for recovery patterns (volume drops)
@@ -153,8 +164,8 @@ describe('TrainingPlanGenerator', () => {
       const { summary } = plan;
       
       // Peak volume should be reasonable relative to average
-      expect(summary.peakWeekVolume).toBeLessThan(summary.averageWeeklyVolume * 2.5);
-      expect(summary.peakWeekVolume).toBeGreaterThan(summary.averageWeeklyVolume * 1.1);
+      expect(summary.peakWeeklyDistance).toBeLessThan(summary.averageWeeklyDistance * 2.5);
+      expect(summary.peakWeeklyDistance).toBeGreaterThan(summary.averageWeeklyDistance * 1.1);
     });
   });
 
@@ -201,15 +212,18 @@ describe('TrainingPlanGenerator', () => {
     });
 
     it('should focus on race-specific work in short plans', () => {
-      const shortConfig = createMockTrainingPlanConfig({
+      const baseConfig = createMockTrainingPlanConfig({
         duration: 4,
-        goal: '5k',
+        goal: '5k'
+      });
+      const shortConfig = {
+        ...baseConfig,
         races: [{
           distance: '5k',
-          date: addWeeks(shortConfig.startDate, 3),
+          date: addWeeks(baseConfig.startDate, 3),
           priority: 'A'
         }]
-      });
+      };
       const shortGenerator = new TrainingPlanGenerator(shortConfig);
       const plan = shortGenerator.generatePlan();
       
@@ -274,7 +288,7 @@ describe('TrainingPlanGenerator', () => {
       const plan = longGenerator.generatePlan();
       
       const weeklyVolumes = plan.blocks.flatMap(block => 
-        block.weeks.map(week => week.totalVolume)
+        block.microcycles.map(week => week.totalVolume)
       );
       
       // Should show long-term progression with multiple cycles
@@ -300,7 +314,7 @@ describe('TrainingPlanGenerator', () => {
       const plan = longGenerator.generatePlan();
       
       const weeklyVolumes = plan.blocks.flatMap(block => 
-        block.weeks.map(week => week.totalVolume)
+        block.microcycles.map(week => week.totalVolume)
       );
       
       // Count recovery weeks (significant volume drops)
@@ -365,8 +379,8 @@ describe('TrainingPlanGenerator', () => {
       const highPlan = highFitnessGenerator.generatePlan();
       
       // High fitness should generally have higher volume
-      expect(highPlan.summary.averageWeeklyVolume).toBeGreaterThan(
-        lowPlan.summary.averageWeeklyVolume * 0.8
+      expect(highPlan.summary.averageWeeklyDistance).toBeGreaterThan(
+        lowPlan.summary.averageWeeklyDistance * 0.8
       );
     });
 

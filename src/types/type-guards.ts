@@ -135,14 +135,14 @@ export function createSchemaGuard<T extends object>(
       
       // Apply property-specific validator if available
       const validator = propertyValidators[prop];
-      if (validator && !validator(value[prop])) return false;
+      if (validator && !validator((value as any)[prop])) return false;
     }
     
     // Check optional properties if present
     for (const prop of optionalProperties) {
       if (prop in value) {
         const validator = propertyValidators[prop];
-        if (validator && !validator(value[prop])) return false;
+        if (validator && !validator((value as any)[prop])) return false;
       }
     }
     
@@ -163,7 +163,7 @@ export function createSchemaGuard<T extends object>(
         errors.push(`Missing required property: ${String(prop)}`);
       } else {
         const validator = propertyValidators[prop];
-        if (validator && !validator(value[prop])) {
+        if (validator && !validator((value as any)[prop])) {
           errors.push(`Invalid value for property: ${String(prop)}`);
         }
       }
@@ -173,7 +173,7 @@ export function createSchemaGuard<T extends object>(
     for (const prop of optionalProperties) {
       if (prop in value) {
         const validator = propertyValidators[prop];
-        if (validator && !validator(value[prop])) {
+        if (validator && !validator((value as any)[prop])) {
           errors.push(`Invalid value for optional property: ${String(prop)}`);
         }
       }
@@ -498,7 +498,7 @@ export const validationUtils = {
   assertType: <T>(value: unknown, guard: ValidationGuard<T>, context?: string): asserts value is T => {
     const result = guard.validateWithContext(value, context);
     if (!result.success) {
-      throw result.error;
+      throw (result as { success: false; error: TypeValidationError }).error;
     }
   },
 
@@ -531,7 +531,7 @@ export const validationUtils = {
     for (let i = 0; i < values.length; i++) {
       const result = elementGuard.validateWithContext(values[i], `${context}[${i}]`);
       if (!result.success) {
-        return result;
+        return result as TypedResult<T[], TypeValidationError>;
       }
       validatedItems.push(result.data);
     }

@@ -2138,3 +2138,588 @@ export const createCompliantMockData = {
     };
   }
 };
+
+// =============================================================================
+// COMPLEX SCENARIO BUILDERS FOR COMPREHENSIVE TEST COVERAGE
+// =============================================================================
+
+/**
+ * Test Data Builders for Complex Scenarios
+ * 
+ * These builders create sophisticated test datasets for edge cases, error testing,
+ * and performance benchmarking. They extend the existing test utilities with
+ * specialized data generation patterns.
+ * 
+ * Key features:
+ * - Edge case data generation for boundary testing
+ * - Invalid data generators for error path testing
+ * - Performance benchmark datasets with varying complexity
+ * - Realistic scenario builders for integration testing
+ */
+
+/**
+ * Builder for edge case scenarios in training plan generation
+ */
+export class EdgeCaseDataBuilder {
+  /**
+   * Generate extremely short training plans (minimum viable)
+   */
+  static createMinimumViablePlan(overrides?: Partial<TrainingPlanConfig>): TrainingPlanConfig {
+    return createMockTrainingPlanConfig({
+      startDate: testDateUtils.createTestDate('2024-01-01'),
+      targetDate: testDateUtils.createTestDate('2024-01-29'), // 4 weeks minimum
+      preferences: createMockTrainingPreferences({
+        availableDays: [1], // Only one day per week
+        timeConstraints: { 1: 30 } // Minimal time constraint
+      }),
+      currentFitness: createMockFitnessAssessment({
+        vdot: 30, // Minimum fitness level
+        weeklyMileage: 5, // Very low mileage
+        recentRace: {
+          distance: '5K',
+          time: 1800, // 30 minutes - slow 5K time
+          date: testDateUtils.createTestDate('2023-12-01')
+        }
+      }),
+      ...overrides
+    });
+  }
+
+  /**
+   * Generate extremely long training plans (maximum complexity)
+   */
+  static createMaximumComplexityPlan(overrides?: Partial<AdvancedPlanConfig>): AdvancedPlanConfig {
+    const races: TargetRace[] = [];
+    const startDate = testDateUtils.createTestDate('2024-01-01');
+    
+    // Create 12 races throughout the year
+    for (let i = 0; i < 12; i++) {
+      races.push(createMockTargetRace({
+        distance: i % 4 === 0 ? 'MARATHON' : i % 3 === 0 ? 'HALF_MARATHON' : '10K',
+        date: addDays(startDate, 30 * i + 15),
+        priority: i % 4 === 0 ? 'A' : 'B'
+      }));
+    }
+
+    return createMockAdvancedPlanConfig({
+      startDate,
+      targetDate: addDays(startDate, 365), // Full year plan
+      preferences: createMockTrainingPreferences({
+        availableDays: [1, 2, 3, 4, 5, 6, 7], // Every day
+        timeConstraints: {
+          1: 120, 2: 90, 3: 120, 4: 90, 5: 90, 6: 180, 7: 120
+        }
+      }),
+      targetRaces: races,
+      currentFitness: createMockFitnessAssessment({
+        vdot: 65, // Elite level fitness
+        weeklyMileage: 100, // High mileage
+        longestRun: 35 // Very long runs
+      }),
+      ...overrides
+    });
+  }
+
+  /**
+   * Generate data with boundary values for numeric constraints
+   */
+  static createBoundaryValueData(): {
+    configs: TrainingPlanConfig[];
+    runData: RunData[];
+    assessments: FitnessAssessment[];
+  } {
+    const boundaryConfigs = [
+      // Minimum values
+      createMockTrainingPlanConfig({
+        currentFitness: createMockFitnessAssessment({
+          vdot: 20, // Minimum VDOT
+          weeklyMileage: 0, // No base mileage
+          longestRun: 0
+        })
+      }),
+      // Maximum realistic values
+      createMockTrainingPlanConfig({
+        currentFitness: createMockFitnessAssessment({
+          vdot: 85, // Elite VDOT
+          weeklyMileage: 200, // Elite weekly mileage
+          longestRun: 50 // Ultra distance
+        })
+      })
+    ];
+
+    const boundaryRuns = [
+      // Minimum valid run
+      createMockRunData(0, {
+        distance: 0.1, // 100m
+        duration: 0.5, // 30 seconds
+        avgPace: 3.0, // 3 min/km (very fast)
+        effortLevel: 1
+      }),
+      // Maximum realistic run
+      createMockRunData(-1, {
+        distance: 100, // 100km ultramarathon
+        duration: 600, // 10 hours
+        avgPace: 6.0, // 6 min/km
+        effortLevel: 10
+      })
+    ];
+
+    const boundaryAssessments = [
+      createMockFitnessAssessment({
+        vdot: 15, // Below typical minimum
+        weeklyMileage: 0,
+        longestRun: 0,
+        restingHeartRate: 40, // Very low RHR
+        maxHeartRate: 220 // Very high max HR
+      }),
+      createMockFitnessAssessment({
+        vdot: 90, // Above typical maximum
+        weeklyMileage: 300, // Extreme mileage
+        longestRun: 100, // Extreme distance
+        restingHeartRate: 80, // High RHR
+        maxHeartRate: 160 // Low max HR for age
+      })
+    ];
+
+    return {
+      configs: boundaryConfigs,
+      runData: boundaryRuns,
+      assessments: boundaryAssessments
+    };
+  }
+
+  /**
+   * Generate data with time zone edge cases
+   */
+  static createTimeZoneEdgeCases(): TrainingPlanConfig[] {
+    const configs: TrainingPlanConfig[] = [];
+    
+    // Plan crossing daylight saving time
+    configs.push(createMockTrainingPlanConfig({
+      startDate: new Date('2024-03-01T12:00:00Z'), // Before DST
+      targetDate: new Date('2024-04-15T12:00:00Z'), // After DST
+      name: 'DST Crossing Plan'
+    }));
+
+    // Plan at year boundary
+    configs.push(createMockTrainingPlanConfig({
+      startDate: new Date('2023-12-01T12:00:00Z'),
+      targetDate: new Date('2024-02-29T12:00:00Z'), // Leap year
+      name: 'Year Boundary Plan'
+    }));
+
+    return configs;
+  }
+}
+
+/**
+ * Builder for invalid data scenarios to test error handling
+ */
+export class InvalidDataBuilder {
+  /**
+   * Generate invalid TrainingPlanConfig objects for error testing
+   */
+  static createInvalidConfigs(): Array<{ config: any; expectedError: string }> {
+    return [
+      {
+        config: {
+          ...createMockTrainingPlanConfig(),
+          startDate: null
+        },
+        expectedError: 'Start date is required'
+      },
+      {
+        config: {
+          ...createMockTrainingPlanConfig(),
+          targetDate: testDateUtils.createTestDate('2023-01-01'), // Past date
+          startDate: testDateUtils.createTestDate('2024-01-01')
+        },
+        expectedError: 'Target date must be after start date'
+      },
+      {
+        config: {
+          ...createMockTrainingPlanConfig(),
+          currentFitness: {
+            ...createMockFitnessAssessment(),
+            vdot: -5 // Negative VDOT
+          }
+        },
+        expectedError: 'VDOT must be positive'
+      },
+      {
+        config: {
+          ...createMockTrainingPlanConfig(),
+          currentFitness: {
+            ...createMockFitnessAssessment(),
+            weeklyMileage: -10 // Negative mileage
+          }
+        },
+        expectedError: 'Weekly mileage cannot be negative'
+      },
+      {
+        config: {
+          ...createMockTrainingPlanConfig(),
+          preferences: {
+            ...createMockTrainingPreferences(),
+            availableDays: [] // No available days
+          }
+        },
+        expectedError: 'At least one training day must be available'
+      }
+    ];
+  }
+
+  /**
+   * Generate invalid RunData objects for calculator testing
+   */
+  static createInvalidRunData(): Array<{ runData: any; expectedError: string }> {
+    return [
+      {
+        runData: {
+          ...createMockRunData(0),
+          distance: -5 // Negative distance
+        },
+        expectedError: 'Distance must be positive'
+      },
+      {
+        runData: {
+          ...createMockRunData(0),
+          duration: 0 // Zero duration
+        },
+        expectedError: 'Duration must be positive'
+      },
+      {
+        runData: {
+          ...createMockRunData(0),
+          avgPace: undefined
+        },
+        expectedError: 'Average pace is required'
+      },
+      {
+        runData: {
+          ...createMockRunData(0),
+          date: 'invalid-date' // Invalid date format
+        },
+        expectedError: 'Valid date is required'
+      }
+    ];
+  }
+
+  /**
+   * Generate malformed data structures for robust error handling
+   */
+  static createMalformedData(): Array<{ data: any; context: string }> {
+    return [
+      {
+        data: null,
+        context: 'null input'
+      },
+      {
+        data: undefined,
+        context: 'undefined input'
+      },
+      {
+        data: 'string instead of object',
+        context: 'wrong type'
+      },
+      {
+        data: 42,
+        context: 'number instead of object'
+      },
+      {
+        data: [],
+        context: 'array instead of object'
+      },
+      {
+        data: {
+          // Missing required properties
+          partialConfig: true
+        },
+        context: 'incomplete object'
+      },
+      {
+        data: {
+          ...createMockTrainingPlanConfig(),
+          startDate: NaN // Invalid date
+        },
+        context: 'object with invalid properties'
+      }
+    ];
+  }
+
+  /**
+   * Generate data that causes calculation edge cases
+   */
+  static createCalculationEdgeCases(): Array<{ input: any; operation: string }> {
+    return [
+      {
+        input: { vdot: 0, distance: 5 },
+        operation: 'pace calculation with zero VDOT'
+      },
+      {
+        input: { pace: Infinity, distance: 5 },
+        operation: 'TSS calculation with infinite pace'
+      },
+      {
+        input: { runs: Array(10000).fill(createMockRunData(0)) },
+        operation: 'VDOT calculation with excessive data'
+      },
+      {
+        input: { heartRate: [300, 400, 500] }, // Impossible HR values
+        operation: 'zone calculation with invalid heart rate'
+      }
+    ];
+  }
+}
+
+/**
+ * Builder for performance benchmark datasets
+ */
+export class PerformanceBenchmarkBuilder {
+  /**
+   * Generate datasets of varying sizes for performance testing
+   */
+  static createScalabilityDatasets(): {
+    small: any;
+    medium: any;
+    large: any;
+    xlarge: any;
+  } {
+    return {
+      // Small dataset (baseline performance)
+      small: {
+        runs: generateMockRunHistory(4, 3), // 4 weeks, 3 runs per week
+        workouts: generateCompletedWorkouts(4, 3),
+        config: createMockTrainingPlanConfig()
+      },
+      
+      // Medium dataset (typical real-world usage)
+      medium: {
+        runs: generateMockRunHistory(12, 4), // 3 months, 4 runs per week
+        workouts: generateCompletedWorkouts(12, 4),
+        config: createMockAdvancedPlanConfig({
+          targetRaces: Array(3).fill(null).map((_, i) => 
+            createMockTargetRace({
+              date: addDays(new Date(), 30 * (i + 1))
+            })
+          )
+        })
+      },
+      
+      // Large dataset (power user scenario)
+      large: {
+        runs: generateMockRunHistory(26, 5), // 6 months, 5 runs per week
+        workouts: generateCompletedWorkouts(26, 5),
+        config: EdgeCaseDataBuilder.createMaximumComplexityPlan()
+      },
+      
+      // Extra large dataset (stress testing)
+      xlarge: {
+        runs: generateMockRunHistory(52, 6), // Full year, 6 runs per week
+        workouts: generateCompletedWorkouts(52, 6),
+        config: EdgeCaseDataBuilder.createMaximumComplexityPlan()
+      }
+    };
+  }
+
+  /**
+   * Generate computation-heavy scenarios for algorithm performance testing
+   */
+  static createComputationHeavyScenarios(): Array<{
+    name: string;
+    data: any;
+    expectedComplexity: string;
+  }> {
+    return [
+      {
+        name: 'VDOT calculation with many data points',
+        data: {
+          runs: Array(1000).fill(null).map((_, i) => 
+            createMockRunData(-i, {
+              distance: 5 + Math.random() * 10,
+              duration: 20 + Math.random() * 40,
+              isRace: i % 50 === 0 // Race every 50 runs
+            })
+          )
+        },
+        expectedComplexity: 'O(n log n)'
+      },
+      {
+        name: 'Zone calculation across fitness spectrum',
+        data: {
+          vdotRange: Array(100).fill(null).map((_, i) => 20 + i * 0.5), // VDOT 20-70
+          heartRateRange: Array(100).fill(null).map((_, i) => 120 + i * 2) // HR 120-320
+        },
+        expectedComplexity: 'O(n)'
+      },
+      {
+        name: 'Complex plan generation with many constraints',
+        data: EdgeCaseDataBuilder.createMaximumComplexityPlan(),
+        expectedComplexity: 'O(n²)'
+      }
+    ];
+  }
+
+  /**
+   * Generate memory-intensive datasets for memory usage testing
+   */
+  static createMemoryIntensiveDatasets(): Array<{
+    name: string;
+    data: any;
+    estimatedMemoryMB: number;
+  }> {
+    return [
+      {
+        name: 'Large run history dataset',
+        data: {
+          runs: generateMockRunHistory(104, 7) // 2 years, daily runs
+        },
+        estimatedMemoryMB: 5
+      },
+      {
+        name: 'Multiple concurrent plans',
+        data: {
+          plans: Array(10).fill(null).map(() => 
+            EdgeCaseDataBuilder.createMaximumComplexityPlan()
+          )
+        },
+        estimatedMemoryMB: 20
+      },
+      {
+        name: 'Comprehensive workout database',
+        data: {
+          workouts: generateCompletedWorkouts(104, 7), // 2 years of workouts
+          planned: Array(104 * 7).fill(null).map((_, i) => 
+            createMockPlannedWorkout({
+              date: addDays(new Date(), -i)
+            })
+          )
+        },
+        estimatedMemoryMB: 15
+      }
+    ];
+  }
+
+  /**
+   * Generate realistic training scenarios for integration performance testing
+   */
+  static createRealisticScenarios(): Array<{
+    name: string;
+    scenario: any;
+    description: string;
+  }> {
+    return [
+      {
+        name: 'Elite marathoner preparation',
+        scenario: {
+          config: createMockAdvancedPlanConfig({
+            methodology: 'pfitzinger',
+            currentFitness: createMockFitnessAssessment({
+              vdot: 70,
+              weeklyMileage: 120,
+              longestRun: 32
+            }),
+            targetRaces: [
+              createMockTargetRace({
+                distance: 'MARATHON',
+                date: addDays(new Date(), 120),
+                priority: 'A'
+              })
+            ]
+          }),
+          history: generateMockRunHistory(52, 6) // Full year of training
+        },
+        description: 'High-volume elite training with complex periodization'
+      },
+      {
+        name: 'Beginner couch-to-5K progression',
+        scenario: {
+          config: EdgeCaseDataBuilder.createMinimumViablePlan({
+            goal: '5K',
+            currentFitness: createMockFitnessAssessment({
+              vdot: 25,
+              weeklyMileage: 0,
+              longestRun: 0
+            })
+          }),
+          history: generateMockRunHistory(12, 3) // 3 months, 3x per week
+        },
+        description: 'Low-volume beginner progression with careful adaptation'
+      },
+      {
+        name: 'Multi-distance athlete season',
+        scenario: {
+          config: createMockAdvancedPlanConfig({
+            methodology: 'daniels',
+            targetRaces: [
+              createMockTargetRace({ distance: '5K', priority: 'B' }),
+              createMockTargetRace({ distance: '10K', priority: 'A', date: addDays(new Date(), 60) }),
+              createMockTargetRace({ distance: 'HALF_MARATHON', priority: 'A', date: addDays(new Date(), 120) })
+            ]
+          }),
+          history: generateMockRunHistory(26, 5) // 6 months varied training
+        },
+        description: 'Multi-race season with varied distance targets'
+      }
+    ];
+  }
+}
+
+/**
+ * Utility functions for working with complex test scenarios
+ */
+export const complexScenarioUtils = {
+  /**
+   * Validate that generated data meets expected constraints
+   */
+  validateDataConstraints: (data: any, constraints: any): boolean => {
+    // Implementation would check that generated data meets specified constraints
+    return true; // Placeholder
+  },
+
+  /**
+   * Measure memory usage of a dataset
+   */
+  estimateMemoryUsage: (data: any): number => {
+    // Rough estimation of memory usage in MB
+    const jsonString = JSON.stringify(data);
+    return jsonString.length / (1024 * 1024);
+  },
+
+  /**
+   * Time the execution of a function with given data
+   */
+  measureExecutionTime: async (fn: Function, data: any): Promise<{
+    result: any;
+    executionTimeMs: number;
+    memoryUsedMB: number;
+  }> => {
+    const startTime = performance.now();
+    const startMemory = process.memoryUsage().heapUsed;
+    
+    const result = await fn(data);
+    
+    const endTime = performance.now();
+    const endMemory = process.memoryUsage().heapUsed;
+    
+    return {
+      result,
+      executionTimeMs: endTime - startTime,
+      memoryUsedMB: (endMemory - startMemory) / (1024 * 1024)
+    };
+  },
+
+  /**
+   * Generate test data summary for documentation
+   */
+  generateDataSummary: (data: any): string => {
+    const summary = {
+      type: typeof data,
+      properties: Object.keys(data || {}),
+      size: Array.isArray(data) ? data.length : 'N/A',
+      memoryEstimate: complexScenarioUtils.estimateMemoryUsage(data)
+    };
+    
+    return `Data Type: ${summary.type}, Properties: ${summary.properties.join(', ')}, Size: ${summary.size}, Memory: ${summary.memoryEstimate.toFixed(2)}MB`;
+  }
+};

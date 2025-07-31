@@ -6,31 +6,21 @@ import {
   Workout, 
   WorkoutType,
   IntensityDistribution,
-  IntensityDistributionViolation,
-  IntensityDistributionReport,
   FitnessAssessment,
   PlannedWorkout,
-  RunData,
-  PfitzingerPaceRange,
-  PfitzingerTrainingPaces,
-  MediumLongRunPattern,
-  MediumLongRunSegment,
-  PfitzingerWeeklyStructure,
-  PfitzingerDayStructure,
-  WorkoutSpacing,
-  ThresholdVolumeStructure,
-  ThresholdVolumeProgression,
-  RecoveryRequirements,
-  RaceSpecificIntegration,
-  TaperIntegration,
-  TuneUpRace,
-  WeeklyVariation
+  RunData
 } from './types';
 import { WORKOUT_TEMPLATES, createCustomWorkout } from './workouts';
-import { TRAINING_METHODOLOGIES, WORKOUT_EMPHASIS, METHODOLOGY_PHASE_TARGETS, INTENSITY_MODELS } from './constants';
-import { calculateVDOT, calculateVDOTCached, calculateLactateThreshold } from './calculator';
-import { TRAINING_ZONES, calculateTrainingPaces, DanielsTrainingPaces, PaceRange } from './zones';
+import { TRAINING_METHODOLOGIES, WORKOUT_EMPHASIS, METHODOLOGY_PHASE_TARGETS, INTENSITY_MODELS, METHODOLOGY_INTENSITY_DISTRIBUTIONS } from './constants';
+import { calculateVDOT, calculateLactateThreshold } from './calculator';
+import { calculateVDOTCached } from './calculation-cache';
+import { TRAINING_ZONES, calculateTrainingPaces } from './zones';
 import { differenceInWeeks } from 'date-fns';
+
+// Temporary type definitions for missing types
+type DanielsTrainingPaces = Record<string, number>;
+type WeeklyMicrocycle = any; // Will be defined properly later
+type TrainingZone = any; // Will be defined properly later
 
 /**
  * Core interface for training philosophies
@@ -176,8 +166,8 @@ export abstract class BaseTrainingPhilosophy implements TrainingPhilosophy {
    * Get phase-specific intensity distribution
    */
   getPhaseIntensityDistribution(phase: TrainingPhase): IntensityDistribution {
-    const phaseTargets = METHODOLOGY_PHASE_TARGETS[this.methodology as keyof typeof METHODOLOGY_PHASE_TARGETS];
-    return phaseTargets?.[phase] || this.intensityDistribution;
+    const methodologyDistributions = METHODOLOGY_INTENSITY_DISTRIBUTIONS[this.methodology as keyof typeof METHODOLOGY_INTENSITY_DISTRIBUTIONS];
+    return methodologyDistributions?.[phase] || this.intensityDistribution;
   }
   
   /**

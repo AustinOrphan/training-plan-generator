@@ -5,16 +5,12 @@
  * with full validation, adaptation, and export capabilities.
  */
 
-import {
-  AdvancedTrainingPlanGenerator,
-  PhilosophyFactory,
-  SmartAdaptationEngine,
-  MultiFormatExporter,
-  type AdvancedPlanConfig,
-  type TrainingPlan,
-  type ProgressData
-} from '../src/index';
+import { AdvancedTrainingPlanGenerator } from '../src/advanced-generator';
+import { PhilosophyFactory } from '../src/philosophies';
+import { SmartAdaptationEngine } from '../src/adaptation';
+import { MultiFormatExporter } from '../src/export';
 import { ValidationFactory } from '../src/validation';
+import type { AdvancedPlanConfig, TrainingPlan, ProgressData } from '../src/types';
 
 /**
  * Complete workflow for Jack Daniels methodology

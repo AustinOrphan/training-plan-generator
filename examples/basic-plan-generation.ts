@@ -5,11 +5,10 @@
  * enhanced API with different methodologies and export options.
  */
 
-import {
-  AdvancedTrainingPlanGenerator,
-  MultiFormatExporter,
-  type AdvancedPlanConfig
-} from '../src/index';
+import { TrainingPlanGenerator } from '../src/generator';
+import { AdvancedTrainingPlanGenerator } from '../src/advanced-generator';
+import { MultiFormatExporter } from '../src/export';
+import type { AdvancedPlanConfig, RaceDistance } from '../src/types';
 
 async function basicPlanGeneration() {
   console.log('🏃‍♂️ Training Plan Generator - Basic Example\n');
@@ -49,8 +48,24 @@ async function basicPlanGeneration() {
       }
     },
     
-    // Enhanced features
+    // Enhanced features (required properties)
     methodology: 'daniels', // Use Jack Daniels' methodology
+    intensityDistribution: { easy: 0.8, moderate: 0.15, hard: 0.05 },
+    periodization: 'linear',
+    targetRaces: [{
+      name: 'Target Half Marathon',
+      date: new Date(Date.now() + 12 * 7 * 24 * 60 * 60 * 1000),
+      distance: 21.1,
+      priority: 'A',
+      location: 'Local Race',
+      terrain: 'road' as const,
+      conditions: {
+        temperature: 15,
+        humidity: 60,
+        windSpeed: 5,
+        elevation: 100
+      }
+    }],
     adaptationEnabled: true,
     progressTracking: true,
     exportFormats: ['pdf', 'ical', 'csv']
@@ -58,7 +73,7 @@ async function basicPlanGeneration() {
 
   console.log('📋 Configuration:');
   console.log(`- Goal: ${config.goal}`);
-  console.log(`- Duration: ${Math.round((config.targetDate.getTime() - config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1000))} weeks`);
+  console.log(`- Duration: ${Math.round((config.targetDate!.getTime() - config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1000))} weeks`);
   console.log(`- Methodology: ${config.methodology}`);
   console.log(`- Current VDOT: ${config.currentFitness?.vdot}`);
   console.log(`- Weekly Mileage: ${config.currentFitness?.weeklyMileage} km\n`);
@@ -105,30 +120,30 @@ async function basicPlanGeneration() {
 
   try {
     // Export to PDF
-    const pdfResult = await exporter.export(plan, 'pdf', {
+    const pdfResult = await exporter.exportPlan(plan, 'pdf', {
       includePaces: true,
       includeHeartRates: true
     });
     console.log(`✅ PDF exported: ${pdfResult.filename} (${Math.round(pdfResult.size / 1024)} KB)`);
 
     // Export to Calendar
-    const icalResult = await exporter.export(plan, 'ical', {
+    const icalResult = await exporter.exportPlan(plan, 'ical', {
       timeZone: 'America/New_York'
     });
     console.log(`✅ Calendar exported: ${icalResult.filename} (${icalResult.metadata.totalWorkouts} events)`);
 
     // Export to CSV for analysis
-    const csvResult = await exporter.export(plan, 'csv', {
+    const csvResult = await exporter.exportPlan(plan, 'csv', {
       units: 'metric'
     });
     console.log(`✅ CSV exported: ${csvResult.filename} (${Math.round(csvResult.size / 1024)} KB)`);
 
     // Export to JSON for API integration
-    const jsonResult = await exporter.export(plan, 'json');
+    const jsonResult = await exporter.exportPlan(plan, 'json');
     console.log(`✅ JSON exported: ${jsonResult.filename} (${Math.round(jsonResult.size / 1024)} KB)`);
 
   } catch (error) {
-    console.error('❌ Export error:', error.message);
+    console.error('❌ Export error:', error instanceof Error ? error.message : String(error));
   }
 
   console.log('\n🎉 Basic plan generation complete!');
