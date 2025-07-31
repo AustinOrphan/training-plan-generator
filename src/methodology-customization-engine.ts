@@ -18,7 +18,8 @@ import { PhilosophyFactory, TrainingPhilosophy } from './philosophies';
 import { PhilosophyComparator } from './philosophy-comparator';
 import { MethodologyRecommendationEngine, UserProfile } from './methodology-recommendation-engine';
 import { calculateVDOTCached, calculateFitnessMetricsCached } from './calculation-cache';
-import { TRAINING_METHODOLOGIES, WORKOUT_TEMPLATES } from './constants';
+import { TRAINING_METHODOLOGIES } from './constants';
+import { WORKOUT_TEMPLATES } from './workouts';
 import { calculateTSS } from './calculator';
 
 // Types for customization system

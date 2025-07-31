@@ -1,11 +1,12 @@
 import {
-  TrainingMethodology,
+  TrainingMethodology,  
   TrainingGoal,
   FitnessAssessment,
   TrainingPreferences,
   EnvironmentalFactors,
   RaceDistance,
-  TargetRace
+  TargetRace,
+  RunnerAttribute
 } from './types';
 import { PhilosophyComparator, MethodologyProfile } from './philosophy-comparator';
 import { TRAINING_METHODOLOGIES } from './constants';
@@ -60,16 +61,6 @@ export interface StrengthsWeaknesses {
   weaknesses: RunnerAttribute[];
 }
 
-export type RunnerAttribute = 
-  | 'speed'
-  | 'endurance'
-  | 'consistency'
-  | 'mental_toughness'
-  | 'recovery'
-  | 'injury_resistance'
-  | 'hill_running'
-  | 'heat_tolerance'
-  | 'cold_tolerance';
 
 export type TrainingApproach = 
   | 'scientific' // Data-driven, precise pacing

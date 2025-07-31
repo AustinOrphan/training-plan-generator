@@ -682,6 +682,21 @@ export interface RecoveryMetrics {
   motivation: number; // 1-10
   hrv?: number; // Heart rate variability
   restingHR?: number; // Resting heart rate
-  notes?: string; // Additional recovery notes
+  notes?: string; // Additional recovery notes  
   date?: Date; // Date of recovery measurement
 }
+
+/**
+ * Runner attributes for methodology customization and profiling
+ * Defines the key characteristics that influence training approach selection
+ */
+export type RunnerAttribute = 
+  | 'speed'
+  | 'endurance'
+  | 'consistency'
+  | 'mental_toughness'
+  | 'recovery'
+  | 'injury_resistance'
+  | 'hill_running'
+  | 'heat_tolerance'
+  | 'cold_tolerance';

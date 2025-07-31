@@ -24,6 +24,11 @@ import { differenceInDays, addDays, startOfWeek, isSameDay } from 'date-fns';
 /**
  * Interface for training plan adaptation engines
  */
+/**
+ * Plan modification types for different adaptation strategies
+ */
+export type ModificationType = 'reduce_volume' | 'reduce_intensity' | 'add_recovery' | 'substitute_workout' | 'delay_progression' | 'injury_protocol';
+
 export interface AdaptationEngine {
   /**
    * Analyze workout completion and performance data
@@ -63,7 +68,7 @@ export interface AdaptationEngine {
  * Represents a suggested modification to the training plan
  */
 export interface PlanModification {
-  type: 'reduce_volume' | 'reduce_intensity' | 'add_recovery' | 'substitute_workout' | 'delay_progression' | 'injury_protocol';
+  type: ModificationType;
   reason: string;
   priority: 'high' | 'medium' | 'low';
   workoutIds?: string[];
