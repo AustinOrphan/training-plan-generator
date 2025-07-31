@@ -440,7 +440,9 @@ abstract class BaseFormatter<TOptions extends BaseExportOptions = BaseExportOpti
       exportDate: new Date(),
       format: this.format,
       totalWorkouts: plan.workouts.length,
-      planDuration: Math.ceil((plan.config.targetDate?.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) || 16,
+      planDuration: plan.config.targetDate 
+        ? Math.ceil((plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1000))
+        : 16,
       fileSize: contentSize,
       version: '1.0.0'
     };
@@ -2242,7 +2244,9 @@ class TrainingPeaksFormatter extends BaseFormatter {
   
   private estimateWeeklyHours(plan: TrainingPlan): number {
     const totalMinutes = plan.workouts.reduce((sum, w) => sum + w.targetMetrics.duration, 0);
-    const weeks = Math.ceil((plan.config.targetDate?.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) || 16;
+    const weeks = plan.config.targetDate 
+      ? Math.ceil((plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1000))
+      : 16;
     return Math.round((totalMinutes / weeks) / 60 * 10) / 10; // Round to 1 decimal
   }
   
