@@ -499,12 +499,14 @@ export class ValidationPipeline {
     // Plan to progress consistency
     if (plan && progress) {
       progress.forEach((entry, index) => {
-        if (entry.completedWorkout?.plannedWorkout) {
-          const plannedId = entry.completedWorkout.plannedWorkout.id;
-          const found = plan.workouts.find(w => w.id === plannedId);
-          if (!found) {
-            this.addError(`progress[${index}]`, `References non-existent workout ID: ${plannedId}`);
-          }
+        if (entry.completedWorkouts?.length > 0) {
+          entry.completedWorkouts.forEach(workout => {
+            const plannedId = workout.plannedWorkout.id;
+            const found = plan.workouts.find(w => w.id === plannedId);
+            if (!found) {
+              this.addError(`progress[${index}]`, `References non-existent workout ID: ${plannedId}`);
+            }
+          });
         }
       });
     }

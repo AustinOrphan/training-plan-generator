@@ -569,7 +569,7 @@ export type TrainingMethodology = 'daniels' | 'lydiard' | 'pfitzinger' | 'hudson
 
 export type ExportFormat = 'pdf' | 'ical' | 'csv' | 'json';
 
-export type RaceDistance = '5k' | '10k' | '15k' | 'half-marathon' | 'marathon' | '50K' | 'ultra';
+export type RaceDistance = '5k' | '10k' | '15k' | 'half-marathon' | 'marathon' | '50k' | '50-mile' | '100k' | '100-mile' | 'ultra';
 
 export interface TargetRace {
   distance: RaceDistance;

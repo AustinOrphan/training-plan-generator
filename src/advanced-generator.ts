@@ -562,7 +562,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
         taper: ['Recovery', 'Maintenance', 'Mental prep'],
         recovery: ['Easy running', 'Recovery']
       },
-      '50K': {
+      '50k': {
         base: ['Ultra endurance', 'Time on feet', 'Nutrition'],
         build: ['Back-to-back long runs', 'Hill strength', 'Pacing'],
         peak: ['Race simulation', 'Fueling strategy', 'Mental prep'],
@@ -576,7 +576,7 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
         taper: ['Rest', 'Recovery', 'Preparation'],
         recovery: ['Extended recovery', 'Adaptation']
       },
-      '100K': {
+      '100k': {
         base: ['Volume build', 'Endurance', 'Consistency'],
         build: ['Back-to-backs', 'Night running', 'Nutrition'],
         peak: ['Race simulation', 'Mental training', 'Strategy'],
@@ -626,9 +626,9 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '15k': 1,
       'half-marathon': 2,
       'marathon': 3,
-      '50K': 4,
+      '50k': 4,
       '50-mile': 6,
-      '100K': 8,
+      '100k': 8,
       '100-mile': 12
     };
     
@@ -648,9 +648,9 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '15k': 8,
       'half-marathon': 8,
       'marathon': 12,
-      '50K': 16,
+      '50k': 16,
       '50-mile': 20,
-      '100K': 24,
+      '100k': 24,
       '100-mile': 32
     };
     
@@ -789,9 +789,9 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '15k': 80,
       'half-marathon': 110,
       'marathon': 240,
-      '50K': 360,
+      '50k': 360,
       '50-mile': 600,
-      '100K': 840,
+      '100k': 840,
       '100-mile': 1800
     };
     
@@ -808,9 +808,9 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '15k': 15,
       'half-marathon': 21.1,
       'marathon': 42.2,
-      '50K': 50,
+      '50k': 50,
       '50-mile': 80.5,
-      '100K': 100,
+      '100k': 100,
       '100-mile': 161
     };
     
@@ -827,9 +827,9 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '15k': 140,
       'half-marathon': 180,
       'marathon': 300,
-      '50K': 400,
+      '50k': 400,
       '50-mile': 600,
-      '100K': 800,
+      '100k': 800,
       '100-mile': 1200
     };
     
@@ -896,9 +896,9 @@ export class AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
       '15k': 10,
       'half-marathon': 12,
       'marathon': 15,
-      '50K': 20,
+      '50k': 20,
       '50-mile': 30,
-      '100K': 30,
+      '100k': 30,
       '100-mile': 45
     };
     

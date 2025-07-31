@@ -9,6 +9,7 @@ import {
   IntensityDistribution,
   RunData,
   FitnessAssessment,
+  WorkoutType,
 } from './types';
 import {
   PHASE_DURATION,
@@ -331,6 +332,35 @@ export class TrainingPlanGenerator {
   }
 
   /**
+   * Generate a single workout (for advanced-generator extension)
+   */
+  protected generateWorkout(
+    date: Date,
+    type: WorkoutType,
+    phase: TrainingPhase,
+    weekNumber: number
+  ): PlannedWorkout {
+    const workout = this.selectWorkout(type.toString(), phase, 10); // Default remaining volume
+    const targetDistance = this.calculateWorkoutDistance(workout, 10, 1);
+
+    return {
+      id: `workout-${weekNumber}-${Date.now()}`,
+      date,
+      type: workout.type,
+      name: this.generateWorkoutName(workout.type, phase),
+      description: this.generateWorkoutDescription(workout),
+      workout,
+      targetMetrics: {
+        duration: workout.segments.reduce((sum: number, s: any) => sum + s.duration, 0),
+        distance: targetDistance,
+        tss: workout.estimatedTSS,
+        load: workout.estimatedTSS,
+        intensity: workout.segments.reduce((sum: number, s: any) => sum + s.intensity, 0) / workout.segments.length,
+      },
+    };
+  }
+
+  /**
    * Select appropriate workout based on type string
    */
   private selectWorkout(typeString: string, phase: TrainingPhase, volumeRemaining: number): any {
@@ -482,25 +512,48 @@ export class TrainingPlanGenerator {
   }
 
   /**
+   * Calculate overall fitness score from available metrics
+   */
+  private calculateOverallScore(assessment: Partial<FitnessAssessment>): number {
+    const vdotScore = Math.min((assessment.vdot || 40) / 80 * 100, 100); // Normalize VDOT to 0-100
+    const volumeScore = Math.min((assessment.weeklyMileage || 30) / 100 * 100, 100); // Weekly mileage score
+    const experienceScore = Math.min((assessment.trainingAge || 1) / 10 * 100, 100); // Training age score
+    const recoveryScore = assessment.recoveryRate || 75; // Recovery rate (already 0-100)
+    
+    // Weighted average: VDOT (40%), Volume (25%), Experience (20%), Recovery (15%)
+    return Math.round(
+      vdotScore * 0.4 + 
+      volumeScore * 0.25 + 
+      experienceScore * 0.2 + 
+      recoveryScore * 0.15
+    );
+  }
+
+  /**
    * Create default fitness assessment
    */
   private createDefaultFitness(): FitnessAssessment {
-    return {
+    const assessment = {
       weeklyMileage: 30,
       longestRecentRun: 10,
       vdot: 40,
       trainingAge: 1,
+    };
+    
+    return {
+      ...assessment,
+      overallScore: this.calculateOverallScore(assessment),
     };
   }
 
   /**
    * Assess fitness from run history
    */
-  private static assessFitnessFromRuns(runs: RunData[]): FitnessAssessment {
+  public static assessFitnessFromRuns(runs: RunData[]): FitnessAssessment {
     const metrics = calculateFitnessMetrics(runs);
     const patterns = analyzeWeeklyPatterns(runs);
 
-    return {
+    const assessment = {
       vdot: metrics.vdot,
       criticalSpeed: metrics.criticalSpeed,
       runningEconomy: metrics.runningEconomy,
@@ -509,6 +562,24 @@ export class TrainingPlanGenerator {
       longestRecentRun: Math.max(...runs.map(r => r.distance)),
       trainingAge: 1, // Would need more data to calculate
       recoveryRate: metrics.recoveryScore,
+    };
+
+    // Calculate overall score using static method since this is a static method
+    const vdotScore = Math.min((assessment.vdot || 40) / 80 * 100, 100);
+    const volumeScore = Math.min((assessment.weeklyMileage || 30) / 100 * 100, 100);
+    const experienceScore = Math.min((assessment.trainingAge || 1) / 10 * 100, 100);
+    const recoveryScore = assessment.recoveryRate || 75;
+    
+    const overallScore = Math.round(
+      vdotScore * 0.4 + 
+      volumeScore * 0.25 + 
+      experienceScore * 0.2 + 
+      recoveryScore * 0.15
+    );
+
+    return {
+      ...assessment,
+      overallScore,
     };
   }
 }

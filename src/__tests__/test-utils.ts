@@ -95,6 +95,7 @@ export const createMockFitnessAssessment = (overrides?: Partial<FitnessAssessmen
   trainingAge: 3,
   injuryHistory: [],
   recoveryRate: 75,
+  overallScore: 65, // Combined fitness score: VDOT: 45 * 0.4 + Volume: 40/50*100 * 0.3 + Experience: 3*10 * 0.2 + Recovery: 75 * 0.1 = 65
   ...overrides
 });
 
@@ -137,7 +138,7 @@ export const createMockTrainingPlanConfig = (overrides?: Partial<TrainingPlanCon
 export const createMockAdvancedPlanConfig = (overrides?: Partial<AdvancedPlanConfig>): AdvancedPlanConfig => ({
   ...createMockTrainingPlanConfig(),
   methodology: 'daniels',
-  intensityDistribution: { easy: 80, moderate: 15, hard: 5 },
+  intensityDistribution: { easy: 80, moderate: 15, hard: 4, veryHard: 1 },
   periodization: 'linear',
   targetRaces: [createMockTargetRace()],
   seasonGoals: [],
