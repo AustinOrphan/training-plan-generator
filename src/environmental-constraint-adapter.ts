@@ -1069,8 +1069,8 @@ export class EnvironmentalConstraintAdapter {
     const recoveryScore = calculateRecoveryScore(recent);
     
     // Calculate weekly load increase
-    const recentLoad = recent.slice(-3).reduce((sum, w) => sum + (w.actualMetrics?.duration || 0), 0) / 3;
-    const priorLoad = recent.slice(-6, -3).reduce((sum, w) => sum + (w.actualMetrics?.duration || 0), 0) / 3;
+    const recentLoad = recent.slice(-3).reduce((sum, w) => sum + (w.actualDuration || 0), 0) / 3;
+    const priorLoad = recent.slice(-6, -3).reduce((sum, w) => sum + (w.actualDuration || 0), 0) / 3;
     const weeklyIncrease = priorLoad > 0 ? ((recentLoad - priorLoad) / priorLoad) * 100 : 0;
 
     const injuryRisk = calculateInjuryRisk(trainingLoad, weeklyIncrease, recoveryScore);
@@ -1078,7 +1078,7 @@ export class EnvironmentalConstraintAdapter {
     const factors = [];
     if (weeklyIncrease > 10) factors.push('rapid_load_increase');
     if (recoveryScore < 70) factors.push('poor_recovery');
-    if (trainingLoad.current > trainingLoad.baseline * 1.3) factors.push('high_absolute_load');
+    if (trainingLoad.acuteLoad > trainingLoad.chronicLoad * 1.3) factors.push('high_absolute_load');
 
     return { risk: injuryRisk, factors };
   }

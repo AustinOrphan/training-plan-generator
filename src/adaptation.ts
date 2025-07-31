@@ -178,15 +178,16 @@ export class SmartAdaptationEngine implements AdaptationEngine {
         });
       }
       
-      // Check for injury or illness
-      if (recovery.injuryStatus === 'injured' || recovery.illnessStatus === 'sick') {
+      // Check for injury if extended recovery metrics are used
+      const extendedRecovery = recovery as any; // Type assertion for extended properties
+      if (extendedRecovery.injuryStatus && extendedRecovery.injuryStatus !== 'healthy') {
         modifications.push({
           type: 'injury_protocol',
-          reason: recovery.injuryStatus === 'injured' ? 'Injury reported' : 'Illness reported',
+          reason: 'Injury reported',
           priority: 'high',
           suggestedChanges: {
             substituteWorkoutType: 'recovery',
-            volumeReduction: recovery.injuryStatus === 'injured' ? 100 : 50
+            volumeReduction: extendedRecovery.injuryStatus === 'severe' ? 100 : 50
           }
         });
       }
@@ -283,7 +284,9 @@ export class SmartAdaptationEngine implements AdaptationEngine {
         return true;
       }
       
-      if (recovery.injuryStatus === 'injured' || recovery.illnessStatus === 'sick') {
+      // Check for injury status if extended recovery metrics are used
+      const extendedRecovery = recovery as any;
+      if (extendedRecovery.injuryStatus && extendedRecovery.injuryStatus !== 'healthy') {
         return true;
       }
     }
@@ -620,8 +623,9 @@ export class SmartAdaptationEngine implements AdaptationEngine {
       const effortContribution = (workout.perceivedEffort || 5) * 2;
       
       // Factor in workout completion
-      const completionRate = workout.actualDuration && workout.plannedDuration
-        ? workout.actualDuration / workout.plannedDuration
+      const plannedDuration = workout.plannedWorkout.targetMetrics.duration;
+      const completionRate = workout.actualDuration && plannedDuration
+        ? workout.actualDuration / plannedDuration
         : 1;
       
       // Lower completion might indicate fatigue
@@ -662,8 +666,9 @@ export class SmartAdaptationEngine implements AdaptationEngine {
     
     sortedWorkouts.forEach((workout, index) => {
       const highEffort = workout.perceivedEffort && workout.perceivedEffort >= 7;
-      const poorCompletion = workout.actualDuration && workout.plannedDuration
-        ? workout.actualDuration / workout.plannedDuration < 0.85
+      const plannedDuration = workout.plannedWorkout.targetMetrics.duration;
+      const poorCompletion = workout.actualDuration && plannedDuration
+        ? workout.actualDuration / plannedDuration < 0.85
         : false;
       
       if (highEffort && poorCompletion) {
