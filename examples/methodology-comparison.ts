@@ -5,12 +5,10 @@
  * create different plan structures and workout distributions for the same athlete.
  */
 
-import {
-  AdvancedTrainingPlanGenerator,
-  PhilosophyFactory,
-  type AdvancedPlanConfig,
-  type TrainingPlan
-} from '../src/index';
+import { AdvancedTrainingPlanGenerator } from '../src/advanced-generator';
+import { PhilosophyFactory } from '../src/philosophies';
+import { calculateTrainingPaces } from '../src/zones';
+import type { AdvancedPlanConfig, TrainingPlan } from '../src/types';
 
 async function compareMethodologies() {
   console.log('🔬 Training Methodology Comparison\n');
@@ -26,7 +24,8 @@ async function compareMethodologies() {
       vdot: 50, // Experienced runner
       weeklyMileage: 50, // Solid base
       longestRecentRun: 20,
-      trainingAge: 5
+      trainingAge: 5,
+      overallScore: 73 // VDOT: 62.5 + Volume: 50 + Experience: 100 + Recovery: 75 * weights = 73
     },
     
     preferences: {
@@ -34,7 +33,18 @@ async function compareMethodologies() {
       preferredIntensity: 'moderate',
       crossTraining: false,
       strengthTraining: true
-    }
+    },
+
+    intensityDistribution: { easy: 0.8, moderate: 0.15, hard: 0.05 },
+    periodization: 'linear',
+    targetRaces: [{
+      name: 'Target Marathon',
+      date: new Date(Date.now() + 16 * 7 * 24 * 60 * 60 * 1000),
+      distance: 42.2,
+      priority: 'A',
+      targetTime: 210, // 3:30 marathon
+      conditions: { temperature: 15, humidity: 60, wind: 5, elevation: 0 }
+    }]
   };
 
   const methodologies = ['daniels', 'lydiard', 'pfitzinger'] as const;
@@ -141,7 +151,7 @@ async function compareMethodologies() {
   console.log('- 80/20 easy/hard distribution philosophy');
   console.log('- Scientific approach to training intensities');
   
-  const danielsPaces = danielsPhilosophy.calculateTrainingPaces(50);
+  const danielsPaces = calculateTrainingPaces(50);
   console.log('- Training paces for VDOT 50:');
   Object.entries(danielsPaces).forEach(([type, pace]) => {
     console.log(`  ${type}: ${pace.toFixed(1)} min/km`);

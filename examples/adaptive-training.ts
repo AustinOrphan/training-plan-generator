@@ -5,13 +5,9 @@
  * real-time progress data, recovery metrics, and performance feedback.
  */
 
-import {
-  AdvancedTrainingPlanGenerator,
-  SmartAdaptationEngine,
-  type AdvancedPlanConfig,
-  type ProgressData,
-  type TrainingPlan
-} from '../src/index';
+import { AdvancedTrainingPlanGenerator } from '../src/advanced-generator';
+import { SmartAdaptationEngine } from '../src/adaptation';
+import type { AdvancedPlanConfig, ProgressData, TrainingPlan } from '../src/types';
 
 async function adaptiveTrainingExample() {
   console.log('🔄 Adaptive Training Plan Example\n');
@@ -28,7 +24,8 @@ async function adaptiveTrainingExample() {
       weeklyMileage: 40,
       longestRecentRun: 22,
       trainingAge: 4,
-      recoveryRate: 72
+      recoveryRate: 72,
+      overallScore: 69 // VDOT: 58.8 + Volume: 40 + Experience: 80 + Recovery: 72 * weights = 69
     },
     
     preferences: {
@@ -37,6 +34,16 @@ async function adaptiveTrainingExample() {
     },
     
     methodology: 'daniels',
+    intensityDistribution: { easy: 0.8, moderate: 0.15, hard: 0.05 },
+    periodization: 'linear',
+    targetRaces: [{
+      name: 'Target Marathon',
+      date: new Date(Date.now() + 18 * 7 * 24 * 60 * 60 * 1000),
+      distance: 42.2,
+      priority: 'A',
+      targetTime: 220, // 3:40 marathon
+      conditions: { temperature: 15, humidity: 60, wind: 5, elevation: 0 }
+    }],
     adaptationEnabled: true,
     progressTracking: true
   };
@@ -197,14 +204,14 @@ async function adaptiveTrainingExample() {
 
     // Analyze progress and get recommendations
     const weekProgress = progressHistory.slice(-weekWorkouts.length);
-    const analysis = adaptationEngine.analyzeProgress(weekProgress);
-    const modifications = adaptationEngine.recommendModifications(weekProgress, config);
+    const analysis = adaptationEngine.analyzeProgress(weekProgress, weekWorkouts);
+    const modifications = adaptationEngine.suggestModifications(initialPlan, analysis);
 
     console.log(`\n📊 Week ${week} Analysis:`);
-    console.log(`- Training Load: ${analysis.trainingLoad.toFixed(1)}`);
-    console.log(`- Recovery Trend: ${analysis.recoveryTrend}`);
     console.log(`- Adherence Rate: ${(analysis.adherenceRate * 100).toFixed(1)}%`);
-    console.log(`- Risk Level: ${analysis.riskLevel}`);
+    console.log(`- Performance Trend: ${analysis.performanceTrend}`);
+    console.log(`- Current VDOT: ${analysis.currentFitness.vdot.toFixed(1)}`);
+    console.log(`- Weekly Mileage: ${analysis.currentFitness.weeklyMileage.toFixed(1)}km`);
 
     if (modifications.length > 0) {
       console.log('\n🔧 Recommended Modifications:');
@@ -229,12 +236,12 @@ async function adaptiveTrainingExample() {
   // 4. Show adaptation summary
   console.log('📈 Adaptation Summary\n');
   
-  const finalAnalysis = adaptationEngine.analyzeProgress(progressHistory);
+  const finalAnalysis = adaptationEngine.analyzeProgress(progressHistory, initialPlan.workouts);
   console.log('Overall Progress:');
-  console.log(`- Average Training Load: ${finalAnalysis.trainingLoad.toFixed(1)}`);
   console.log(`- Overall Adherence: ${(finalAnalysis.adherenceRate * 100).toFixed(1)}%`);
-  console.log(`- Recovery Pattern: ${finalAnalysis.recoveryTrend}`);
-  console.log(`- Current Risk Level: ${finalAnalysis.riskLevel}`);
+  console.log(`- Performance Trend: ${finalAnalysis.performanceTrend}`);
+  console.log(`- Final VDOT: ${finalAnalysis.currentFitness.vdot.toFixed(1)}`);
+  console.log(`- Final Weekly Mileage: ${finalAnalysis.currentFitness.weeklyMileage.toFixed(1)}km`);
 
   // Calculate adaptation metrics
   const totalPlannedWorkouts = progressHistory.length;

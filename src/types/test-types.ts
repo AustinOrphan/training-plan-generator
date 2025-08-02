@@ -1,18 +1,18 @@
 /**
  * Test-Specific Type Definitions
- * 
+ *
  * This module provides type-safe interfaces and utilities specifically for testing.
  * Eliminates 'as any' usage in test files and provides type-safe test expectations.
- * 
+ *
  * @fileoverview Test assertion types and mock utilities for type-safe testing
  */
 
-import { TypedResult, TypeGuard, TypedSchema } from './base-types.js';
+import { TypedResult, TypeGuard, TypedSchema } from "./base-types.js";
 
 /**
  * Generic mock generator interface for type-safe test data creation
  * Provides structured approach to creating mock data with full type safety
- * 
+ *
  * @template T The type being mocked
  * @example
  * ```typescript
@@ -27,16 +27,19 @@ import { TypedResult, TypeGuard, TypedSchema } from './base-types.js';
 export interface MockGenerator<T> {
   /** Generate a single mock instance with optional property overrides */
   generate(overrides?: Partial<T>): T;
-  
+
   /** Generate multiple mock instances with consistent or varied overrides */
-  generateMany(count: number, overrides?: Partial<T> | ((index: number) => Partial<T>)): T[];
-  
+  generateMany(
+    count: number,
+    overrides?: Partial<T> | ((index: number) => Partial<T>),
+  ): T[];
+
   /** Validate that a generated instance conforms to expected structure */
   validate(instance: T): boolean;
-  
+
   /** Schema definition for the type being generated */
   schema: TypedSchema<T>;
-  
+
   /** Optional metadata about the generator */
   metadata?: {
     /** Type name for debugging and error messages */
@@ -57,13 +60,13 @@ export interface MockGenerator<T> {
 /**
  * Test configuration type for flexible test parameter overrides
  * Allows partial specification of test data with proper type constraints
- * 
+ *
  * @template T The base configuration type
  * @template TRequired Keys that must be provided in test config
  * @example
  * ```typescript
  * type WorkoutTestConfig = TestConfig<PlannedWorkout, 'id' | 'date'>;
- * 
+ *
  * const testConfig: WorkoutTestConfig = {
  *   id: 'test-workout-1',
  *   date: new Date(),
@@ -72,36 +75,35 @@ export interface MockGenerator<T> {
  * };
  * ```
  */
-export type TestConfig<T, TRequired extends keyof T = never> = 
-  T extends object ? (
-    TRequired extends never 
-      ? Partial<T>
-      : Partial<T> & Required<Pick<T, TRequired>>
-  ) : never;
+export type TestConfig<T, TRequired extends keyof T = never> = T extends object
+  ? TRequired extends never
+    ? Partial<T>
+    : Partial<T> & Required<Pick<T, TRequired>>
+  : never;
 
 /**
  * Mock data factory registry for type-safe mock creation
  * Central registry for all mock generators in the test suite
- * 
+ *
  * @example
  * ```typescript
  * const registry = new MockFactoryRegistry();
  * registry.register('PlannedWorkout', workoutGenerator);
  * registry.register('TrainingPlan', planGenerator);
- * 
+ *
  * const workout = registry.create('PlannedWorkout', { duration: 60 });
  * ```
  */
 export interface MockFactoryRegistry {
   /** Register a mock generator for a specific type */
   register<T>(typeName: string, generator: MockGenerator<T>): void;
-  
+
   /** Create a mock instance using a registered generator */
   create<T>(typeName: string, overrides?: Partial<T>): T;
-  
+
   /** Check if a generator is registered for a type */
   hasGenerator(typeName: string): boolean;
-  
+
   /** Get all registered type names */
   getRegisteredTypes(): string[];
 }
@@ -109,7 +111,7 @@ export interface MockFactoryRegistry {
 /**
  * Generic test assertion interface for type-safe test expectations
  * Replaces 'as any' type assertions in test files with proper type checking
- * 
+ *
  * @template T The type being asserted
  * @example
  * ```typescript
@@ -118,7 +120,7 @@ export interface MockFactoryRegistry {
  *   expectedType: 'TrainingPlan',
  *   assert: (plan): plan is TrainingPlan => plan.config !== undefined
  * };
- * 
+ *
  * if (assertion.assert(assertion.value)) {
  *   // TypeScript knows this is TrainingPlan
  *   expect(assertion.value.config.name).toBe('Test Plan');
@@ -141,7 +143,7 @@ export interface TestAssertion<T> {
 /**
  * Test expectation wrapper for complex object comparisons
  * Provides type-safe expectations without losing type information
- * 
+ *
  * @template T The type being tested
  * @example
  * ```typescript
@@ -162,7 +164,7 @@ export interface TypedExpectation<T> {
   /** The expected value or matcher pattern */
   expected: Partial<T> | T;
   /** Type of matching to perform */
-  matchType: 'exact' | 'partial' | 'deep' | 'shape';
+  matchType: "exact" | "partial" | "deep" | "shape";
   /** Custom comparison function for complex types */
   customMatcher?: (actual: T, expected: Partial<T> | T) => boolean;
   /** Optional message for assertion failures */
@@ -172,7 +174,7 @@ export interface TypedExpectation<T> {
 /**
  * Mock configuration interface for type-safe mock data generation
  * Replaces generic mock functions with type-constrained alternatives
- * 
+ *
  * @template T The type being mocked
  * @template TOverrides Specific properties that can be overridden
  * @example
@@ -200,7 +202,7 @@ export interface MockConfig<T, TOverrides extends keyof T = keyof T> {
 /**
  * Test data generator interface for creating type-safe test scenarios
  * Provides consistent structure for test data creation across test files
- * 
+ *
  * @template T The type being generated
  * @example
  * ```typescript
@@ -230,7 +232,7 @@ export interface TestDataGenerator<T> {
 /**
  * Test scenario configuration for complex integration tests
  * Structures test scenarios with proper type safety and documentation
- * 
+ *
  * @template TInput The input type for the scenario
  * @template TOutput The expected output type
  * @example
@@ -273,7 +275,7 @@ export interface TestScenario<TInput, TOutput> {
 /**
  * Performance test expectation interface for type-safe performance assertions
  * Provides structure for performance testing with proper type constraints
- * 
+ *
  * @example
  * ```typescript
  * const perfExpectation: PerformanceExpectation = {
@@ -295,7 +297,7 @@ export interface PerformanceExpectation {
   /** Minimum required throughput (operations per second) */
   minThroughput?: number;
   /** Unit of measurement for duration */
-  measurementUnit: 'milliseconds' | 'seconds' | 'microseconds';
+  measurementUnit: "milliseconds" | "seconds" | "microseconds";
   /** Number of iterations for average calculation */
   iterations?: number;
   /** Warmup iterations before measurement */
@@ -305,7 +307,7 @@ export interface PerformanceExpectation {
 /**
  * Test validation result for structured test outcome reporting
  * Provides type-safe result reporting for complex test validations
- * 
+ *
  * @template T The type that was validated
  * @example
  * ```typescript
@@ -341,7 +343,7 @@ export interface TestValidationResult<T> {
 /**
  * Async test assertion interface for testing promise-based operations
  * Provides type-safe async test patterns with proper error handling
- * 
+ *
  * @template T The resolved type of the promise
  * @template E The error type (defaults to Error)
  * @example
@@ -359,7 +361,7 @@ export interface AsyncTestAssertion<T, E = Error> {
   /** The async operation to test */
   operation: () => Promise<T>;
   /** Expected result type */
-  expectedResult: 'success' | 'error' | 'timeout';
+  expectedResult: "success" | "error" | "timeout";
   /** Maximum time to wait for completion */
   timeout?: number;
   /** Validator for successful results */
@@ -377,7 +379,7 @@ export interface AsyncTestAssertion<T, E = Error> {
 /**
  * Collection test utilities for array and object validation
  * Provides type-safe utilities for testing collections and arrays
- * 
+ *
  * @template T The element type in the collection
  * @example
  * ```typescript
@@ -418,7 +420,7 @@ export type TestTypeGuard<T> = TypeGuard<T>;
 /**
  * Helper function to create type-safe test assertions
  * Eliminates the need for 'as any' in test files
- * 
+ *
  * @template T The type being asserted
  * @param value The value to assert
  * @param typeGuard The type guard function
@@ -431,7 +433,7 @@ export type TestTypeGuard<T> = TypeGuard<T>;
  *   (val): val is ExportResult => typeof val === 'object' && 'content' in val,
  *   'ExportResult'
  * );
- * 
+ *
  * if (assertion.assert(assertion.value)) {
  *   // TypeScript knows this is ExportResult
  *   expect(assertion.value.content).toBeDefined();
@@ -442,20 +444,20 @@ export function createTestAssertion<T>(
   value: unknown,
   typeGuard: (val: unknown) => val is T,
   expectedType: string,
-  context?: string
+  context?: string,
 ): TestAssertion<T> {
   return {
     value,
     expectedType,
     assert: typeGuard,
-    context
+    context,
   };
 }
 
 /**
  * Helper function to create type-safe mock configurations
  * Provides structured approach to mock data generation
- * 
+ *
  * @template T The type being mocked
  * @template TOverrides Keys that can be overridden (defaults to all keys)
  * @param baseValue Optional base value to start with
@@ -473,19 +475,19 @@ export function createTestAssertion<T>(
  */
 export function createMockConfig<T, TOverrides extends keyof T = keyof T>(
   baseValue?: Partial<T>,
-  overrides?: Pick<T, TOverrides>
+  overrides?: Pick<T, TOverrides>,
 ): MockConfig<T, TOverrides> {
   return {
     baseValue,
     overrides,
-    generateDefaults: true
+    generateDefaults: true,
   };
 }
 
 /**
  * Helper function to validate test results with proper type narrowing
  * Combines validation with type assertion for safe test operations
- * 
+ *
  * @template T The expected result type
  * @param result The result to validate
  * @param validator The validation function
@@ -494,10 +496,10 @@ export function createMockConfig<T, TOverrides extends keyof T = keyof T>(
  * ```typescript
  * const validation = validateTestResult(
  *   exportResult,
- *   (result): result is ExportResult => 
+ *   (result): result is ExportResult =>
  *     result.content !== undefined && result.filename !== undefined
  * );
- * 
+ *
  * if (validation.isValid && validation.validatedValue) {
  *   // TypeScript knows validatedValue is ExportResult
  *   expect(validation.validatedValue.filename).toMatch(/\.(pdf|ics|csv|json)$/);
@@ -507,26 +509,26 @@ export function createMockConfig<T, TOverrides extends keyof T = keyof T>(
 export function validateTestResult<T>(
   result: unknown,
   validator: (val: unknown) => val is T,
-  errorMessage?: string
+  errorMessage?: string,
 ): TestValidationResult<T> {
   const isValid = validator(result);
-  
+
   return {
     isValid,
     validatedValue: isValid ? result : undefined,
-    errors: isValid ? [] : [errorMessage || 'Validation failed'],
+    errors: isValid ? [] : [errorMessage || "Validation failed"],
     warnings: [],
     metadata: {
       validationTime: Date.now(),
-      ruleName: validator.name || 'anonymous'
-    }
+      ruleName: validator.name || "anonymous",
+    },
   };
 }
 
 /**
  * Utility type for extracting test-relevant properties from complex types
  * Helps create focused test interfaces that only include testable properties
- * 
+ *
  * @template T The source type
  * @example
  * ```typescript
@@ -534,12 +536,12 @@ export function validateTestResult<T>(
  * // Only includes properties that can be meaningfully tested
  * ```
  */
-export type TestableProperties<T> = Omit<T, 'createdAt' | 'updatedAt' | 'id'>;
+export type TestableProperties<T> = Omit<T, "createdAt" | "updatedAt" | "id">;
 
 /**
  * Utility type for creating test doubles (mocks, stubs, spies)
  * Provides structure for different types of test doubles with proper typing
- * 
+ *
  * @template T The interface being doubled
  * @example
  * ```typescript
@@ -555,7 +557,7 @@ export type TestableProperties<T> = Omit<T, 'createdAt' | 'updatedAt' | 'id'>;
  */
 export interface TestDouble<T> {
   /** Type of test double */
-  type: 'mock' | 'stub' | 'spy' | 'fake';
+  type: "mock" | "stub" | "spy" | "fake";
   /** The implementation (can be partial for mocks) */
   implementation: Partial<T>;
   /** Methods that should be verified in tests */
@@ -569,7 +571,7 @@ export interface TestDouble<T> {
 /**
  * Mock lifecycle manager for managing mock creation, setup, and cleanup
  * Provides structured approach to managing mock instances throughout test execution
- * 
+ *
  * @template T The type being mocked
  * @example
  * ```typescript
@@ -597,7 +599,7 @@ export interface MockLifecycleManager<T> {
 /**
  * Test data comparator for deep equality and similarity testing
  * Provides type-safe comparison utilities for complex test assertions
- * 
+ *
  * @template T The type being compared
  * @example
  * ```typescript
@@ -615,22 +617,28 @@ export interface TestDataComparator<T> {
   /** Check if two instances are similar within a threshold */
   isSimilar(a: T, b: T, threshold?: number): boolean;
   /** Get detailed differences between two instances */
-  getDifferences(a: T, b: T): Array<{
+  getDifferences(
+    a: T,
+    b: T,
+  ): Array<{
     path: string;
     expected: unknown;
     actual: unknown;
-    type: 'missing' | 'extra' | 'different';
+    type: "missing" | "extra" | "different";
   }>;
   /** Get a signature/hash for an instance for quick comparison */
   getSignature(obj: T): string;
   /** Custom comparison function for specific properties */
-  customComparators?: Record<keyof T, (a: T[keyof T], b: T[keyof T]) => boolean>;
+  customComparators?: Record<
+    keyof T,
+    (a: T[keyof T], b: T[keyof T]) => boolean
+  >;
 }
 
 /**
  * Typed mock configuration with enhanced type safety
  * Extends basic mock configuration with additional type constraints and validation
- * 
+ *
  * @template T The type being mocked
  * @template TRequired Keys that must be provided
  * @example
@@ -647,7 +655,10 @@ export interface TestDataComparator<T> {
  * };
  * ```
  */
-export type TypedMockConfig<T, TRequired extends keyof T = never> = TestConfig<T, TRequired> & {
+export type TypedMockConfig<T, TRequired extends keyof T = never> = TestConfig<
+  T,
+  TRequired
+> & {
   /** Whether this is a partial mock (some properties may be undefined) */
   partialMode?: boolean;
   /** Whether to apply strict type validation */
@@ -663,4 +674,4 @@ export type TypedMockConfig<T, TRequired extends keyof T = never> = TestConfig<T
     /** Tags for categorizing mocks */
     tags?: string[];
   };
-}
+};

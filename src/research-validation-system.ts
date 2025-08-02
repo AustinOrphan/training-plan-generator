@@ -1,15 +1,15 @@
 /**
  * Research Validation System
- * 
+ *
  * Implements comprehensive validation of training methodologies against
  * source material, expert review integration, and continuous validation
  * monitoring to ensure 95%+ accuracy in methodology implementation.
- * 
+ *
  * LEVERAGES:
  * - Existing validation engine (ValidationPipeline)
  * - Research citation system (ResearchCitation from PhilosophyComparator)
  * - Methodology profiles and validation results
- * 
+ *
  * REQUIREMENTS:
  * - 95%+ accuracy in methodology principle implementation vs. source material
  * - Peer review by certified coaches familiar with each methodology
@@ -22,18 +22,18 @@ import {
   PlannedWorkout,
   AdvancedPlanConfig,
   WorkoutType,
-  TrainingPhase
-} from './types';
-import { ValidationPipeline, ValidationResult } from './validation';
-import { 
-  PhilosophyComparator, 
-  ResearchCitation, 
+  TrainingPhase,
+} from "./types";
+import { ValidationPipeline, ValidationResult } from "./validation";
+import {
+  PhilosophyComparator,
+  ResearchCitation,
   MethodologyProfile,
-  ValidationResult as MethodologyValidationResult
-} from './philosophy-comparator';
-import { PhilosophyFactory } from './philosophies';
-import { AdvancedTrainingPlanGenerator } from './advanced-generator';
-import { calculateTrainingPaces } from './zones';
+  ValidationResult as MethodologyValidationResult,
+} from "./philosophy-comparator";
+import { PhilosophyFactory } from "./philosophies";
+import { AdvancedTrainingPlanGenerator } from "./advanced-generator";
+import { calculateTrainingPaces } from "./zones";
 
 // Research validation types
 export interface ResearchValidationResult {
@@ -54,7 +54,7 @@ export interface ValidatedPrinciple {
   implementationAccuracy: number; // 0-100
   complianceEvidence: string[];
   deviations: string[];
-  confidenceLevel: 'high' | 'medium' | 'low';
+  confidenceLevel: "high" | "medium" | "low";
 }
 
 export interface SourceCompliance {
@@ -70,7 +70,7 @@ export interface ComplianceDeviation {
   aspect: string;
   expected: string;
   actual: string;
-  severity: 'major' | 'minor' | 'cosmetic';
+  severity: "major" | "minor" | "cosmetic";
   justification?: string;
 }
 
@@ -81,7 +81,7 @@ export interface ExpertReview {
   overallScore: number; // 0-100
   principleAssessments: PrincipleAssessment[];
   recommendations: string[];
-  approvalStatus: 'approved' | 'conditional' | 'rejected';
+  approvalStatus: "approved" | "conditional" | "rejected";
   reviewDate: Date;
   comments: string;
 }
@@ -106,7 +106,7 @@ export interface MonitoringResult {
 export interface ResearchUpdate {
   citation: ResearchCitation;
   relevantPrinciples: string[];
-  potentialImpact: 'high' | 'medium' | 'low';
+  potentialImpact: "high" | "medium" | "low";
   implementationSuggestions: string[];
   priority: number; // 1-10
   estimatedEffort: string;
@@ -115,7 +115,7 @@ export interface ResearchUpdate {
 export interface AccuracyTrend {
   currentScore: number;
   previousScore: number;
-  trend: 'improving' | 'stable' | 'declining';
+  trend: "improving" | "stable" | "declining";
   timeframe: string;
   significantChanges: string[];
 }
@@ -139,31 +139,34 @@ export interface PerformanceMetrics {
 export interface RecommendedAction {
   action: string;
   methodology: TrainingMethodology[];
-  priority: 'critical' | 'high' | 'medium' | 'low';
+  priority: "critical" | "high" | "medium" | "low";
   timeline: string;
-  effort: 'minimal' | 'moderate' | 'significant';
+  effort: "minimal" | "moderate" | "significant";
   expectedImprovement: number; // accuracy score improvement
 }
 
 export interface ValidationSummary {
-  overallGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+  overallGrade: "A" | "B" | "C" | "D" | "F";
   strengthAreas: string[];
   improvementAreas: string[];
   criticalIssues: string[];
   nextReviewDate: Date;
-  certificationStatus: 'certified' | 'provisional' | 'under_review';
+  certificationStatus: "certified" | "provisional" | "under_review";
 }
 
 /**
  * Research Validation System
- * 
+ *
  * Provides comprehensive methodology validation against research sources,
  * expert review integration, and continuous monitoring for accuracy
  */
 export class ResearchValidationSystem {
   private comparator: PhilosophyComparator;
   private validationPipeline: ValidationPipeline;
-  private validationHistory: Map<TrainingMethodology, ResearchValidationResult[]>;
+  private validationHistory: Map<
+    TrainingMethodology,
+    ResearchValidationResult[]
+  >;
   private expertReviews: Map<TrainingMethodology, ExpertReview[]>;
   private monitoringData: Map<TrainingMethodology, MonitoringResult[]>;
 
@@ -180,7 +183,7 @@ export class ResearchValidationSystem {
    */
   public async validateMethodologyResearch(
     methodology: TrainingMethodology,
-    includeExpertReview: boolean = false
+    includeExpertReview: boolean = false,
   ): Promise<ResearchValidationResult> {
     // Get methodology profile and research citations
     const profile = this.comparator.getMethodologyProfile(methodology);
@@ -190,34 +193,40 @@ export class ResearchValidationSystem {
 
     // Validate against source material
     const sourceCompliance = await this.validateSourceCompliance(profile);
-    
+
     // Validate methodology principles
-    const validatedPrinciples = await this.validateMethodologyPrinciples(methodology, profile);
-    
+    const validatedPrinciples = await this.validateMethodologyPrinciples(
+      methodology,
+      profile,
+    );
+
     // Get expert reviews if requested
-    const expertReviews = includeExpertReview 
+    const expertReviews = includeExpertReview
       ? await this.getExpertReviews(methodology)
       : [];
-    
+
     // Get continuous monitoring data
     const continuousMonitoring = this.getContinuousMonitoringData(methodology);
-    
+
     // Identify recommended updates
-    const recommendedUpdates = await this.identifyResearchUpdates(methodology, profile);
-    
+    const recommendedUpdates = await this.identifyResearchUpdates(
+      methodology,
+      profile,
+    );
+
     // Calculate overall accuracy score
     const accuracyScore = this.calculateOverallAccuracyScore(
       validatedPrinciples,
       sourceCompliance,
-      expertReviews
+      expertReviews,
     );
-    
+
     // Generate validation summary
     const validationSummary = this.generateValidationSummary(
       accuracyScore,
       validatedPrinciples,
       sourceCompliance,
-      expertReviews
+      expertReviews,
     );
 
     const result: ResearchValidationResult = {
@@ -229,7 +238,7 @@ export class ResearchValidationSystem {
       continuousMonitoring,
       recommendedUpdates,
       lastValidated: new Date(),
-      validationSummary
+      validationSummary,
     };
 
     // Store in validation history
@@ -241,11 +250,16 @@ export class ResearchValidationSystem {
   /**
    * Validate methodology compliance with source material
    */
-  private async validateSourceCompliance(profile: MethodologyProfile): Promise<SourceCompliance[]> {
+  private async validateSourceCompliance(
+    profile: MethodologyProfile,
+  ): Promise<SourceCompliance[]> {
     const compliance: SourceCompliance[] = [];
 
     for (const citation of profile.researchBasis) {
-      const sourceCompliance = await this.validateAgainstSource(citation, profile);
+      const sourceCompliance = await this.validateAgainstSource(
+        citation,
+        profile,
+      );
       compliance.push(sourceCompliance);
     }
 
@@ -257,7 +271,7 @@ export class ResearchValidationSystem {
    */
   private async validateAgainstSource(
     citation: ResearchCitation,
-    profile: MethodologyProfile
+    profile: MethodologyProfile,
   ): Promise<SourceCompliance> {
     const implementedAspects: string[] = [];
     const missingAspects: string[] = [];
@@ -265,11 +279,11 @@ export class ResearchValidationSystem {
 
     // Validate based on methodology and citation
     switch (profile.methodology) {
-      case 'daniels':
+      case "daniels":
         return this.validateDanielsSource(citation, profile);
-      case 'lydiard':
+      case "lydiard":
         return this.validateLydiardSource(citation, profile);
-      case 'pfitzinger':
+      case "pfitzinger":
         return this.validatePfitzingerSource(citation, profile);
       default:
         throw new Error(`Unsupported methodology: ${profile.methodology}`);
@@ -279,37 +293,44 @@ export class ResearchValidationSystem {
   /**
    * Validate Daniels methodology against source material
    */
-  private validateDanielsSource(citation: ResearchCitation, profile: MethodologyProfile): SourceCompliance {
+  private validateDanielsSource(
+    citation: ResearchCitation,
+    profile: MethodologyProfile,
+  ): SourceCompliance {
     const implementedAspects: string[] = [];
     const missingAspects: string[] = [];
     const deviations: ComplianceDeviation[] = [];
 
     // Check VDOT implementation
     if (citation.title.includes("Daniels' Running Formula")) {
-      implementedAspects.push('VDOT-based pace calculations');
-      implementedAspects.push('Five training zones (E, M, T, I, R)');
-      implementedAspects.push('80/20 intensity distribution');
-      
+      implementedAspects.push("VDOT-based pace calculations");
+      implementedAspects.push("Five training zones (E, M, T, I, R)");
+      implementedAspects.push("80/20 intensity distribution");
+
       // Check intensity distribution compliance
       const expectedEasy = 80;
       const actualEasy = profile.intensityDistribution.easy;
       if (Math.abs(actualEasy - expectedEasy) > 5) {
         deviations.push({
-          aspect: 'Intensity Distribution',
+          aspect: "Intensity Distribution",
           expected: `${expectedEasy}% easy running`,
           actual: `${actualEasy}% easy running`,
-          severity: 'minor',
-          justification: 'Adjusted for practical implementation'
+          severity: "minor",
+          justification: "Adjusted for practical implementation",
         });
       }
 
       // Check workout emphasis
       if (profile.workoutTypeEmphasis.tempo < 8) {
-        missingAspects.push('Sufficient tempo run emphasis');
+        missingAspects.push("Sufficient tempo run emphasis");
       }
     }
 
-    const complianceScore = this.calculateComplianceScore(implementedAspects, missingAspects, deviations);
+    const complianceScore = this.calculateComplianceScore(
+      implementedAspects,
+      missingAspects,
+      deviations,
+    );
 
     return {
       citation,
@@ -317,46 +338,53 @@ export class ResearchValidationSystem {
       implementedAspects,
       missingAspects,
       deviations,
-      lastReviewed: new Date()
+      lastReviewed: new Date(),
     };
   }
 
   /**
    * Validate Lydiard methodology against source material
    */
-  private validateLydiardSource(citation: ResearchCitation, profile: MethodologyProfile): SourceCompliance {
+  private validateLydiardSource(
+    citation: ResearchCitation,
+    profile: MethodologyProfile,
+  ): SourceCompliance {
     const implementedAspects: string[] = [];
     const missingAspects: string[] = [];
     const deviations: ComplianceDeviation[] = [];
 
-    if (citation.title.includes('Running to the Top')) {
-      implementedAspects.push('Aerobic base building emphasis');
-      implementedAspects.push('Hill training integration');
-      implementedAspects.push('Strict periodization progression');
-      
+    if (citation.title.includes("Running to the Top")) {
+      implementedAspects.push("Aerobic base building emphasis");
+      implementedAspects.push("Hill training integration");
+      implementedAspects.push("Strict periodization progression");
+
       // Check aerobic emphasis
       const expectedEasy = 85;
       const actualEasy = profile.intensityDistribution.easy;
       if (actualEasy >= expectedEasy) {
-        implementedAspects.push('85%+ easy running compliance');
+        implementedAspects.push("85%+ easy running compliance");
       } else {
         deviations.push({
-          aspect: 'Aerobic Base Emphasis',
+          aspect: "Aerobic Base Emphasis",
           expected: `${expectedEasy}%+ easy running`,
           actual: `${actualEasy}% easy running`,
-          severity: 'major'
+          severity: "major",
         });
       }
 
       // Check strength training inclusion
       if (profile.strengthTraining) {
-        implementedAspects.push('Strength training integration');
+        implementedAspects.push("Strength training integration");
       } else {
-        missingAspects.push('Strength training component');
+        missingAspects.push("Strength training component");
       }
     }
 
-    const complianceScore = this.calculateComplianceScore(implementedAspects, missingAspects, deviations);
+    const complianceScore = this.calculateComplianceScore(
+      implementedAspects,
+      missingAspects,
+      deviations,
+    );
 
     return {
       citation,
@@ -364,44 +392,51 @@ export class ResearchValidationSystem {
       implementedAspects,
       missingAspects,
       deviations,
-      lastReviewed: new Date()
+      lastReviewed: new Date(),
     };
   }
 
   /**
    * Validate Pfitzinger methodology against source material
    */
-  private validatePfitzingerSource(citation: ResearchCitation, profile: MethodologyProfile): SourceCompliance {
+  private validatePfitzingerSource(
+    citation: ResearchCitation,
+    profile: MethodologyProfile,
+  ): SourceCompliance {
     const implementedAspects: string[] = [];
     const missingAspects: string[] = [];
     const deviations: ComplianceDeviation[] = [];
 
-    if (citation.title.includes('Advanced Marathoning')) {
-      implementedAspects.push('Lactate threshold focus');
-      implementedAspects.push('Medium-long run emphasis');
-      implementedAspects.push('Systematic progression');
-      
+    if (citation.title.includes("Advanced Marathoning")) {
+      implementedAspects.push("Lactate threshold focus");
+      implementedAspects.push("Medium-long run emphasis");
+      implementedAspects.push("Systematic progression");
+
       // Check threshold emphasis
       if (profile.workoutTypeEmphasis.threshold >= 8) {
-        implementedAspects.push('Strong threshold workout emphasis');
+        implementedAspects.push("Strong threshold workout emphasis");
       } else {
-        missingAspects.push('Sufficient threshold workout emphasis');
+        missingAspects.push("Sufficient threshold workout emphasis");
       }
 
       // Check pace calculation method
-      if (profile.paceCalculationMethod.includes('LT-based')) {
-        implementedAspects.push('LT-based pace calculations');
+      if (profile.paceCalculationMethod.includes("LT-based")) {
+        implementedAspects.push("LT-based pace calculations");
       } else {
         deviations.push({
-          aspect: 'Pace Calculation Method',
-          expected: 'LT-based pace derivations',
+          aspect: "Pace Calculation Method",
+          expected: "LT-based pace derivations",
           actual: profile.paceCalculationMethod,
-          severity: 'minor'
+          severity: "minor",
         });
       }
     }
 
-    const complianceScore = this.calculateComplianceScore(implementedAspects, missingAspects, deviations);
+    const complianceScore = this.calculateComplianceScore(
+      implementedAspects,
+      missingAspects,
+      deviations,
+    );
 
     return {
       citation,
@@ -409,7 +444,7 @@ export class ResearchValidationSystem {
       implementedAspects,
       missingAspects,
       deviations,
-      lastReviewed: new Date()
+      lastReviewed: new Date(),
     };
   }
 
@@ -418,7 +453,7 @@ export class ResearchValidationSystem {
    */
   private async validateMethodologyPrinciples(
     methodology: TrainingMethodology,
-    profile: MethodologyProfile
+    profile: MethodologyProfile,
   ): Promise<ValidatedPrinciple[]> {
     const principles: ValidatedPrinciple[] = [];
 
@@ -428,7 +463,10 @@ export class ResearchValidationSystem {
     const testPlan = await generator.generateAdvancedPlan();
 
     // Validate intensity distribution principle
-    const intensityPrinciple = this.validateIntensityDistribution(testPlan, profile);
+    const intensityPrinciple = this.validateIntensityDistribution(
+      testPlan,
+      profile,
+    );
     principles.push(intensityPrinciple);
 
     // Validate workout selection principle
@@ -436,7 +474,10 @@ export class ResearchValidationSystem {
     principles.push(workoutPrinciple);
 
     // Validate periodization principle
-    const periodizationPrinciple = this.validatePeriodization(testPlan, profile);
+    const periodizationPrinciple = this.validatePeriodization(
+      testPlan,
+      profile,
+    );
     principles.push(periodizationPrinciple);
 
     // Validate pace calculation principle
@@ -449,35 +490,50 @@ export class ResearchValidationSystem {
   /**
    * Validate intensity distribution principle
    */
-  private validateIntensityDistribution(plan: TrainingPlan, profile: MethodologyProfile): ValidatedPrinciple {
-    const easyWorkouts = plan.workouts.filter(w => 
-      ['easy', 'recovery', 'long_run'].includes(w.type)
+  private validateIntensityDistribution(
+    plan: TrainingPlan,
+    profile: MethodologyProfile,
+  ): ValidatedPrinciple {
+    const easyWorkouts = plan.workouts.filter((w) =>
+      ["easy", "recovery", "long_run"].includes(w.type),
     ).length;
     const totalWorkouts = plan.workouts.length;
     const actualEasyPercentage = (easyWorkouts / totalWorkouts) * 100;
     const expectedEasyPercentage = profile.intensityDistribution.easy;
-    
-    const accuracy = Math.max(0, 100 - Math.abs(actualEasyPercentage - expectedEasyPercentage) * 2);
-    
+
+    const accuracy = Math.max(
+      0,
+      100 - Math.abs(actualEasyPercentage - expectedEasyPercentage) * 2,
+    );
+
     return {
-      principle: 'Intensity Distribution',
+      principle: "Intensity Distribution",
       sourceReference: `${profile.methodology} methodology intensity targets`,
       implementationAccuracy: accuracy,
       complianceEvidence: [
         `Generated ${easyWorkouts} easy workouts out of ${totalWorkouts} total (${actualEasyPercentage.toFixed(1)}%)`,
-        `Target: ${expectedEasyPercentage}% easy running`
+        `Target: ${expectedEasyPercentage}% easy running`,
       ],
-      deviations: accuracy < 90 ? [`Deviation of ${Math.abs(actualEasyPercentage - expectedEasyPercentage).toFixed(1)}% from target`] : [],
-      confidenceLevel: accuracy >= 90 ? 'high' : accuracy >= 75 ? 'medium' : 'low'
+      deviations:
+        accuracy < 90
+          ? [
+              `Deviation of ${Math.abs(actualEasyPercentage - expectedEasyPercentage).toFixed(1)}% from target`,
+            ]
+          : [],
+      confidenceLevel:
+        accuracy >= 90 ? "high" : accuracy >= 75 ? "medium" : "low",
     };
   }
 
   /**
    * Validate workout selection principle
    */
-  private validateWorkoutSelection(plan: TrainingPlan, profile: MethodologyProfile): ValidatedPrinciple {
+  private validateWorkoutSelection(
+    plan: TrainingPlan,
+    profile: MethodologyProfile,
+  ): ValidatedPrinciple {
     const workoutCounts: Record<string, number> = {};
-    plan.workouts.forEach(w => {
+    plan.workouts.forEach((w) => {
       workoutCounts[w.type] = (workoutCounts[w.type] || 0) + 1;
     });
 
@@ -485,86 +541,115 @@ export class ResearchValidationSystem {
       .filter(([type, emphasis]) => emphasis >= 8)
       .map(([type]) => type);
 
-    const implementedHighEmphasis = highEmphasisTypes.filter(type => 
-      workoutCounts[type] && workoutCounts[type] > 0
+    const implementedHighEmphasis = highEmphasisTypes.filter(
+      (type) => workoutCounts[type] && workoutCounts[type] > 0,
     );
 
-    const accuracy = (implementedHighEmphasis.length / Math.max(1, highEmphasisTypes.length)) * 100;
+    const accuracy =
+      (implementedHighEmphasis.length / Math.max(1, highEmphasisTypes.length)) *
+      100;
 
     return {
-      principle: 'Workout Selection Priority',
+      principle: "Workout Selection Priority",
       sourceReference: `${profile.methodology} methodology workout emphasis`,
       implementationAccuracy: accuracy,
       complianceEvidence: [
         `Implemented ${implementedHighEmphasis.length} of ${highEmphasisTypes.length} high-emphasis workout types`,
-        `High-emphasis types: ${highEmphasisTypes.join(', ')}`
+        `High-emphasis types: ${highEmphasisTypes.join(", ")}`,
       ],
-      deviations: accuracy < 100 ? [`Missing workout types: ${highEmphasisTypes.filter(t => !implementedHighEmphasis.includes(t)).join(', ')}`] : [],
-      confidenceLevel: accuracy >= 90 ? 'high' : accuracy >= 75 ? 'medium' : 'low'
+      deviations:
+        accuracy < 100
+          ? [
+              `Missing workout types: ${highEmphasisTypes.filter((t) => !implementedHighEmphasis.includes(t)).join(", ")}`,
+            ]
+          : [],
+      confidenceLevel:
+        accuracy >= 90 ? "high" : accuracy >= 75 ? "medium" : "low",
     };
   }
 
   /**
    * Validate periodization principle
    */
-  private validatePeriodization(plan: TrainingPlan, profile: MethodologyProfile): ValidatedPrinciple {
+  private validatePeriodization(
+    plan: TrainingPlan,
+    profile: MethodologyProfile,
+  ): ValidatedPrinciple {
     const hasProgression = plan.blocks.length > 1;
-    const hasPhaseStructure = plan.blocks.some(block => ['base', 'build', 'peak'].includes(block.phase));
-    
+    const hasPhaseStructure = plan.blocks.some((block) =>
+      ["base", "build", "peak"].includes(block.phase),
+    );
+
     let accuracy = 0;
     if (hasProgression) accuracy += 50;
     if (hasPhaseStructure) accuracy += 50;
-    
+
     return {
-      principle: 'Periodization Structure',
+      principle: "Periodization Structure",
       sourceReference: profile.periodizationApproach,
       implementationAccuracy: accuracy,
       complianceEvidence: [
         `Plan has ${plan.blocks.length} training blocks`,
-        hasPhaseStructure ? 'Clear phase progression implemented' : 'Phase structure needs improvement'
+        hasPhaseStructure
+          ? "Clear phase progression implemented"
+          : "Phase structure needs improvement",
       ],
-      deviations: accuracy < 100 ? ['Periodization structure could be more detailed'] : [],
-      confidenceLevel: accuracy >= 90 ? 'high' : accuracy >= 75 ? 'medium' : 'low'
+      deviations:
+        accuracy < 100
+          ? ["Periodization structure could be more detailed"]
+          : [],
+      confidenceLevel:
+        accuracy >= 90 ? "high" : accuracy >= 75 ? "medium" : "low",
     };
   }
 
   /**
    * Validate pace calculation principle
    */
-  private validatePaceCalculations(methodology: TrainingMethodology, profile: MethodologyProfile): ValidatedPrinciple {
+  private validatePaceCalculations(
+    methodology: TrainingMethodology,
+    profile: MethodologyProfile,
+  ): ValidatedPrinciple {
     try {
       const testVdot = 50;
       const paces = calculateTrainingPaces(testVdot);
-      
+
       const hasValidPaces = paces && Object.keys(paces).length > 0;
-      const paceProgression = hasValidPaces && 
+      const paceProgression =
+        hasValidPaces &&
         paces.repetition < paces.interval &&
         paces.interval < paces.threshold &&
         paces.threshold < paces.easy;
-      
+
       let accuracy = 0;
       if (hasValidPaces) accuracy += 60;
       if (paceProgression) accuracy += 40;
-      
+
       return {
-        principle: 'Pace Calculation System',
+        principle: "Pace Calculation System",
         sourceReference: profile.paceCalculationMethod,
         implementationAccuracy: accuracy,
         complianceEvidence: [
-          hasValidPaces ? 'Pace calculations functioning correctly' : 'Pace calculation issues detected',
-          paceProgression ? 'Pace progression follows expected pattern' : 'Pace progression needs validation'
+          hasValidPaces
+            ? "Pace calculations functioning correctly"
+            : "Pace calculation issues detected",
+          paceProgression
+            ? "Pace progression follows expected pattern"
+            : "Pace progression needs validation",
         ],
-        deviations: accuracy < 100 ? ['Pace calculation system may need refinement'] : [],
-        confidenceLevel: accuracy >= 90 ? 'high' : accuracy >= 75 ? 'medium' : 'low'
+        deviations:
+          accuracy < 100 ? ["Pace calculation system may need refinement"] : [],
+        confidenceLevel:
+          accuracy >= 90 ? "high" : accuracy >= 75 ? "medium" : "low",
       };
     } catch (error) {
       return {
-        principle: 'Pace Calculation System',
+        principle: "Pace Calculation System",
         sourceReference: profile.paceCalculationMethod,
         implementationAccuracy: 0,
         complianceEvidence: [],
         deviations: [`Pace calculation error: ${error}`],
-        confidenceLevel: 'low'
+        confidenceLevel: "low",
       };
     }
   }
@@ -572,55 +657,187 @@ export class ResearchValidationSystem {
   /**
    * Get expert reviews for methodology
    */
-  private async getExpertReviews(methodology: TrainingMethodology): Promise<ExpertReview[]> {
+  private async getExpertReviews(
+    methodology: TrainingMethodology,
+  ): Promise<ExpertReview[]> {
     // Return existing expert reviews or create mock reviews for demonstration
     const existingReviews = this.expertReviews.get(methodology) || [];
-    
+
     if (existingReviews.length === 0) {
       // Create mock expert review for demonstration
       const mockReview = this.createMockExpertReview(methodology);
       existingReviews.push(mockReview);
       this.expertReviews.set(methodology, existingReviews);
     }
-    
+
     return existingReviews;
   }
 
   /**
    * Create mock expert review for demonstration
    */
-  private createMockExpertReview(methodology: TrainingMethodology): ExpertReview {
+  private createMockExpertReview(
+    methodology: TrainingMethodology,
+  ): ExpertReview {
     const reviewData = {
       daniels: {
         score: 92,
-        credentials: ['USATF Level 3 Coach', 'Exercise Physiology PhD'],
+        credentials: ["USATF Level 3 Coach", "Exercise Physiology PhD"],
         assessments: [
-          { principle: 'VDOT System', accuracy: 95, completeness: 90, practicalRelevance: 95, feedback: 'Excellent implementation of VDOT principles' },
-          { principle: '80/20 Distribution', accuracy: 90, completeness: 85, practicalRelevance: 90, feedback: 'Good adherence to intensity distribution' },
-          { principle: 'Workout Selection', accuracy: 88, completeness: 85, practicalRelevance: 92, feedback: 'Appropriate workout selection for methodology' }
+          {
+            principle: "VDOT System",
+            accuracy: 95,
+            completeness: 90,
+            practicalRelevance: 95,
+            feedback: "Excellent implementation of VDOT principles",
+          },
+          {
+            principle: "80/20 Distribution",
+            accuracy: 90,
+            completeness: 85,
+            practicalRelevance: 90,
+            feedback: "Good adherence to intensity distribution",
+          },
+          {
+            principle: "Workout Selection",
+            accuracy: 88,
+            completeness: 85,
+            practicalRelevance: 92,
+            feedback: "Appropriate workout selection for methodology",
+          },
         ],
-        recommendations: ['Consider adding more specific VO2max progression guidelines', 'Enhance recovery week protocols']
+        recommendations: [
+          "Consider adding more specific VO2max progression guidelines",
+          "Enhance recovery week protocols",
+        ],
       },
       lydiard: {
         score: 88,
-        credentials: ['Arthur Lydiard Foundation Certified', 'IAAF Level 4 Coach'],
-        assessments: [
-          { principle: 'Aerobic Base', accuracy: 90, completeness: 88, practicalRelevance: 92, feedback: 'Strong aerobic base implementation' },
-          { principle: 'Hill Training', accuracy: 85, completeness: 80, practicalRelevance: 88, feedback: 'Hill training could be more detailed' },
-          { principle: 'Periodization', accuracy: 90, completeness: 90, practicalRelevance: 90, feedback: 'Excellent periodization structure' }
+        credentials: [
+          "Arthur Lydiard Foundation Certified",
+          "IAAF Level 4 Coach",
         ],
-        recommendations: ['Add more specific hill training protocols', 'Include coordination phase details']
+        assessments: [
+          {
+            principle: "Aerobic Base",
+            accuracy: 90,
+            completeness: 88,
+            practicalRelevance: 92,
+            feedback: "Strong aerobic base implementation",
+          },
+          {
+            principle: "Hill Training",
+            accuracy: 85,
+            completeness: 80,
+            practicalRelevance: 88,
+            feedback: "Hill training could be more detailed",
+          },
+          {
+            principle: "Periodization",
+            accuracy: 90,
+            completeness: 90,
+            practicalRelevance: 90,
+            feedback: "Excellent periodization structure",
+          },
+        ],
+        recommendations: [
+          "Add more specific hill training protocols",
+          "Include coordination phase details",
+        ],
       },
       pfitzinger: {
         score: 90,
-        credentials: ['Olympic Marathon Coach', 'Exercise Science MS'],
+        credentials: ["Olympic Marathon Coach", "Exercise Science MS"],
         assessments: [
-          { principle: 'LT Focus', accuracy: 92, completeness: 90, practicalRelevance: 93, feedback: 'Excellent lactate threshold implementation' },
-          { principle: 'Medium-Long Runs', accuracy: 88, completeness: 85, practicalRelevance: 90, feedback: 'Good medium-long run structure' },
-          { principle: 'Systematic Progression', accuracy: 90, completeness: 88, practicalRelevance: 91, feedback: 'Well-structured progression' }
+          {
+            principle: "LT Focus",
+            accuracy: 92,
+            completeness: 90,
+            practicalRelevance: 93,
+            feedback: "Excellent lactate threshold implementation",
+          },
+          {
+            principle: "Medium-Long Runs",
+            accuracy: 88,
+            completeness: 85,
+            practicalRelevance: 90,
+            feedback: "Good medium-long run structure",
+          },
+          {
+            principle: "Systematic Progression",
+            accuracy: 90,
+            completeness: 88,
+            practicalRelevance: 91,
+            feedback: "Well-structured progression",
+          },
         ],
-        recommendations: ['Enhance race-pace workout variety', 'Add more taper customization options']
-      }
+        recommendations: [
+          "Enhance race-pace workout variety",
+          "Add more taper customization options",
+        ],
+      },
+      hudson: {
+        score: 87,
+        credentials: ["Marathon World Coach", "Sports Science PhD"],
+        assessments: [
+          {
+            principle: "Multi-pace Training",
+            accuracy: 88,
+            completeness: 86,
+            practicalRelevance: 90,
+            feedback: "Good multi-pace implementation",
+          },
+          {
+            principle: "Adaptive Training",
+            accuracy: 85,
+            completeness: 83,
+            practicalRelevance: 88,
+            feedback: "Adaptive approach well structured",
+          },
+          {
+            principle: "Race Simulation",
+            accuracy: 89,
+            completeness: 87,
+            practicalRelevance: 91,
+            feedback: "Excellent race simulation workouts",
+          },
+        ],
+        recommendations: [
+          "Enhance adaptive algorithms",
+          "Add more personalization options",
+        ],
+      },
+      custom: {
+        score: 85,
+        credentials: ["Custom Methodology Expert", "Applied Sports Science"],
+        assessments: [
+          {
+            principle: "Flexibility",
+            accuracy: 86,
+            completeness: 84,
+            practicalRelevance: 88,
+            feedback: "Good flexibility in approach",
+          },
+          {
+            principle: "Customization",
+            accuracy: 88,
+            completeness: 85,
+            practicalRelevance: 90,
+            feedback: "Excellent customization options",
+          },
+          {
+            principle: "Balance",
+            accuracy: 85,
+            completeness: 83,
+            practicalRelevance: 87,
+            feedback: "Well-balanced methodology",
+          },
+        ],
+        recommendations: [
+          "Document custom methodology principles",
+          "Add validation for custom parameters",
+        ],
+      },
     };
 
     const data = reviewData[methodology];
@@ -632,16 +849,18 @@ export class ResearchValidationSystem {
       overallScore: data.score,
       principleAssessments: data.assessments,
       recommendations: data.recommendations,
-      approvalStatus: data.score >= 85 ? 'approved' : 'conditional',
+      approvalStatus: data.score >= 85 ? "approved" : "conditional",
       reviewDate: new Date(),
-      comments: `Comprehensive review of ${methodology} methodology implementation. Overall excellent work with some areas for enhancement.`
+      comments: `Comprehensive review of ${methodology} methodology implementation. Overall excellent work with some areas for enhancement.`,
     };
   }
 
   /**
    * Get continuous monitoring data
    */
-  private getContinuousMonitoringData(methodology: TrainingMethodology): MonitoringResult[] {
+  private getContinuousMonitoringData(
+    methodology: TrainingMethodology,
+  ): MonitoringResult[] {
     return this.monitoringData.get(methodology) || [];
   }
 
@@ -650,14 +869,14 @@ export class ResearchValidationSystem {
    */
   private async identifyResearchUpdates(
     methodology: TrainingMethodology,
-    profile: MethodologyProfile
+    profile: MethodologyProfile,
   ): Promise<ResearchUpdate[]> {
     // Mock research updates for demonstration
     const updates: ResearchUpdate[] = [];
 
     // Check for outdated citations
     const currentYear = new Date().getFullYear();
-    profile.researchBasis.forEach(citation => {
+    profile.researchBasis.forEach((citation) => {
       const age = currentYear - citation.year;
       if (age > 10) {
         updates.push({
@@ -665,13 +884,16 @@ export class ResearchValidationSystem {
             ...citation,
             title: `Updated ${citation.title} Research`,
             year: currentYear,
-            relevance: 'Updated methodology principles'
+            relevance: "Updated methodology principles",
           },
-          relevantPrinciples: ['intensity distribution', 'workout selection'],
-          potentialImpact: 'medium',
-          implementationSuggestions: ['Review latest research findings', 'Update calculation parameters'],
+          relevantPrinciples: ["intensity distribution", "workout selection"],
+          potentialImpact: "medium",
+          implementationSuggestions: [
+            "Review latest research findings",
+            "Update calculation parameters",
+          ],
           priority: 6,
-          estimatedEffort: '2-3 weeks'
+          estimatedEffort: "2-3 weeks",
         });
       }
     });
@@ -685,28 +907,34 @@ export class ResearchValidationSystem {
   private calculateOverallAccuracyScore(
     principles: ValidatedPrinciple[],
     sourceCompliance: SourceCompliance[],
-    expertReviews: ExpertReview[]
+    expertReviews: ExpertReview[],
   ): number {
     let totalScore = 0;
     let weightSum = 0;
 
     // Weight principles validation (40%)
     if (principles.length > 0) {
-      const principleScore = principles.reduce((sum, p) => sum + p.implementationAccuracy, 0) / principles.length;
+      const principleScore =
+        principles.reduce((sum, p) => sum + p.implementationAccuracy, 0) /
+        principles.length;
       totalScore += principleScore * 0.4;
       weightSum += 0.4;
     }
 
     // Weight source compliance (35%)
     if (sourceCompliance.length > 0) {
-      const complianceScore = sourceCompliance.reduce((sum, c) => sum + c.complianceScore, 0) / sourceCompliance.length;
+      const complianceScore =
+        sourceCompliance.reduce((sum, c) => sum + c.complianceScore, 0) /
+        sourceCompliance.length;
       totalScore += complianceScore * 0.35;
       weightSum += 0.35;
     }
 
     // Weight expert reviews (25%)
     if (expertReviews.length > 0) {
-      const expertScore = expertReviews.reduce((sum, r) => sum + r.overallScore, 0) / expertReviews.length;
+      const expertScore =
+        expertReviews.reduce((sum, r) => sum + r.overallScore, 0) /
+        expertReviews.length;
       totalScore += expertScore * 0.25;
       weightSum += 0.25;
     }
@@ -721,7 +949,7 @@ export class ResearchValidationSystem {
     accuracyScore: number,
     principles: ValidatedPrinciple[],
     sourceCompliance: SourceCompliance[],
-    expertReviews: ExpertReview[]
+    expertReviews: ExpertReview[],
   ): ValidationSummary {
     const grade = this.calculateGrade(accuracyScore);
     const strengthAreas: string[] = [];
@@ -729,7 +957,7 @@ export class ResearchValidationSystem {
     const criticalIssues: string[] = [];
 
     // Analyze principles
-    principles.forEach(p => {
+    principles.forEach((p) => {
       if (p.implementationAccuracy >= 90) {
         strengthAreas.push(p.principle);
       } else if (p.implementationAccuracy < 75) {
@@ -741,25 +969,27 @@ export class ResearchValidationSystem {
     });
 
     // Analyze source compliance
-    sourceCompliance.forEach(c => {
-      if (c.deviations.some(d => d.severity === 'major')) {
+    sourceCompliance.forEach((c) => {
+      if (c.deviations.some((d) => d.severity === "major")) {
         criticalIssues.push(`Major deviation from ${c.citation.title}`);
       }
     });
 
     // Determine certification status
-    let certificationStatus: 'certified' | 'provisional' | 'under_review';
+    let certificationStatus: "certified" | "provisional" | "under_review";
     if (accuracyScore >= 95 && criticalIssues.length === 0) {
-      certificationStatus = 'certified';
+      certificationStatus = "certified";
     } else if (accuracyScore >= 85) {
-      certificationStatus = 'provisional';
+      certificationStatus = "provisional";
     } else {
-      certificationStatus = 'under_review';
+      certificationStatus = "under_review";
     }
 
     // Next review date (3 months for certified, 1 month for others)
     const nextReviewDate = new Date();
-    nextReviewDate.setMonth(nextReviewDate.getMonth() + (certificationStatus === 'certified' ? 3 : 1));
+    nextReviewDate.setMonth(
+      nextReviewDate.getMonth() + (certificationStatus === "certified" ? 3 : 1),
+    );
 
     return {
       overallGrade: grade,
@@ -767,19 +997,19 @@ export class ResearchValidationSystem {
       improvementAreas: improvementAreas.slice(0, 5), // Top 5
       criticalIssues,
       nextReviewDate,
-      certificationStatus
+      certificationStatus,
     };
   }
 
   /**
    * Calculate grade from accuracy score
    */
-  private calculateGrade(score: number): 'A' | 'B' | 'C' | 'D' | 'F' {
-    if (score >= 95) return 'A';
-    if (score >= 85) return 'B';
-    if (score >= 75) return 'C';
-    if (score >= 65) return 'D';
-    return 'F';
+  private calculateGrade(score: number): "A" | "B" | "C" | "D" | "F" {
+    if (score >= 95) return "A";
+    if (score >= 85) return "B";
+    if (score >= 75) return "C";
+    if (score >= 65) return "D";
+    return "F";
   }
 
   /**
@@ -788,7 +1018,7 @@ export class ResearchValidationSystem {
   private calculateComplianceScore(
     implemented: string[],
     missing: string[],
-    deviations: ComplianceDeviation[]
+    deviations: ComplianceDeviation[],
   ): number {
     const totalAspects = implemented.length + missing.length;
     if (totalAspects === 0) return 100;
@@ -796,8 +1026,13 @@ export class ResearchValidationSystem {
     let score = (implemented.length / totalAspects) * 100;
 
     // Deduct points for deviations
-    deviations.forEach(deviation => {
-      const penalty = deviation.severity === 'major' ? 10 : deviation.severity === 'minor' ? 5 : 2;
+    deviations.forEach((deviation) => {
+      const penalty =
+        deviation.severity === "major"
+          ? 10
+          : deviation.severity === "minor"
+            ? 5
+            : 2;
       score -= penalty;
     });
 
@@ -807,39 +1042,67 @@ export class ResearchValidationSystem {
   /**
    * Add to validation history
    */
-  private addToValidationHistory(methodology: TrainingMethodology, result: ResearchValidationResult): void {
+  private addToValidationHistory(
+    methodology: TrainingMethodology,
+    result: ResearchValidationResult,
+  ): void {
     const history = this.validationHistory.get(methodology) || [];
     history.push(result);
-    
+
     // Keep only last 10 validation results
     if (history.length > 10) {
       history.splice(0, history.length - 10);
     }
-    
+
     this.validationHistory.set(methodology, history);
   }
 
   /**
    * Create test configuration for validation
    */
-  private createTestConfig(methodology: TrainingMethodology): AdvancedPlanConfig {
+  private createTestConfig(
+    methodology: TrainingMethodology,
+  ): AdvancedPlanConfig {
     return {
       name: `${methodology} Validation Test`,
-      goal: 'MARATHON',
+      goal: "MARATHON",
       startDate: new Date(),
       targetDate: new Date(Date.now() + 16 * 7 * 24 * 60 * 60 * 1000), // 16 weeks
       methodology,
+      intensityDistribution: {
+        easy: 0.8,
+        moderate: 0.15,
+        hard: 0.05,
+        veryHard: 0.0,
+      },
+      periodization: "linear" as const,
+      targetRaces: [
+        {
+          distance: "marathon" as const,
+          date: new Date(Date.now() + 16 * 7 * 24 * 60 * 60 * 1000),
+          goalTime: { hours: 3, minutes: 30, seconds: 0 },
+          priority: "A" as const,
+          location: "Test City",
+          terrain: "road" as const,
+          conditions: {
+            typicalTemperature: 15,
+            humidity: 60,
+            terrain: "flat" as const,
+          },
+        },
+      ],
       currentFitness: {
         vdot: 50,
         weeklyMileage: 40,
-        longestRun: 16
+        longestRecentRun: 16,
+        overallScore: 75,
       },
       preferences: {
         availableDays: [1, 2, 3, 4, 5, 6],
-        preferredIntensity: 'moderate',
+        preferredIntensity: "moderate",
         crossTraining: false,
-        strengthTraining: false
-      }
+        strengthTraining: false,
+      },
     };
   }
 
@@ -850,7 +1113,9 @@ export class ResearchValidationSystem {
   /**
    * Get validation history for methodology
    */
-  public getValidationHistory(methodology: TrainingMethodology): ResearchValidationResult[] {
+  public getValidationHistory(
+    methodology: TrainingMethodology,
+  ): ResearchValidationResult[] {
     return this.validationHistory.get(methodology) || [];
   }
 
@@ -866,15 +1131,18 @@ export class ResearchValidationSystem {
   /**
    * Add monitoring result
    */
-  public addMonitoringResult(methodology: TrainingMethodology, result: MonitoringResult): void {
+  public addMonitoringResult(
+    methodology: TrainingMethodology,
+    result: MonitoringResult,
+  ): void {
     const monitoring = this.monitoringData.get(methodology) || [];
     monitoring.push(result);
-    
+
     // Keep only last 12 months of monitoring data
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    
-    const filtered = monitoring.filter(m => m.monitoringDate > oneYearAgo);
+
+    const filtered = monitoring.filter((m) => m.monitoringDate > oneYearAgo);
     this.monitoringData.set(methodology, filtered);
   }
 
@@ -883,17 +1151,19 @@ export class ResearchValidationSystem {
    */
   public getCertificationStatus(): Record<TrainingMethodology, string> {
     const status: Record<string, string> = {};
-    
-    (['daniels', 'lydiard', 'pfitzinger'] as TrainingMethodology[]).forEach(methodology => {
-      const history = this.getValidationHistory(methodology);
-      if (history.length > 0) {
-        const latest = history[history.length - 1];
-        status[methodology] = latest.validationSummary.certificationStatus;
-      } else {
-        status[methodology] = 'not_validated';
-      }
-    });
-    
+
+    (["daniels", "lydiard", "pfitzinger"] as TrainingMethodology[]).forEach(
+      (methodology) => {
+        const history = this.getValidationHistory(methodology);
+        if (history.length > 0) {
+          const latest = history[history.length - 1];
+          status[methodology] = latest.validationSummary.certificationStatus;
+        } else {
+          status[methodology] = "not_validated";
+        }
+      },
+    );
+
     return status as Record<TrainingMethodology, string>;
   }
 
@@ -907,7 +1177,7 @@ export class ResearchValidationSystem {
     }
 
     const latest = history[history.length - 1];
-    
+
     return `
 # ${methodology.toUpperCase()} Methodology Validation Report
 
@@ -918,36 +1188,49 @@ export class ResearchValidationSystem {
 - **Last Validated**: ${latest.lastValidated.toLocaleDateString()}
 
 ## Validated Principles
-${latest.validatedPrinciples.map(p => 
-  `- **${p.principle}**: ${p.implementationAccuracy.toFixed(1)}% accuracy (${p.confidenceLevel} confidence)`
-).join('\n')}
+${latest.validatedPrinciples
+  .map(
+    (p) =>
+      `- **${p.principle}**: ${p.implementationAccuracy.toFixed(1)}% accuracy (${p.confidenceLevel} confidence)`,
+  )
+  .join("\n")}
 
 ## Source Compliance
-${latest.sourceCompliance.map(c => 
-  `- **${c.citation.title}**: ${c.complianceScore.toFixed(1)}% compliance`
-).join('\n')}
+${latest.sourceCompliance
+  .map(
+    (c) =>
+      `- **${c.citation.title}**: ${c.complianceScore.toFixed(1)}% compliance`,
+  )
+  .join("\n")}
 
 ## Expert Reviews
-${latest.expertReviews.map(r => 
-  `- **Reviewer ${r.reviewerId}**: ${r.overallScore}% (${r.approvalStatus})`
-).join('\n')}
+${latest.expertReviews
+  .map(
+    (r) =>
+      `- **Reviewer ${r.reviewerId}**: ${r.overallScore}% (${r.approvalStatus})`,
+  )
+  .join("\n")}
 
 ## Strengths
-${latest.validationSummary.strengthAreas.map(s => `- ${s}`).join('\n')}
+${latest.validationSummary.strengthAreas.map((s) => `- ${s}`).join("\n")}
 
 ## Areas for Improvement
-${latest.validationSummary.improvementAreas.map(i => `- ${i}`).join('\n')}
+${latest.validationSummary.improvementAreas.map((i) => `- ${i}`).join("\n")}
 
 ## Critical Issues
-${latest.validationSummary.criticalIssues.length > 0 
-  ? latest.validationSummary.criticalIssues.map(i => `- ${i}`).join('\n')
-  : '- None identified'
+${
+  latest.validationSummary.criticalIssues.length > 0
+    ? latest.validationSummary.criticalIssues.map((i) => `- ${i}`).join("\n")
+    : "- None identified"
 }
 
 ## Recommended Updates
-${latest.recommendedUpdates.map(u => 
-  `- **${u.citation.title}**: ${u.potentialImpact} impact, Priority ${u.priority}/10`
-).join('\n')}
+${latest.recommendedUpdates
+  .map(
+    (u) =>
+      `- **${u.citation.title}**: ${u.potentialImpact} impact, Priority ${u.priority}/10`,
+  )
+  .join("\n")}
 
 ---
 *Next review scheduled for: ${latest.validationSummary.nextReviewDate.toLocaleDateString()}*

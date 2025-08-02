@@ -18,7 +18,11 @@ A scientific, advanced training plan generation library for running based on pro
 npm install @yourusername/training-plan-generator
 ```
 
+> **Note**: This library is currently undergoing TypeScript export improvements. Some advanced features may have limited availability while these fixes are being implemented. The core functionality (basic plan generation, fitness calculations, zones, and workouts) is fully available and stable.
+
 ## Quick Start
+
+### Basic Plan Generation
 
 ```javascript
 import { TrainingPlanGenerator } from '@yourusername/training-plan-generator';
@@ -39,6 +43,23 @@ const config = {
 const generator = new TrainingPlanGenerator(config);
 const plan = generator.generatePlan();
 ```
+
+### Currently Available Stable API
+
+The following modules are fully stable and available for use:
+
+```typescript
+import { 
+  TrainingPlanGenerator,
+  calculateVDOT,
+  calculateCriticalSpeed,
+  calculateFitnessMetrics,
+  calculatePersonalizedZones,
+  WORKOUT_TEMPLATES
+} from '@yourusername/training-plan-generator';
+```
+
+> **Advanced Features Coming Soon**: Enhanced methodologies (Daniels, Lydiard, Pfitzinger), export utilities, and adaptation systems are being updated with improved TypeScript support and will be available in a future release.
 
 ## Generate from Run History
 
@@ -194,6 +215,41 @@ This library implements evidence-based training principles from:
 - Nonlinear periodization (Kiely, 2012)
 
 See the [training-science-docs](https://github.com/yourusername/training-science-docs) repository for complete scientific references.
+
+## TypeScript Support
+
+This library provides full TypeScript support with comprehensive type definitions. All public APIs include proper type annotations for enhanced development experience.
+
+### Type-Only Imports
+
+For better tree-shaking and build optimization, use type-only imports where appropriate:
+
+```typescript
+import type { FitnessAssessment, TrainingPreferences } from '@yourusername/training-plan-generator';
+import { TrainingPlanGenerator } from '@yourusername/training-plan-generator';
+
+const assessment: FitnessAssessment = {
+  vdot: 45,
+  weeklyMileage: 40,
+  longestRecentRun: 20
+};
+```
+
+### Build Compatibility
+
+- ✅ CommonJS (CJS) modules supported
+- ✅ ES Modules (ESM) supported  
+- ✅ TypeScript strict mode compatible
+- ✅ Complete `.d.ts` type definitions included
+
+## API Documentation Updates
+
+Recent improvements to the library's TypeScript exports include:
+
+- **Cleaner type exports**: All public interfaces now use `export type` for better tree-shaking
+- **Organized module structure**: Logical grouping of exports by functionality
+- **Reduced build warnings**: Eliminated duplicate object keys and export conflicts
+- **Improved compatibility**: Better support for both CommonJS and ES module environments
 
 ## License
 

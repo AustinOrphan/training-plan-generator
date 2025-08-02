@@ -55,7 +55,8 @@ class PfitzingerTrainingExamples {
         vdot: 52,
         weeklyMileage: 65, // km/week
         longestRecentRun: 32,
-        trainingAge: 6
+        trainingAge: 6,
+        overallScore: 66 // VDOT: 65 + Volume: 65 + Experience: 60 + Recovery: 75 * weights = 66
       },
       
       preferences: {
@@ -122,7 +123,8 @@ class PfitzingerTrainingExamples {
         vdot: 48,
         weeklyMileage: 55,
         longestRecentRun: 22,
-        trainingAge: 4
+        trainingAge: 4,
+        overallScore: 57 // VDOT: 60 + Volume: 55 + Experience: 40 + Recovery: 75 * weights = 57
       },
       
       preferences: {
@@ -187,7 +189,8 @@ class PfitzingerTrainingExamples {
         vdot: 50,
         weeklyMileage: 60,
         longestRecentRun: 28,
-        trainingAge: 5
+        trainingAge: 5,
+        overallScore: 61 // VDOT: 62.5 + Volume: 60 + Experience: 50 + Recovery: 75 * weights = 61
       },
       
       preferences: {
@@ -252,7 +255,8 @@ class PfitzingerTrainingExamples {
         vdot: 49, // Right at BQ fitness level
         weeklyMileage: 60,
         longestRecentRun: 30,
-        trainingAge: 4
+        trainingAge: 4,
+        overallScore: 59 // VDOT: 61.3 + Volume: 60 + Experience: 40 + Recovery: 75 * weights = 59
       },
       
       preferences: {

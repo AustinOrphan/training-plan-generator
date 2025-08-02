@@ -1,23 +1,23 @@
 /**
  * Core Type Definitions for Training Plan Generator
- * 
+ *
  * This module contains the fundamental type definitions used throughout the training plan
  * generator system. These types define the structure of training plans, workouts, fitness
  * assessments, and all related data structures.
- * 
+ *
  * @fileoverview Core domain types and interfaces for the training plan generator
  * @since 1.0.0
  */
 
-import { TrainingZone } from './zones';
+import { TrainingZone } from "./zones";
 
 /**
  * Configuration for generating a training plan
- * 
+ *
  * The core configuration object that defines all aspects of a training plan,
  * including goal, timeline, current fitness level, preferences, and environmental factors.
  * This serves as the primary input for the training plan generation process.
- * 
+ *
  * @interface TrainingPlanConfig
  * @example
  * ```typescript
@@ -64,20 +64,20 @@ export interface TrainingPlanConfig {
 
 /**
  * Available training goals that determine plan structure and focus
- * 
+ *
  * Training goals define the primary objective and target distance for a training plan.
  * Each goal influences workout types, training phases, and periodization approach.
- * 
+ *
  * @example
  * ```typescript
  * // First-time race goals
  * const beginnerGoal: TrainingGoal = 'FIRST_5K'; // Conservative progression
  * const noviceMarathon: TrainingGoal = 'MARATHON'; // Standard marathon training
- * 
- * // Improvement-focused goals  
+ *
+ * // Improvement-focused goals
  * const speedGoal: TrainingGoal = 'IMPROVE_5K'; // Higher intensity focus
  * const fitnessGoal: TrainingGoal = 'GENERAL_FITNESS'; // Flexible approach
- * 
+ *
  * // Distance-specific goals
  * const middleDistance: TrainingGoal = 'HALF_MARATHON'; // 13.1 mile focus
  * const ultraEndurance: TrainingGoal = 'ULTRA'; // 50K+ preparation
@@ -85,27 +85,27 @@ export interface TrainingPlanConfig {
  */
 export type TrainingGoal =
   /** First 5K race - beginner-friendly with gradual progression */
-  | 'FIRST_5K'
+  | "FIRST_5K"
   /** Improve existing 5K time - higher intensity and speed work */
-  | 'IMPROVE_5K'
+  | "IMPROVE_5K"
   /** First 10K race - intermediate distance introduction */
-  | 'FIRST_10K'
+  | "FIRST_10K"
   /** Half marathon training - endurance base with tempo work */
-  | 'HALF_MARATHON'
+  | "HALF_MARATHON"
   /** Marathon training - full 26.2 mile preparation */
-  | 'MARATHON'
+  | "MARATHON"
   /** Ultra marathon training - 50K+ distance preparation */
-  | 'ULTRA'
+  | "ULTRA"
   /** General fitness - flexible approach without specific race goal */
-  | 'GENERAL_FITNESS';
+  | "GENERAL_FITNESS";
 
 /**
  * Current fitness assessment for training plan personalization
- * 
+ *
  * Comprehensive evaluation of an athlete's current fitness level, training history,
  * and physiological metrics. Used to customize training intensity, progression rates,
  * and injury prevention strategies.
- * 
+ *
  * @interface FitnessAssessment
  * @example
  * ```typescript
@@ -114,12 +114,12 @@ export type TrainingGoal =
  *   vdot: 45, // Daniels VDOT score from recent race
  *   weeklyMileage: 30, // Current weekly distance
  *   longestRecentRun: 16, // Longest run in last 4 weeks
- *   
+ *
  *   // Advanced metrics (optional)
  *   criticalSpeed: 15.2, // km/h sustainable pace
  *   lactateThreshold: 14.8, // km/h threshold pace
  *   runningEconomy: 220, // ml/kg/km oxygen cost
- *   
+ *
  *   // Training background
  *   trainingAge: 3, // Years of consistent training
  *   recoveryRate: 75, // HRV-based recovery score
@@ -146,14 +146,34 @@ export interface FitnessAssessment {
   injuryHistory?: string[];
   /** Recovery rate score 0-100 based on HRV trends or subjective assessment */
   recoveryRate?: number;
+  /** Overall fitness score combining multiple metrics */
+  overallScore: number;
+  /** Recent race results for VDOT and fitness calculations */
+  recentRaces?: RecentRace[];
+}
+
+/**
+ * Recent race performance data for fitness assessment
+ */
+export interface RecentRace {
+  /** Race distance */
+  distance: RaceDistance;
+  /** Race date */
+  date: Date;
+  /** Finish time in seconds */
+  timeInSeconds: number;
+  /** Terrain type */
+  terrain?: "road" | "trail" | "track" | "mixed";
+  /** Weather conditions */
+  conditions?: string;
 }
 
 /**
  * Training preferences and constraints for plan customization
- * 
+ *
  * Defines athlete preferences, scheduling constraints, and training modalities
  * to ensure the plan fits their lifestyle and goals.
- * 
+ *
  * @interface TrainingPreferences
  * @example
  * ```typescript
@@ -167,7 +187,7 @@ export interface FitnessAssessment {
  *     4: 60, // Thursday: 60 minutes available
  *     6: 120 // Saturday: 120 minutes available
  *   },
- *   
+ *
  *   // Training preferences
  *   preferredIntensity: 'moderate', // Balanced approach
  *   crossTraining: true, // Include cycling, swimming
@@ -179,7 +199,7 @@ export interface TrainingPreferences {
   /** Days of week available for training (0 = Sunday, 6 = Saturday) */
   availableDays: number[];
   /** Preferred intensity level for training progression */
-  preferredIntensity: 'low' | 'moderate' | 'high';
+  preferredIntensity: "low" | "moderate" | "high";
   /** Whether to include cross-training activities (cycling, swimming, etc.) */
   crossTraining: boolean;
   /** Whether to include strength training sessions */
@@ -190,10 +210,10 @@ export interface TrainingPreferences {
 
 /**
  * Environmental factors affecting training adaptation and performance
- * 
+ *
  * Environmental conditions impact training stress, adaptation rates, and safety considerations.
  * These factors influence pace targets, hydration needs, and workout modifications.
- * 
+ *
  * @interface EnvironmentalFactors
  * @example
  * ```typescript
@@ -202,17 +222,17 @@ export interface TrainingPreferences {
  *   altitude: 1200, // Denver altitude in meters
  *   typicalTemperature: 25, // Average training temperature (°C)
  *   humidity: 45, // Typical humidity percentage
- *   
+ *
  *   // Training surface characteristics
  *   terrain: 'hilly' // Impacts pace targets and effort levels
  * };
- * 
+ *
  * // Sea level environment
  * const seaLevel: EnvironmentalFactors = {
  *   terrain: 'flat' // Faster pace targets, less elevation stress
  * };
- * 
- * // Trail running environment  
+ *
+ * // Trail running environment
  * const trailEnvironment: EnvironmentalFactors = {
  *   terrain: 'trail', // Time-based vs pace-based workouts
  *   altitude: 800,
@@ -228,22 +248,22 @@ export interface EnvironmentalFactors {
   /** Typical humidity percentage during training (affects heat stress) */
   humidity?: number;
   /** Primary terrain type for training (influences pace targets and workout types) */
-  terrain: 'flat' | 'hilly' | 'mixed' | 'trail';
+  terrain: "flat" | "hilly" | "mixed" | "trail";
 }
 
 /**
  * Complete training plan with all workouts, phases, and metadata
- * 
+ *
  * The primary output of the training plan generator, containing all scheduled workouts,
  * training blocks, and summary information for a complete training program.
- * 
+ *
  * @interface TrainingPlan
  * @example
  * ```typescript
  * const trainingPlan: TrainingPlan = {
  *   id: 'plan-marathon-2024',
  *   config: planConfig, // Original configuration used
- *   
+ *
  *   // Training phases and structure
  *   blocks: [
  *     {
@@ -254,7 +274,7 @@ export interface EnvironmentalFactors {
  *     }
  *     // Additional blocks...
  *   ],
- *   
+ *
  *   // All workouts in chronological order
  *   workouts: [
  *     {
@@ -266,7 +286,7 @@ export interface EnvironmentalFactors {
  *     }
  *     // Additional workouts...
  *   ],
- *   
+ *
  *   // Plan overview and metrics
  *   summary: {
  *     totalWeeks: 16,
@@ -292,10 +312,10 @@ export interface TrainingPlan {
 
 /**
  * Training block representing a phase of the overall training plan
- * 
+ *
  * Training blocks group related weeks together with a common focus and progression.
  * Each block has specific training objectives and contains multiple weekly microcycles.
- * 
+ *
  * @interface TrainingBlock
  * @example
  * ```typescript
@@ -305,14 +325,14 @@ export interface TrainingPlan {
  *   startDate: new Date('2024-01-01'),
  *   endDate: new Date('2024-02-25'),
  *   weeks: 8,
- *   
+ *
  *   // Phase-specific objectives
  *   focusAreas: [
  *     'aerobic base building',
- *     'injury prevention', 
+ *     'injury prevention',
  *     'consistent mileage'
  *   ],
- *   
+ *
  *   // Weekly progressions within the block
  *   microcycles: [
  *     {
@@ -345,58 +365,58 @@ export interface TrainingBlock {
 
 /**
  * Training phases that define the periodization structure
- * 
+ *
  * Each phase has distinct characteristics and training focuses that progress
  * toward peak performance on race day.
- * 
+ *
  * @example
  * ```typescript
  * // Typical marathon periodization sequence
  * const phases: TrainingPhase[] = ['base', 'build', 'peak', 'taper'];
- * 
+ *
  * // Base phase characteristics
  * const basePhase: TrainingPhase = 'base'; // Aerobic foundation, high volume/low intensity
- * 
- * // Build phase characteristics  
+ *
+ * // Build phase characteristics
  * const buildPhase: TrainingPhase = 'build'; // Lactate threshold work, tempo runs
- * 
+ *
  * // Peak phase characteristics
  * const peakPhase: TrainingPhase = 'peak'; // VO2max intervals, race pace work
- * 
+ *
  * // Taper phase characteristics
  * const taperPhase: TrainingPhase = 'taper'; // Volume reduction, intensity maintenance
- * 
+ *
  * // Recovery phase characteristics
  * const recoveryPhase: TrainingPhase = 'recovery'; // Post-race recovery and rebuilding
  * ```
  */
-export type TrainingPhase = 
+export type TrainingPhase =
   /** Base building phase - aerobic foundation with high volume, low intensity */
-  | 'base' 
+  | "base"
   /** Build phase - lactate threshold development with tempo and threshold work */
-  | 'build' 
+  | "build"
   /** Peak phase - VO2max and neuromuscular power with intervals and race pace */
-  | 'peak' 
+  | "peak"
   /** Taper phase - volume reduction while maintaining intensity for race preparation */
-  | 'taper' 
+  | "taper"
   /** Recovery phase - active recovery and regeneration after racing */
-  | 'recovery';
+  | "recovery";
 
 /**
  * Weekly training microcycle with workout pattern and load metrics
- * 
+ *
  * Represents a single week of training with specific workout sequencing,
  * load management, and recovery optimization.
- * 
+ *
  * @interface WeeklyMicrocycle
  * @example
  * ```typescript
  * const buildWeek: WeeklyMicrocycle = {
  *   weekNumber: 12,
- *   
+ *
  *   // Training pattern for the week
  *   pattern: 'Easy-Tempo-Easy-Intervals-Rest-Long-Recovery',
- *   
+ *
  *   // All workouts for this week
  *   workouts: [
  *     { id: 'w1', type: 'easy', duration: 45 },
@@ -405,7 +425,7 @@ export type TrainingPhase =
  *     { id: 'w4', type: 'vo2max', duration: 50 },
  *     { id: 'w5', type: 'recovery', duration: 90 }
  *   ],
- *   
+ *
  *   // Week metrics
  *   totalLoad: 320, // Training Stress Score
  *   totalDistance: 65, // Kilometers
@@ -455,8 +475,8 @@ export interface WorkoutSegment {
   description: string;
   cadenceTarget?: number;
   heartRateTarget?: { min: number; max: number };
-  paceTarget?: { 
-    min: number; 
+  paceTarget?: {
+    min: number;
     max: number; // min/km
     effortBased?: boolean; // For Lydiard methodology - use effort over rigid pace
     perceivedEffort?: number; // 1-10 scale for effort-based training
@@ -472,21 +492,21 @@ export interface WorkoutMetrics {
 }
 
 export type WorkoutType =
-  | 'recovery'
-  | 'easy'
-  | 'steady'
-  | 'tempo'
-  | 'threshold'
-  | 'vo2max'
-  | 'speed'
-  | 'hill_repeats'
-  | 'fartlek'
-  | 'progression'
-  | 'long_run'
-  | 'race_pace'
-  | 'time_trial'
-  | 'cross_training'
-  | 'strength';
+  | "recovery"
+  | "easy"
+  | "steady"
+  | "tempo"
+  | "threshold"
+  | "vo2max"
+  | "speed"
+  | "hill_repeats"
+  | "fartlek"
+  | "progression"
+  | "long_run"
+  | "race_pace"
+  | "time_trial"
+  | "cross_training"
+  | "strength";
 
 export interface PlanSummary {
   totalWeeks: number;
@@ -512,6 +532,26 @@ export interface IntensityDistribution {
   easy: number; // percentage
   moderate: number;
   hard: number;
+  veryHard: number;
+}
+
+export interface IntensityDistributionViolation {
+  type: "insufficient_easy" | "excessive_hard";
+  phase: TrainingPhase | "overall";
+  actual: number;
+  target: number;
+  difference: number;
+  severity: "low" | "medium" | "high" | "critical";
+}
+
+export interface IntensityDistributionReport {
+  overall: IntensityDistribution;
+  target: IntensityDistribution;
+  phases: Record<string, IntensityDistribution>;
+  violations: IntensityDistributionViolation[];
+  recommendations: string[];
+  compliance: number; // 0-100 compliance score
+  methodology: string;
 }
 
 // Run data for analysis
@@ -558,16 +598,31 @@ export interface TrainingLoad {
   acute: number; // 7-day
   chronic: number; // 28-day
   ratio: number; // acute:chronic
-  trend: 'increasing' | 'stable' | 'decreasing';
+  trend: "increasing" | "stable" | "decreasing";
   recommendation: string;
 }
 
 // Advanced Configuration Types
-export type TrainingMethodology = 'daniels' | 'lydiard' | 'pfitzinger' | 'hanson' | 'custom';
+export type TrainingMethodology =
+  | "daniels"
+  | "lydiard"
+  | "pfitzinger"
+  | "hudson"
+  | "custom";
 
-export type ExportFormat = 'pdf' | 'ical' | 'csv' | 'json';
+export type ExportFormat = "pdf" | "ical" | "csv" | "json";
 
-export type RaceDistance = '5k' | '10k' | 'half-marathon' | 'marathon' | 'ultra';
+export type RaceDistance =
+  | "5k"
+  | "10k"
+  | "15k"
+  | "half-marathon"
+  | "marathon"
+  | "50k"
+  | "50-mile"
+  | "100k"
+  | "100-mile"
+  | "ultra";
 
 export interface TargetRace {
   distance: RaceDistance;
@@ -577,16 +632,16 @@ export interface TargetRace {
     minutes: number;
     seconds: number;
   };
-  priority: 'A' | 'B' | 'C';
+  priority: "A" | "B" | "C";
   location: string;
-  terrain: 'road' | 'trail' | 'track' | 'mixed';
+  terrain: "road" | "trail" | "track" | "mixed";
   conditions: EnvironmentalFactors;
 }
 
 export interface AdvancedPlanConfig extends TrainingPlanConfig {
   methodology: TrainingMethodology;
   intensityDistribution: IntensityDistribution;
-  periodization: 'linear' | 'block' | 'undulating';
+  periodization: "linear" | "block" | "undulating" | "reverse";
   targetRaces: TargetRace[];
   seasonGoals?: string[];
   adaptationEnabled?: boolean;
@@ -594,13 +649,32 @@ export interface AdvancedPlanConfig extends TrainingPlanConfig {
   progressTracking?: boolean;
   exportFormats?: ExportFormat[];
   platformIntegrations?: string[];
+
+  // Additional configuration properties for methodology testing and conflict resolution
+  intensity?: {
+    easy?: number;
+    moderate?: number;
+    hard?: number;
+  };
+  volume?: {
+    weeklyHours?: number;
+    progressionRate?: number;
+    weeklyMinutes?: number;
+  };
+  recovery?: {
+    emphasis?: number;
+    restDays?: number;
+    hoursAfterLT?: number;
+  };
+  experience?: "beginner" | "intermediate" | "advanced";
+
   multiRaceConfig?: {
     primaryRace: string;
     secondaryRaces: string[];
-    peakingStrategy: 'single' | 'double' | 'multiple';
+    peakingStrategy: "single" | "double" | "multiple";
   };
   adaptationSettings?: {
-    sensitivity: 'low' | 'medium' | 'high';
+    sensitivity: "low" | "medium" | "high";
     autoAdjust: boolean;
     thresholds: {
       fatigue: number;
@@ -611,18 +685,45 @@ export interface AdvancedPlanConfig extends TrainingPlanConfig {
 
 export interface ProgressData {
   date: Date;
-  perceivedExertion: number; // 1-10
-  heartRateData: {
+  adherenceRate: number; // 0-1 percentage of planned workouts completed
+  completedWorkouts: CompletedWorkout[]; // Array of completed workouts
+  totalWorkouts: number; // Total number of planned workouts
+  performanceTrend: "improving" | "maintaining" | "declining"; // Performance trend analysis
+  volumeProgress: {
+    weeklyAverage: number;
+    trend: "increasing" | "stable" | "decreasing";
+  };
+  intensityDistribution: {
+    easy: number; // percentage
+    moderate: number;
+    hard: number;
+    veryHard: number;
+  };
+  currentFitness: {
+    vdot: number;
+    weeklyMileage: number;
+    longestRecentRun: number;
+    trainingAge: number; // years
+  };
+  lastUpdateDate: Date;
+
+  // Additional analysis metrics
+  consistencyScore?: number; // 0-100 training consistency rating
+  overreachingRisk?: number; // 0-100 risk of overreaching
+  recoveryTrend?: "improving" | "stable" | "declining"; // Recovery pattern analysis
+
+  // Optional legacy fields for backward compatibility
+  perceivedExertion?: number; // 1-10
+  heartRateData?: {
     resting: number;
     average: number;
     maximum: number;
   };
-  performanceMetrics: {
+  performanceMetrics?: {
     vo2max: number;
     lactateThreshold: number;
     runningEconomy: number;
   };
-  completedWorkouts?: CompletedWorkout[];
   notes?: string;
 }
 
@@ -634,8 +735,12 @@ export interface CompletedWorkout {
   avgHeartRate: number;
   maxHeartRate: number;
   completionRate: number; // 0-1
-  adherence: 'none' | 'partial' | 'complete';
+  adherence: "none" | "partial" | "complete";
   difficultyRating: number; // 1-10
+  date: Date; // When the workout was completed
+  perceivedEffort?: number; // 1-10 RPE scale
+  notes?: string; // User notes about the workout
+  workoutId?: string; // Reference to planned workout ID
 }
 
 export interface RecoveryMetrics {
@@ -646,4 +751,41 @@ export interface RecoveryMetrics {
   muscleSoreness: number; // 1-10
   energyLevel: number; // 1-10
   motivation: number; // 1-10
+  hrv?: number; // Heart rate variability
+  restingHR?: number; // Resting heart rate
+  notes?: string; // Additional recovery notes
+  date?: Date; // Date of recovery measurement
 }
+
+/**
+ * Runner attributes for methodology customization and profiling
+ * Defines the key characteristics that influence training approach selection
+ */
+export type RunnerAttribute =
+  | "speed"
+  | "endurance"
+  | "consistency"
+  | "mental_toughness"
+  | "recovery"
+  | "injury_resistance"
+  | "hill_running"
+  | "heat_tolerance"
+  | "cold_tolerance";
+
+// Type validation utilities
+export class TypeValidationError extends Error {
+  constructor(
+    message: string,
+    public expectedType: string,
+    public actualValue: unknown,
+  ) {
+    super(
+      `Type validation failed: ${message}. Expected ${expectedType}, got ${typeof actualValue}`,
+    );
+    this.name = "TypeValidationError";
+  }
+}
+
+export type TypedResult<T, E = Error> =
+  | { success: true; data: T }
+  | { success: false; error: E };

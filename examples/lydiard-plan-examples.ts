@@ -55,7 +55,8 @@ class LydiardTrainingExamples {
         vdot: 48,
         weeklyMileage: 55, // km/week
         longestRecentRun: 22,
-        trainingAge: 4
+        trainingAge: 4,
+        overallScore: 73 // VDOT: 60 + Volume: 55 + Experience: 80 + Recovery: 75 * weights = 73
       },
       
       preferences: {
@@ -116,7 +117,8 @@ class LydiardTrainingExamples {
         vdot: 45,
         weeklyMileage: 70,
         longestRecentRun: 35,
-        trainingAge: 6
+        trainingAge: 6,
+        overallScore: 73 // VDOT: 56.3 + Volume: 70 + Experience: 100 + Recovery: 75 * weights = 73
       },
       
       preferences: {
@@ -177,7 +179,8 @@ class LydiardTrainingExamples {
         weeklyMileage: 20, // Starting low
         longestRecentRun: 10,
         trainingAge: 3,
-        injuryHistory: ['plantar fasciitis']
+        injuryHistory: ['plantar fasciitis'],
+        overallScore: 53 // VDOT: 50 + Volume: 20 + Experience: 60 + Recovery: 75 * weights = 53
       },
       
       preferences: {
@@ -236,7 +239,8 @@ class LydiardTrainingExamples {
         vdot: 38, // Developing runner
         weeklyMileage: 30,
         longestRecentRun: 12,
-        trainingAge: 1 // New to structured training
+        trainingAge: 1, // New to structured training
+        overallScore: 50 // VDOT: 47.5 + Volume: 30 + Experience: 20 + Recovery: 75 * weights = 50
       },
       
       preferences: {

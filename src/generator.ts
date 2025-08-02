@@ -9,17 +9,24 @@ import {
   IntensityDistribution,
   RunData,
   FitnessAssessment,
-} from './types';
+  WorkoutType,
+} from "./types";
 import {
   PHASE_DURATION,
   INTENSITY_MODELS,
   PROGRESSION_RATES,
   ADAPTATION_TIMELINE,
   WORKOUT_DURATIONS,
-} from './constants';
-import { WORKOUT_TEMPLATES } from './workouts';
-import { calculateFitnessMetrics, analyzeWeeklyPatterns } from './calculator';
-import { addDays, addWeeks, differenceInWeeks, format, startOfWeek } from 'date-fns';
+} from "./constants";
+import { WORKOUT_TEMPLATES } from "./workouts";
+import { calculateFitnessMetrics, analyzeWeeklyPatterns } from "./calculator";
+import {
+  addDays,
+  addWeeks,
+  differenceInWeeks,
+  format,
+  startOfWeek,
+} from "date-fns";
 
 export class TrainingPlanGenerator {
   private config: TrainingPlanConfig;
@@ -51,8 +58,8 @@ export class TrainingPlanGenerator {
    */
   static fromRunHistory(
     runs: RunData[],
-    goal: TrainingPlanConfig['goal'],
-    targetDate: Date
+    goal: TrainingPlanConfig["goal"],
+    targetDate: Date,
   ): TrainingPlan {
     const fitness = this.assessFitnessFromRuns(runs);
     const weeklyPatterns = analyzeWeeklyPatterns(runs);
@@ -66,7 +73,7 @@ export class TrainingPlanGenerator {
       currentFitness: fitness,
       preferences: {
         availableDays: weeklyPatterns.optimalDays,
-        preferredIntensity: 'moderate',
+        preferredIntensity: "moderate",
         crossTraining: false,
         strengthTraining: false,
       },
@@ -81,8 +88,10 @@ export class TrainingPlanGenerator {
    */
   private createTrainingBlocks(): TrainingBlock[] {
     const totalWeeks = differenceInWeeks(
-      this.config.endDate || this.config.targetDate || addWeeks(this.config.startDate, 16),
-      this.config.startDate
+      this.config.endDate ||
+        this.config.targetDate ||
+        addWeeks(this.config.startDate, 16),
+      this.config.startDate,
     );
 
     const blocks: TrainingBlock[] = [];
@@ -117,7 +126,9 @@ export class TrainingPlanGenerator {
   /**
    * Determine phase distribution based on total weeks and goal
    */
-  private getPhaseDistribution(totalWeeks: number): Record<TrainingPhase, number> {
+  private getPhaseDistribution(
+    totalWeeks: number,
+  ): Record<TrainingPhase, number> {
     const distribution: Record<TrainingPhase, number> = {
       base: 0,
       build: 0,
@@ -154,11 +165,15 @@ export class TrainingPlanGenerator {
    */
   private getFocusAreas(phase: TrainingPhase): string[] {
     const focusMap: Record<TrainingPhase, string[]> = {
-      base: ['Aerobic capacity', 'Running economy', 'Injury prevention'],
-      build: ['Lactate threshold', 'VO2max development', 'Race pace familiarity'],
-      peak: ['Race-specific fitness', 'Speed endurance', 'Mental preparation'],
-      taper: ['Recovery', 'Maintenance', 'Race readiness'],
-      recovery: ['Active recovery', 'Reflection', 'Planning'],
+      base: ["Aerobic capacity", "Running economy", "Injury prevention"],
+      build: [
+        "Lactate threshold",
+        "VO2max development",
+        "Race pace familiarity",
+      ],
+      peak: ["Race-specific fitness", "Speed endurance", "Mental preparation"],
+      taper: ["Recovery", "Maintenance", "Race readiness"],
+      recovery: ["Active recovery", "Reflection", "Planning"],
     };
 
     return focusMap[phase];
@@ -176,7 +191,11 @@ export class TrainingPlanGenerator {
       const weekNumber = microcycles.length + 1;
 
       // Calculate weekly volume with progression
-      const progressionFactor = this.calculateProgressionFactor(block.phase, week, block.weeks);
+      const progressionFactor = this.calculateProgressionFactor(
+        block.phase,
+        week,
+        block.weeks,
+      );
       const weeklyVolume = isRecoveryWeek
         ? baseVolume * 0.7 * progressionFactor
         : baseVolume * progressionFactor;
@@ -188,13 +207,16 @@ export class TrainingPlanGenerator {
         weekNumber,
         pattern,
         weeklyVolume,
-        addWeeks(block.startDate, week)
+        addWeeks(block.startDate, week),
       );
 
-      const totalLoad = workouts.reduce((sum, w) => sum + w.workout.estimatedTSS, 0);
+      const totalLoad = workouts.reduce(
+        (sum, w) => sum + w.workout.estimatedTSS,
+        0,
+      );
       const totalDistance = workouts.reduce(
         (sum, w) => sum + (w.targetMetrics.distance || 0),
-        0
+        0,
       );
 
       microcycles.push({
@@ -216,24 +238,25 @@ export class TrainingPlanGenerator {
   private calculateProgressionFactor(
     phase: TrainingPhase,
     week: number,
-    totalWeeks: number
+    totalWeeks: number,
   ): number {
-    const progressionRate = this.fitness.trainingAge && this.fitness.trainingAge > 2
-      ? PROGRESSION_RATES.advanced
-      : this.fitness.trainingAge && this.fitness.trainingAge > 1
-      ? PROGRESSION_RATES.intermediate
-      : PROGRESSION_RATES.beginner;
+    const progressionRate =
+      this.fitness.trainingAge && this.fitness.trainingAge > 2
+        ? PROGRESSION_RATES.advanced
+        : this.fitness.trainingAge && this.fitness.trainingAge > 1
+          ? PROGRESSION_RATES.intermediate
+          : PROGRESSION_RATES.beginner;
 
     switch (phase) {
-      case 'base':
-        return 1 + (week * progressionRate);
-      case 'build':
-        return 1.2 + (week * progressionRate * 0.8);
-      case 'peak':
-        return 1.3 + (week * progressionRate * 0.5);
-      case 'taper':
-        return 1.0 - (week * 0.2); // Reduce volume
-      case 'recovery':
+      case "base":
+        return 1 + week * progressionRate;
+      case "build":
+        return 1.2 + week * progressionRate * 0.8;
+      case "peak":
+        return 1.3 + week * progressionRate * 0.5;
+      case "taper":
+        return 1.0 - week * 0.2; // Reduce volume
+      case "recovery":
         return 0.6;
       default:
         return 1.0;
@@ -243,29 +266,32 @@ export class TrainingPlanGenerator {
   /**
    * Generate weekly workout pattern
    */
-  private generateWeeklyPattern(phase: TrainingPhase, isRecovery: boolean): string {
+  private generateWeeklyPattern(
+    phase: TrainingPhase,
+    isRecovery: boolean,
+  ): string {
     if (isRecovery) {
-      return 'Easy-Recovery-Easy-Recovery-Rest-Easy-Recovery';
+      return "Easy-Recovery-Easy-Recovery-Rest-Easy-Recovery";
     }
 
     const patterns: Record<TrainingPhase, string[]> = {
       base: [
-        'Easy-Steady-Easy-Tempo-Rest-Long-Recovery',
-        'Easy-Hills-Recovery-Steady-Rest-Long-Easy',
+        "Easy-Steady-Easy-Tempo-Rest-Long-Recovery",
+        "Easy-Hills-Recovery-Steady-Rest-Long-Easy",
       ],
       build: [
-        'Easy-Intervals-Recovery-Tempo-Rest-Long-Recovery',
-        'Easy-Threshold-Recovery-Hills-Rest-Progression-Recovery',
+        "Easy-Intervals-Recovery-Tempo-Rest-Long-Recovery",
+        "Easy-Threshold-Recovery-Hills-Rest-Progression-Recovery",
       ],
       peak: [
-        'Easy-VO2max-Recovery-RacePace-Rest-Long-Recovery',
-        'Easy-Speed-Recovery-Threshold-Rest-TimeTrial-Recovery',
+        "Easy-VO2max-Recovery-RacePace-Rest-Long-Recovery",
+        "Easy-Speed-Recovery-Threshold-Rest-TimeTrial-Recovery",
       ],
       taper: [
-        'Easy-Tempo-Recovery-Easy-Rest-MediumLong-Recovery',
-        'Easy-Strides-Recovery-Easy-Rest-Easy-Rest',
+        "Easy-Tempo-Recovery-Easy-Rest-MediumLong-Recovery",
+        "Easy-Strides-Recovery-Easy-Rest-Easy-Rest",
       ],
-      recovery: ['Easy-Recovery-Rest-Easy-Rest-Easy-Recovery'],
+      recovery: ["Easy-Recovery-Rest-Easy-Rest-Easy-Recovery"],
     };
 
     const phasePatterns = patterns[phase];
@@ -280,17 +306,19 @@ export class TrainingPlanGenerator {
     weekNumber: number,
     pattern: string,
     weeklyVolume: number,
-    weekStart: Date
+    weekStart: Date,
   ): PlannedWorkout[] {
-    const workoutTypes = pattern.split('-');
+    const workoutTypes = pattern.split("-");
     const workouts: PlannedWorkout[] = [];
-    const availableDays = this.config.preferences?.availableDays || [0, 2, 4, 6];
+    const availableDays = this.config.preferences?.availableDays || [
+      0, 2, 4, 6,
+    ];
 
     let volumeRemaining = weeklyVolume;
     let dayIndex = 0;
 
     workoutTypes.forEach((type, index) => {
-      if (type === 'Rest') {
+      if (type === "Rest") {
         return;
       }
 
@@ -304,7 +332,7 @@ export class TrainingPlanGenerator {
       const targetDistance = this.calculateWorkoutDistance(
         workout,
         volumeRemaining,
-        workoutTypes.length - index
+        workoutTypes.length - index,
       );
 
       workouts.push({
@@ -315,11 +343,18 @@ export class TrainingPlanGenerator {
         description: this.generateWorkoutDescription(workout),
         workout,
         targetMetrics: {
-          duration: workout.segments.reduce((sum: number, s: any) => sum + s.duration, 0),
+          duration: workout.segments.reduce(
+            (sum: number, s: any) => sum + s.duration,
+            0,
+          ),
           distance: targetDistance,
           tss: workout.estimatedTSS,
           load: workout.estimatedTSS,
-          intensity: workout.segments.reduce((sum: number, s: any) => sum + s.intensity, 0) / workout.segments.length,
+          intensity:
+            workout.segments.reduce(
+              (sum: number, s: any) => sum + s.intensity,
+              0,
+            ) / workout.segments.length,
         },
       });
 
@@ -331,30 +366,71 @@ export class TrainingPlanGenerator {
   }
 
   /**
+   * Generate a single workout (for advanced-generator extension)
+   */
+  protected generateWorkout(
+    date: Date,
+    type: WorkoutType,
+    phase: TrainingPhase,
+    weekNumber: number,
+  ): PlannedWorkout {
+    const workout = this.selectWorkout(type.toString(), phase, 10); // Default remaining volume
+    const targetDistance = this.calculateWorkoutDistance(workout, 10, 1);
+
+    return {
+      id: `workout-${weekNumber}-${Date.now()}`,
+      date,
+      type: workout.type,
+      name: this.generateWorkoutName(workout.type, phase),
+      description: this.generateWorkoutDescription(workout),
+      workout,
+      targetMetrics: {
+        duration: workout.segments.reduce(
+          (sum: number, s: any) => sum + s.duration,
+          0,
+        ),
+        distance: targetDistance,
+        tss: workout.estimatedTSS,
+        load: workout.estimatedTSS,
+        intensity:
+          workout.segments.reduce(
+            (sum: number, s: any) => sum + s.intensity,
+            0,
+          ) / workout.segments.length,
+      },
+    };
+  }
+
+  /**
    * Select appropriate workout based on type string
    */
-  private selectWorkout(typeString: string, phase: TrainingPhase, volumeRemaining: number): any {
+  private selectWorkout(
+    typeString: string,
+    phase: TrainingPhase,
+    volumeRemaining: number,
+  ): any {
     const workoutMap: Record<string, string[]> = {
-      Easy: ['EASY_AEROBIC'],
-      Recovery: ['RECOVERY_JOG'],
-      Steady: ['EASY_AEROBIC'],
-      Tempo: ['TEMPO_CONTINUOUS'],
-      Threshold: ['LACTATE_THRESHOLD_2X20', 'THRESHOLD_PROGRESSION'],
-      Intervals: ['VO2MAX_4X4', 'VO2MAX_5X3'],
-      Hills: ['HILL_REPEATS_6X2'],
-      Long: ['LONG_RUN'],
-      Progression: ['PROGRESSION_3_STAGE'],
-      VO2max: ['VO2MAX_4X4', 'VO2MAX_5X3'],
-      Speed: ['SPEED_200M_REPS'],
-      RacePace: ['TEMPO_CONTINUOUS'],
-      TimeTrial: ['THRESHOLD_PROGRESSION'],
-      MediumLong: ['EASY_AEROBIC'],
-      Strides: ['SPEED_200M_REPS'],
+      Easy: ["EASY_AEROBIC"],
+      Recovery: ["RECOVERY_JOG"],
+      Steady: ["EASY_AEROBIC"],
+      Tempo: ["TEMPO_CONTINUOUS"],
+      Threshold: ["LACTATE_THRESHOLD_2X20", "THRESHOLD_PROGRESSION"],
+      Intervals: ["VO2MAX_4X4", "VO2MAX_5X3"],
+      Hills: ["HILL_REPEATS_6X2"],
+      Long: ["LONG_RUN"],
+      Progression: ["PROGRESSION_3_STAGE"],
+      VO2max: ["VO2MAX_4X4", "VO2MAX_5X3"],
+      Speed: ["SPEED_200M_REPS"],
+      RacePace: ["TEMPO_CONTINUOUS"],
+      TimeTrial: ["THRESHOLD_PROGRESSION"],
+      MediumLong: ["EASY_AEROBIC"],
+      Strides: ["SPEED_200M_REPS"],
     };
 
-    const templates = workoutMap[typeString] || ['EASY_AEROBIC'];
-    const templateName = templates[Math.floor(Math.random() * templates.length)];
-    
+    const templates = workoutMap[typeString] || ["EASY_AEROBIC"];
+    const templateName =
+      templates[Math.floor(Math.random() * templates.length)];
+
     return { ...WORKOUT_TEMPLATES[templateName] };
   }
 
@@ -364,18 +440,26 @@ export class TrainingPlanGenerator {
   private calculateWorkoutDistance(
     workout: any,
     volumeRemaining: number,
-    workoutsLeft: number
+    workoutsLeft: number,
   ): number {
-    const totalMinutes = workout.segments.reduce((sum: number, s: any) => sum + s.duration, 0);
-    const avgIntensity = workout.segments.reduce((sum: number, s: any) => sum + s.intensity, 0) / workout.segments.length;
-    
+    const totalMinutes = workout.segments.reduce(
+      (sum: number, s: any) => sum + s.duration,
+      0,
+    );
+    const avgIntensity =
+      workout.segments.reduce((sum: number, s: any) => sum + s.intensity, 0) /
+      workout.segments.length;
+
     // Estimate pace based on intensity and fitness
     const thresholdPace = 5.0; // min/km at threshold (simplified)
     const workoutPace = thresholdPace / (avgIntensity / 88); // Scale from threshold
-    
+
     const estimatedDistance = totalMinutes / workoutPace;
-    const targetDistance = Math.min(estimatedDistance, volumeRemaining / workoutsLeft);
-    
+    const targetDistance = Math.min(
+      estimatedDistance,
+      volumeRemaining / workoutsLeft,
+    );
+
     return Math.round(targetDistance * 10) / 10;
   }
 
@@ -383,36 +467,47 @@ export class TrainingPlanGenerator {
    * Generate all workouts from blocks
    */
   private generateAllWorkouts(blocks: TrainingBlock[]): PlannedWorkout[] {
-    return blocks.flatMap(block => block.microcycles.flatMap(cycle => cycle.workouts));
+    return blocks.flatMap((block) =>
+      block.microcycles.flatMap((cycle) => cycle.workouts),
+    );
   }
 
   /**
    * Create plan summary
    */
-  private createPlanSummary(blocks: TrainingBlock[], workouts: PlannedWorkout[]): PlanSummary {
-    const phases = blocks.map(block => ({
+  private createPlanSummary(
+    blocks: TrainingBlock[],
+    workouts: PlannedWorkout[],
+  ): PlanSummary {
+    const phases = blocks.map((block) => ({
       phase: block.phase,
       weeks: block.weeks,
       focus: block.focusAreas,
-      volumeProgression: block.microcycles.map(m => m.totalDistance),
+      volumeProgression: block.microcycles.map((m) => m.totalDistance),
       intensityDistribution: this.calculateIntensityDistribution(
-        block.microcycles.flatMap(m => m.workouts)
+        block.microcycles.flatMap((m) => m.workouts),
       ),
     }));
 
-    const weeklyDistances = blocks.flatMap(b => b.microcycles.map(m => m.totalDistance));
+    const weeklyDistances = blocks.flatMap((b) =>
+      b.microcycles.map((m) => m.totalDistance),
+    );
 
     return {
       totalWeeks: blocks.reduce((sum, b) => sum + b.weeks, 0),
       totalWorkouts: workouts.length,
-      totalDistance: workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0),
+      totalDistance: workouts.reduce(
+        (sum, w) => sum + (w.targetMetrics.distance || 0),
+        0,
+      ),
       totalTime: workouts.reduce((sum, w) => sum + w.targetMetrics.duration, 0),
       peakWeeklyDistance: Math.max(...weeklyDistances),
       averageWeeklyDistance:
         weeklyDistances.reduce((sum, d) => sum + d, 0) / weeklyDistances.length,
-      keyWorkouts: workouts.filter(w => ['threshold', 'vo2max', 'race_pace'].includes(w.type))
-        .length,
-      recoveryDays: workouts.filter(w => w.type === 'recovery').length,
+      keyWorkouts: workouts.filter((w) =>
+        ["threshold", "vo2max", "race_pace"].includes(w.type),
+      ).length,
+      recoveryDays: workouts.filter((w) => w.type === "recovery").length,
       phases,
     };
   }
@@ -420,16 +515,20 @@ export class TrainingPlanGenerator {
   /**
    * Calculate intensity distribution for workouts
    */
-  private calculateIntensityDistribution(workouts: PlannedWorkout[]): IntensityDistribution {
+  private calculateIntensityDistribution(
+    workouts: PlannedWorkout[],
+  ): IntensityDistribution {
     let easy = 0;
     let moderate = 0;
     let hard = 0;
+    let veryHard = 0;
 
-    workouts.forEach(workout => {
+    workouts.forEach((workout) => {
       const intensity = workout.targetMetrics.intensity;
       if (intensity < 75) easy++;
       else if (intensity < 88) moderate++;
-      else hard++;
+      else if (intensity < 95) hard++;
+      else veryHard++;
     });
 
     const total = workouts.length;
@@ -437,6 +536,7 @@ export class TrainingPlanGenerator {
       easy: Math.round((easy / total) * 100),
       moderate: Math.round((moderate / total) * 100),
       hard: Math.round((hard / total) * 100),
+      veryHard: Math.round((veryHard / total) * 100),
     };
   }
 
@@ -444,7 +544,9 @@ export class TrainingPlanGenerator {
    * Calculate recovery ratio for a set of workouts
    */
   private calculateRecoveryRatio(workouts: PlannedWorkout[]): number {
-    const recoveryWorkouts = workouts.filter(w => w.type === 'recovery' || w.type === 'easy');
+    const recoveryWorkouts = workouts.filter(
+      (w) => w.type === "recovery" || w.type === "easy",
+    );
     return recoveryWorkouts.length / workouts.length;
   }
 
@@ -453,22 +555,22 @@ export class TrainingPlanGenerator {
    */
   private generateWorkoutName(type: string, phase: TrainingPhase): string {
     const nameMap: Record<string, string> = {
-      recovery: 'Recovery Run',
-      easy: 'Easy Aerobic Run',
-      steady: 'Steady State Run',
-      tempo: 'Tempo Run',
-      threshold: 'Lactate Threshold Workout',
-      vo2max: 'VO2max Intervals',
-      speed: 'Speed Development',
-      hill_repeats: 'Hill Repeats',
-      fartlek: 'Fartlek Run',
-      progression: 'Progression Run',
-      long_run: 'Long Run',
-      race_pace: 'Race Pace Practice',
-      time_trial: 'Time Trial',
+      recovery: "Recovery Run",
+      easy: "Easy Aerobic Run",
+      steady: "Steady State Run",
+      tempo: "Tempo Run",
+      threshold: "Lactate Threshold Workout",
+      vo2max: "VO2max Intervals",
+      speed: "Speed Development",
+      hill_repeats: "Hill Repeats",
+      fartlek: "Fartlek Run",
+      progression: "Progression Run",
+      long_run: "Long Run",
+      race_pace: "Race Pace Practice",
+      time_trial: "Time Trial",
     };
 
-    return `${phase.charAt(0).toUpperCase() + phase.slice(1)} Phase: ${nameMap[type] || 'Training Run'}`;
+    return `${phase.charAt(0).toUpperCase() + phase.slice(1)} Phase: ${nameMap[type] || "Training Run"}`;
   }
 
   /**
@@ -477,38 +579,93 @@ export class TrainingPlanGenerator {
   private generateWorkoutDescription(workout: any): string {
     const segments = workout.segments
       .map((s: any) => `${s.duration}min ${s.description}`)
-      .join(', ');
+      .join(", ");
     return `${workout.adaptationTarget}. Workout: ${segments}`;
+  }
+
+  /**
+   * Calculate overall fitness score from available metrics
+   */
+  private calculateOverallScore(
+    assessment: Partial<FitnessAssessment>,
+  ): number {
+    const vdotScore = Math.min(((assessment.vdot || 40) / 80) * 100, 100); // Normalize VDOT to 0-100
+    const volumeScore = Math.min(
+      ((assessment.weeklyMileage || 30) / 100) * 100,
+      100,
+    ); // Weekly mileage score
+    const experienceScore = Math.min(
+      ((assessment.trainingAge || 1) / 10) * 100,
+      100,
+    ); // Training age score
+    const recoveryScore = assessment.recoveryRate || 75; // Recovery rate (already 0-100)
+
+    // Weighted average: VDOT (40%), Volume (25%), Experience (20%), Recovery (15%)
+    return Math.round(
+      vdotScore * 0.4 +
+        volumeScore * 0.25 +
+        experienceScore * 0.2 +
+        recoveryScore * 0.15,
+    );
   }
 
   /**
    * Create default fitness assessment
    */
   private createDefaultFitness(): FitnessAssessment {
-    return {
+    const assessment = {
       weeklyMileage: 30,
       longestRecentRun: 10,
       vdot: 40,
       trainingAge: 1,
+    };
+
+    return {
+      ...assessment,
+      overallScore: this.calculateOverallScore(assessment),
     };
   }
 
   /**
    * Assess fitness from run history
    */
-  private static assessFitnessFromRuns(runs: RunData[]): FitnessAssessment {
+  public static assessFitnessFromRuns(runs: RunData[]): FitnessAssessment {
     const metrics = calculateFitnessMetrics(runs);
     const patterns = analyzeWeeklyPatterns(runs);
 
-    return {
+    const assessment = {
       vdot: metrics.vdot,
       criticalSpeed: metrics.criticalSpeed,
       runningEconomy: metrics.runningEconomy,
       lactateThreshold: metrics.lactateThreshold,
       weeklyMileage: patterns.avgWeeklyMileage,
-      longestRecentRun: Math.max(...runs.map(r => r.distance)),
+      longestRecentRun: Math.max(...runs.map((r) => r.distance)),
       trainingAge: 1, // Would need more data to calculate
       recoveryRate: metrics.recoveryScore,
+    };
+
+    // Calculate overall score using static method since this is a static method
+    const vdotScore = Math.min(((assessment.vdot || 40) / 80) * 100, 100);
+    const volumeScore = Math.min(
+      ((assessment.weeklyMileage || 30) / 100) * 100,
+      100,
+    );
+    const experienceScore = Math.min(
+      ((assessment.trainingAge || 1) / 10) * 100,
+      100,
+    );
+    const recoveryScore = assessment.recoveryRate || 75;
+
+    const overallScore = Math.round(
+      vdotScore * 0.4 +
+        volumeScore * 0.25 +
+        experienceScore * 0.2 +
+        recoveryScore * 0.15,
+    );
+
+    return {
+      ...assessment,
+      overallScore,
     };
   }
 }

@@ -13,60 +13,60 @@ export interface TrainingZone {
  */
 export const TRAINING_ZONES: Record<string, TrainingZone> = {
   RECOVERY: {
-    name: 'Recovery',
+    name: "Recovery",
     rpe: 1,
     heartRateRange: { min: 50, max: 60 },
     paceRange: { min: 0, max: 75 },
-    description: 'Very easy effort, conversational',
-    purpose: 'Active recovery, promote blood flow',
+    description: "Very easy effort, conversational",
+    purpose: "Active recovery, promote blood flow",
   },
   EASY: {
-    name: 'Easy',
+    name: "Easy",
     rpe: 2,
     heartRateRange: { min: 60, max: 70 },
     paceRange: { min: 75, max: 85 },
-    description: 'Comfortable, conversational pace',
-    purpose: 'Build aerobic base, improve fat oxidation',
+    description: "Comfortable, conversational pace",
+    purpose: "Build aerobic base, improve fat oxidation",
   },
   STEADY: {
-    name: 'Steady',
+    name: "Steady",
     rpe: 3,
     heartRateRange: { min: 70, max: 80 },
     paceRange: { min: 85, max: 90 },
-    description: 'Moderate effort, slightly harder breathing',
-    purpose: 'Aerobic development, mitochondrial density',
+    description: "Moderate effort, slightly harder breathing",
+    purpose: "Aerobic development, mitochondrial density",
   },
   TEMPO: {
-    name: 'Tempo',
+    name: "Tempo",
     rpe: 4,
     heartRateRange: { min: 80, max: 87 },
     paceRange: { min: 90, max: 95 },
-    description: 'Comfortably hard, controlled discomfort',
-    purpose: 'Improve lactate clearance, mental toughness',
+    description: "Comfortably hard, controlled discomfort",
+    purpose: "Improve lactate clearance, mental toughness",
   },
   THRESHOLD: {
-    name: 'Threshold',
+    name: "Threshold",
     rpe: 5,
     heartRateRange: { min: 87, max: 92 },
     paceRange: { min: 95, max: 100 },
-    description: 'Hard effort, sustainable for ~1 hour',
-    purpose: 'Increase lactate threshold, improve efficiency',
+    description: "Hard effort, sustainable for ~1 hour",
+    purpose: "Increase lactate threshold, improve efficiency",
   },
   VO2_MAX: {
-    name: 'VO2 Max',
+    name: "VO2 Max",
     rpe: 6,
     heartRateRange: { min: 92, max: 97 },
     paceRange: { min: 105, max: 115 },
-    description: 'Very hard, heavy breathing',
-    purpose: 'Maximize oxygen uptake, increase power',
+    description: "Very hard, heavy breathing",
+    purpose: "Maximize oxygen uptake, increase power",
   },
   NEUROMUSCULAR: {
-    name: 'Neuromuscular',
+    name: "Neuromuscular",
     rpe: 7,
     heartRateRange: { min: 97, max: 100 },
     paceRange: { min: 115, max: 130 },
-    description: 'Maximum effort, short duration',
-    purpose: 'Improve speed, power, and running economy',
+    description: "Maximum effort, short duration",
+    purpose: "Improve speed, power, and running economy",
   },
 };
 
@@ -76,7 +76,7 @@ export const TRAINING_ZONES: Record<string, TrainingZone> = {
 export function calculatePersonalizedZones(
   maxHR: number,
   thresholdPace: number, // min/km
-  vdot?: number
+  vdot?: number,
 ): Record<string, TrainingZone> {
   const zones: Record<string, TrainingZone> = {};
 
@@ -125,9 +125,9 @@ export function getZoneByIntensity(intensity: number): TrainingZone {
 export function calculateTrainingPaces(vdot: number): Record<string, number> {
   // Based on Jack Daniels' VDOT tables
   // Returns paces in min/km
-  
+
   const vdotMultipliers = {
-    easy: 0.70, // % of VO2max
+    easy: 0.7, // % of VO2max
     marathon: 0.84,
     threshold: 0.88,
     interval: 0.98,

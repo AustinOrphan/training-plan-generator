@@ -5,16 +5,12 @@
  * with full validation, adaptation, and export capabilities.
  */
 
-import {
-  AdvancedTrainingPlanGenerator,
-  PhilosophyFactory,
-  SmartAdaptationEngine,
-  MultiFormatExporter,
-  type AdvancedPlanConfig,
-  type TrainingPlan,
-  type ProgressData
-} from '../src/index';
+import { AdvancedTrainingPlanGenerator } from '../src/advanced-generator';
+import { PhilosophyFactory } from '../src/philosophies';
+import { SmartAdaptationEngine } from '../src/adaptation';
+import { MultiFormatExporter } from '../src/export';
 import { ValidationFactory } from '../src/validation';
+import type { AdvancedPlanConfig, TrainingPlan, ProgressData } from '../src/types';
 
 /**
  * Complete workflow for Jack Daniels methodology
@@ -38,7 +34,8 @@ export async function danielsCompleteWorkflow() {
       longestRecentRun: 18,
       trainingAge: 3,
       injuryHistory: [],
-      recoveryRate: 78
+      recoveryRate: 78,
+      overallScore: 70 // VDOT: 60 + Volume: 40 + Experience: 60 + Recovery: 78 * weights = 70
     },
     
     preferences: {
@@ -251,7 +248,8 @@ export async function lydiardCompleteWorkflow() {
       weeklyMileage: 30,
       longestRecentRun: 15,
       trainingAge: 2,
-      recoveryRate: 70
+      recoveryRate: 70,
+      overallScore: 59 // VDOT: 52.5 + Volume: 30 + Experience: 40 + Recovery: 70 * weights = 59
     },
     
     preferences: {
@@ -416,7 +414,8 @@ export async function pfitzingerCompleteWorkflow() {
       weeklyMileage: 55,
       longestRecentRun: 26,
       trainingAge: 5,
-      recoveryRate: 80
+      recoveryRate: 80,
+      overallScore: 76 // VDOT: 65 + Volume: 55 + Experience: 100 + Recovery: 80 * weights = 76
     },
     
     preferences: {

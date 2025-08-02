@@ -1,42 +1,44 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { 
+import { describe, it, expect, beforeEach } from "vitest";
+import {
   MethodologyTransitionSystem,
   MethodologyTransition,
-  TransitionType
-} from '../methodology-transition-system';
-import { TrainingPlan, TrainingPhase, TrainingMethodology } from '../types';
-import { PlanModification } from '../adaptation';
+  TransitionType,
+} from "../methodology-transition-system";
+import { TrainingPlan, TrainingPhase, TrainingMethodology } from "../types";
+import { PlanModification } from "../adaptation";
 
 // Helper function to create a mock training plan
-function createMockTrainingPlan(methodology: TrainingMethodology = 'daniels'): TrainingPlan {
+function createMockTrainingPlan(
+  methodology: TrainingMethodology = "daniels",
+): TrainingPlan {
   return {
-    id: 'test-plan',
+    id: "test-plan",
     config: {
-      name: 'Test Plan',
-      goal: 'MARATHON',
+      name: "Test Plan",
+      goal: "MARATHON",
       startDate: new Date(),
       endDate: new Date(Date.now() + 16 * 7 * 24 * 60 * 60 * 1000),
-      methodology
+      methodology,
     },
     blocks: [
       {
-        id: 'block-1',
-        phase: 'base',
+        id: "block-1",
+        phase: "base",
         startDate: new Date(),
         endDate: new Date(Date.now() + 4 * 7 * 24 * 60 * 60 * 1000),
         weeks: 4,
-        focusAreas: ['aerobic base'],
-        microcycles: []
+        focusAreas: ["aerobic base"],
+        microcycles: [],
       },
       {
-        id: 'block-2',
-        phase: 'build',
+        id: "block-2",
+        phase: "build",
         startDate: new Date(Date.now() + 4 * 7 * 24 * 60 * 60 * 1000),
         endDate: new Date(Date.now() + 8 * 7 * 24 * 60 * 60 * 1000),
         weeks: 4,
-        focusAreas: ['threshold development'],
-        microcycles: []
-      }
+        focusAreas: ["threshold development"],
+        microcycles: [],
+      },
     ],
     summary: {
       totalWeeks: 16,
@@ -49,58 +51,58 @@ function createMockTrainingPlan(methodology: TrainingMethodology = 'daniels'): T
       recoveryDays: 32,
       phases: [
         {
-          phase: 'base',
+          phase: "base",
           weeks: 4,
           totalWorkouts: 20,
           avgWeeklyDistance: 35,
-          focusAreas: ['aerobic base']
+          focusAreas: ["aerobic base"],
         },
         {
-          phase: 'build',
+          phase: "build",
           weeks: 4,
           totalWorkouts: 20,
           avgWeeklyDistance: 40,
-          focusAreas: ['threshold development']
-        }
-      ]
+          focusAreas: ["threshold development"],
+        },
+      ],
     },
-    workouts: []
+    workouts: [],
   };
 }
 
-describe('MethodologyTransitionSystem', () => {
+describe("MethodologyTransitionSystem", () => {
   let system: MethodologyTransitionSystem;
 
   beforeEach(() => {
     system = new MethodologyTransitionSystem();
   });
 
-  describe('Requirement 5.5: Methodology Switching Support', () => {
-    it('should create methodology transition for different methodology pairs', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+  describe("Requirement 5.5: Methodology Switching Support", () => {
+    it("should create methodology transition for different methodology pairs", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       expect(transition).toBeDefined();
-      expect(transition.fromMethodology).toBe('daniels');
-      expect(transition.toMethodology).toBe('lydiard');
+      expect(transition.fromMethodology).toBe("daniels");
+      expect(transition.toMethodology).toBe("lydiard");
       expect(transition.transitionType).toBeDefined();
       expect(transition.transitionPlan).toBeDefined();
     });
 
-    it('should determine appropriate transition type based on compatibility', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should determine appropriate transition type based on compatibility", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       // Test different transition scenarios
       const transitions = [
-        { from: 'daniels', to: 'pfitzinger', expectedType: 'gradual' },
-        { from: 'lydiard', to: 'daniels', expectedType: 'gradual' },
-        { from: 'daniels', to: 'lydiard', expectedType: 'gradual' }
+        { from: "daniels", to: "pfitzinger", expectedType: "gradual" },
+        { from: "lydiard", to: "daniels", expectedType: "gradual" },
+        { from: "daniels", to: "lydiard", expectedType: "gradual" },
       ];
 
       transitions.forEach(({ from, to, expectedType }) => {
@@ -108,40 +110,42 @@ describe('MethodologyTransitionSystem', () => {
           plan,
           from as TrainingMethodology,
           to as TrainingMethodology,
-          'base'
+          "base",
         );
-        
-        expect(['immediate', 'gradual', 'phased', 'deferred']).toContain(transition.transitionType);
+
+        expect(["immediate", "gradual", "phased", "deferred"]).toContain(
+          transition.transitionType,
+        );
       });
     });
 
-    it('should defer transition during peak/taper phases', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should defer transition during peak/taper phases", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'peak'
+        "daniels",
+        "lydiard",
+        "peak",
       );
 
-      expect(transition.transitionType).toBe('deferred');
+      expect(transition.transitionType).toBe("deferred");
     });
 
-    it('should create detailed transition plan with phases', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should create detailed transition plan with phases", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       expect(transition.transitionPlan.phases).toBeDefined();
       expect(transition.transitionPlan.phases.length).toBeGreaterThan(0);
-      
-      transition.transitionPlan.phases.forEach(phase => {
+
+      transition.transitionPlan.phases.forEach((phase) => {
         expect(phase.phaseNumber).toBeDefined();
         expect(phase.name).toBeDefined();
         expect(phase.duration).toBeGreaterThan(0);
@@ -153,14 +157,14 @@ describe('MethodologyTransitionSystem', () => {
       });
     });
 
-    it('should create workout migration plan', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should create workout migration plan", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       const migration = transition.transitionPlan.workoutMigration;
@@ -170,121 +174,134 @@ describe('MethodologyTransitionSystem', () => {
       expect(migration.migrationSchedule.length).toBeGreaterThan(0);
     });
 
-    it('should apply transition to existing plan', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should apply transition to existing plan", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
-      const { modifiedPlan, modifications } = system.applyTransition(plan, transition);
+      const { modifiedPlan, modifications } = system.applyTransition(
+        plan,
+        transition,
+      );
 
       expect(modifiedPlan).toBeDefined();
-      expect(modifiedPlan.config.methodology).toBe('lydiard');
+      expect(modifiedPlan.config.methodology).toBe("lydiard");
       expect(modifications).toBeDefined();
       expect(modifications.length).toBeGreaterThan(0);
     });
   });
 
-  describe('Requirement 5.6: Transition Requirement Explanations', () => {
-    it('should identify transition requirements', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+  describe("Requirement 5.6: Transition Requirement Explanations", () => {
+    it("should identify transition requirements", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'pfitzinger',
-        'base'
+        "daniels",
+        "pfitzinger",
+        "base",
       );
 
       expect(transition.requirements).toBeDefined();
       expect(transition.requirements.length).toBeGreaterThan(0);
-      
-      transition.requirements.forEach(req => {
+
+      transition.requirements.forEach((req) => {
         expect(req.category).toBeDefined();
         expect(req.requirement).toBeDefined();
         expect(req.rationale).toBeDefined();
-        expect(typeof req.isMandatory).toBe('boolean');
+        expect(typeof req.isMandatory).toBe("boolean");
         expect(req.assessmentCriteria).toBeDefined();
         expect(req.assessmentCriteria.length).toBeGreaterThan(0);
       });
     });
 
-    it('should provide specific requirements for each methodology', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should provide specific requirements for each methodology", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       // Transition to Pfitzinger should require volume base
       const toPfitzinger = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'pfitzinger',
-        'base'
+        "daniels",
+        "pfitzinger",
+        "base",
       );
-      
-      const volumeReq = toPfitzinger.requirements.find(r => r.category === 'fitness_baseline');
+
+      const volumeReq = toPfitzinger.requirements.find(
+        (r) => r.category === "fitness_baseline",
+      );
       expect(volumeReq).toBeDefined();
       expect(volumeReq!.requirement).toMatch(/minimum.*miles.*week/i);
 
       // Transition to Lydiard should require time availability
       const toLydiard = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
-      
-      const timeReq = toLydiard.requirements.find(r => r.category === 'time_availability');
+
+      const timeReq = toLydiard.requirements.find(
+        (r) => r.category === "time_availability",
+      );
       expect(timeReq).toBeDefined();
       expect(timeReq!.requirement).toMatch(/hours.*week/i);
 
       // Transition to Daniels should require technical skills
       const toDaniels = system.createMethodologyTransition(
         plan,
-        'lydiard',
-        'daniels',
-        'base'
+        "lydiard",
+        "daniels",
+        "base",
       );
-      
-      const techReq = toDaniels.requirements.find(r => r.category === 'technical_skills');
+
+      const techReq = toDaniels.requirements.find(
+        (r) => r.category === "technical_skills",
+      );
       expect(techReq).toBeDefined();
       expect(techReq!.requirement).toMatch(/pace.*VDOT/i);
     });
 
-    it('should provide alternative options for non-mandatory requirements', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should provide alternative options for non-mandatory requirements", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
-      const nonMandatoryReqs = transition.requirements.filter(r => !r.isMandatory);
-      const reqsWithAlternatives = nonMandatoryReqs.filter(r => r.alternativeOptions && r.alternativeOptions.length > 0);
-      
+      const nonMandatoryReqs = transition.requirements.filter(
+        (r) => !r.isMandatory,
+      );
+      const reqsWithAlternatives = nonMandatoryReqs.filter(
+        (r) => r.alternativeOptions && r.alternativeOptions.length > 0,
+      );
+
       expect(reqsWithAlternatives.length).toBeGreaterThan(0);
     });
   });
 
-  describe('Requirement 5.8: Methodology Conflict Resolution', () => {
-    it('should identify methodology conflicts', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+  describe("Requirement 5.8: Methodology Conflict Resolution", () => {
+    it("should identify methodology conflicts", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       expect(transition.conflicts).toBeDefined();
       expect(transition.conflicts.length).toBeGreaterThan(0);
-      
-      transition.conflicts.forEach(conflict => {
+
+      transition.conflicts.forEach((conflict) => {
         expect(conflict.conflictType).toBeDefined();
         expect(conflict.description).toBeDefined();
         expect(conflict.severity).toMatch(/high|medium|low/);
@@ -293,17 +310,17 @@ describe('MethodologyTransitionSystem', () => {
       });
     });
 
-    it('should provide resolution strategies for conflicts', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should provide resolution strategies for conflicts", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
-      transition.conflicts.forEach(conflict => {
+      transition.conflicts.forEach((conflict) => {
         expect(conflict.resolution.strategy).toBeDefined();
         expect(conflict.resolution.steps).toBeDefined();
         expect(conflict.resolution.steps.length).toBeGreaterThan(0);
@@ -312,57 +329,59 @@ describe('MethodologyTransitionSystem', () => {
       });
     });
 
-    it('should identify philosophy mismatches', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should identify philosophy mismatches", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       const philosophyConflict = transition.conflicts.find(
-        c => c.conflictType === 'philosophy_mismatch'
+        (c) => c.conflictType === "philosophy_mismatch",
       );
-      
+
       expect(philosophyConflict).toBeDefined();
-      expect(philosophyConflict!.description).toMatch(/data-driven.*intuitive|precision.*effort/i);
+      expect(philosophyConflict!.description).toMatch(
+        /data-driven.*intuitive|precision.*effort/i,
+      );
     });
 
-    it('should identify volume incompatibilities', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should identify volume incompatibilities", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       const volumeConflict = transition.conflicts.find(
-        c => c.conflictType === 'volume_incompatibility'
+        (c) => c.conflictType === "volume_incompatibility",
       );
-      
+
       if (volumeConflict) {
         expect(volumeConflict.severity).toMatch(/high|medium/);
-        const hasVolumeStep = volumeConflict.resolution.steps.some(step =>
-          step.match(/increase.*volume|gradual/i)
+        const hasVolumeStep = volumeConflict.resolution.steps.some((step) =>
+          step.match(/increase.*volume|gradual/i),
         );
         expect(hasVolumeStep).toBe(true);
       }
     });
   });
 
-  describe('Transition Guidance', () => {
-    it('should provide comprehensive transition guidance', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+  describe("Transition Guidance", () => {
+    it("should provide comprehensive transition guidance", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       expect(transition.guidance).toBeDefined();
@@ -375,20 +394,20 @@ describe('MethodologyTransitionSystem', () => {
       expect(transition.guidance.donts.length).toBeGreaterThan(0);
     });
 
-    it('should provide transition checkpoints', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should provide transition checkpoints", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       expect(transition.guidance.checkpoints).toBeDefined();
       expect(transition.guidance.checkpoints.length).toBeGreaterThan(0);
-      
-      transition.guidance.checkpoints.forEach(checkpoint => {
+
+      transition.guidance.checkpoints.forEach((checkpoint) => {
         expect(checkpoint.week).toBeDefined();
         expect(checkpoint.name).toBeDefined();
         expect(checkpoint.assessmentCriteria).toBeDefined();
@@ -397,20 +416,20 @@ describe('MethodologyTransitionSystem', () => {
       });
     });
 
-    it('should provide troubleshooting guides', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should provide troubleshooting guides", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       expect(transition.guidance.troubleshooting).toBeDefined();
       expect(transition.guidance.troubleshooting.length).toBeGreaterThan(0);
-      
-      transition.guidance.troubleshooting.forEach(guide => {
+
+      transition.guidance.troubleshooting.forEach((guide) => {
         expect(guide.issue).toBeDefined();
         expect(guide.symptoms).toBeDefined();
         expect(guide.causes).toBeDefined();
@@ -420,15 +439,15 @@ describe('MethodologyTransitionSystem', () => {
     });
   });
 
-  describe('Volume and Intensity Adjustments', () => {
-    it('should create volume adjustment plan', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+  describe("Volume and Intensity Adjustments", () => {
+    it("should create volume adjustment plan", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       const volumePlan = transition.transitionPlan.volumeAdjustment;
@@ -437,7 +456,7 @@ describe('MethodologyTransitionSystem', () => {
       expect(volumePlan.adjustmentRate).toBeDefined();
       expect(volumePlan.stepBackWeeks).toBeDefined();
       expect(volumePlan.volumeByWeek).toBeDefined();
-      
+
       // Verify progressive volume increase
       let previousVolume = volumePlan.currentWeeklyVolume;
       volumePlan.volumeByWeek.forEach((week, index) => {
@@ -448,36 +467,39 @@ describe('MethodologyTransitionSystem', () => {
       });
     });
 
-    it('should create intensity adjustment plan', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should create intensity adjustment plan", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       const intensityPlan = transition.transitionPlan.intensityAdjustment;
       expect(intensityPlan.currentDistribution).toBeDefined();
       expect(intensityPlan.targetDistribution).toBeDefined();
       expect(intensityPlan.weeklyProgression).toBeDefined();
-      
+
       // Verify intensity distribution sums to 100
-      intensityPlan.weeklyProgression.forEach(week => {
-        const total = week.distribution.easy + week.distribution.moderate + week.distribution.hard;
+      intensityPlan.weeklyProgression.forEach((week) => {
+        const total =
+          week.distribution.easy +
+          week.distribution.moderate +
+          week.distribution.hard;
         expect(Math.round(total)).toBe(100);
       });
     });
 
-    it('should include recovery protocol', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should include recovery protocol", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       const recovery = transition.transitionPlan.recoveryProtocol;
@@ -490,44 +512,44 @@ describe('MethodologyTransitionSystem', () => {
     });
   });
 
-  describe('Timeline and Risk Assessment', () => {
-    it('should create transition timeline', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+  describe("Timeline and Risk Assessment", () => {
+    it("should create transition timeline", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       expect(transition.timeline).toBeDefined();
       expect(transition.timeline.totalDuration).toBeGreaterThan(0);
       expect(transition.timeline.phases).toBeDefined();
       expect(transition.timeline.criticalDates).toBeDefined();
-      
+
       // Verify critical dates are in order
       let previousWeek = 0;
-      transition.timeline.criticalDates.forEach(date => {
+      transition.timeline.criticalDates.forEach((date) => {
         expect(date.week).toBeGreaterThanOrEqual(previousWeek);
         previousWeek = date.week;
       });
     });
 
-    it('should assess transition risks', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should assess transition risks", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       expect(transition.risks).toBeDefined();
       expect(transition.risks.length).toBeGreaterThan(0);
-      
-      transition.risks.forEach(risk => {
+
+      transition.risks.forEach((risk) => {
         expect(risk.riskType).toBeDefined();
         expect(risk.description).toBeDefined();
         expect(risk.likelihood).toMatch(/high|medium|low/);
@@ -538,159 +560,176 @@ describe('MethodologyTransitionSystem', () => {
       });
     });
 
-    it('should identify overtraining risk for volume increases', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should identify overtraining risk for volume increases", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
-      const overtrainingRisk = transition.risks.find(r => r.riskType === 'overtraining');
+      const overtrainingRisk = transition.risks.find(
+        (r) => r.riskType === "overtraining",
+      );
       expect(overtrainingRisk).toBeDefined();
-      const hasGradualStrategy = overtrainingRisk!.mitigationStrategies.some(strategy =>
-        strategy.match(/gradual.*volume|monitor.*fatigue|volume.*progression/i)
+      const hasGradualStrategy = overtrainingRisk!.mitigationStrategies.some(
+        (strategy) =>
+          strategy.match(
+            /gradual.*volume|monitor.*fatigue|volume.*progression/i,
+          ),
       );
       expect(hasGradualStrategy).toBe(true);
     });
   });
 
-  describe('Validation', () => {
-    it('should validate transition plan', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+  describe("Validation", () => {
+    it("should validate transition plan", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       const validation = system.validateTransition(transition, plan);
-      
+
       expect(validation).toBeDefined();
       expect(validation.isValid).toBeDefined();
       expect(validation.errors).toBeDefined();
       expect(validation.warnings).toBeDefined();
     });
 
-    it('should warn about high-risk immediate transitions', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should warn about high-risk immediate transitions", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       // Create a transition with high risk
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
-      
+
       // Manually set to immediate with high risk for testing
-      transition.transitionType = 'immediate';
+      transition.transitionType = "immediate";
       transition.risks.push({
-        riskType: 'overtraining',
-        description: 'Test high risk',
-        likelihood: 'high',
-        impact: 'high',
+        riskType: "overtraining",
+        description: "Test high risk",
+        likelihood: "high",
+        impact: "high",
         mitigationStrategies: [],
-        warningSignals: []
+        warningSignals: [],
       });
 
       const validation = system.validateTransition(transition, plan);
-      
-      const hasWarning = validation.warnings.some(w => 
-        w.message.match(/high-risk.*immediate/i)
+
+      const hasWarning = validation.warnings.some((w) =>
+        w.message.match(/high-risk.*immediate/i),
       );
       expect(hasWarning).toBe(true);
     });
   });
 
-  describe('Plan Modifications', () => {
-    it('should create appropriate plan modifications', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+  describe("Plan Modifications", () => {
+    it("should create appropriate plan modifications", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       const { modifications } = system.applyTransition(plan, transition);
-      
+
       expect(modifications.length).toBeGreaterThan(0);
-      
+
       // Should have volume modifications
-      const volumeMods = modifications.filter(m => m.type === 'reduce_volume');
+      const volumeMods = modifications.filter(
+        (m) => m.type === "reduce_volume",
+      );
       expect(volumeMods.length).toBeGreaterThan(0);
-      
+
       // Should have recovery modifications
-      const recoveryMods = modifications.filter(m => m.type === 'add_recovery');
+      const recoveryMods = modifications.filter(
+        (m) => m.type === "add_recovery",
+      );
       expect(recoveryMods.length).toBeGreaterThan(0);
     });
 
-    it('should create workout substitution modifications', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should create workout substitution modifications", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base'
+        "daniels",
+        "lydiard",
+        "base",
       );
 
       const { modifications } = system.applyTransition(plan, transition);
-      
-      const substitutions = modifications.filter(m => m.type === 'substitute_workout');
+
+      const substitutions = modifications.filter(
+        (m) => m.type === "substitute_workout",
+      );
       expect(substitutions.length).toBeGreaterThan(0);
     });
   });
 
-  describe('Edge Cases', () => {
-    it('should handle same methodology transitions', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+  describe("Edge Cases", () => {
+    it("should handle same methodology transitions", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'daniels',
-        'base'
+        "daniels",
+        "daniels",
+        "base",
       );
 
-      expect(transition.transitionType).toBe('immediate');
+      expect(transition.transitionType).toBe("immediate");
       expect(transition.conflicts.length).toBe(0);
     });
 
-    it('should handle transitions during different phases', () => {
-      const plan = createMockTrainingPlan('daniels');
-      const phases: TrainingPhase[] = ['base', 'build', 'peak', 'taper', 'recovery'];
-      
-      phases.forEach(phase => {
+    it("should handle transitions during different phases", () => {
+      const plan = createMockTrainingPlan("daniels");
+      const phases: TrainingPhase[] = [
+        "base",
+        "build",
+        "peak",
+        "taper",
+        "recovery",
+      ];
+
+      phases.forEach((phase) => {
         const transition = system.createMethodologyTransition(
           plan,
-          'daniels',
-          'lydiard',
-          phase
+          "daniels",
+          "lydiard",
+          phase,
         );
-        
+
         expect(transition).toBeDefined();
-        if (phase === 'peak' || phase === 'taper') {
-          expect(transition.transitionType).toBe('deferred');
+        if (phase === "peak" || phase === "taper") {
+          expect(transition.transitionType).toBe("deferred");
         }
       });
     });
 
-    it('should handle transitions with missing user profile', () => {
-      const plan = createMockTrainingPlan('daniels');
-      
+    it("should handle transitions with missing user profile", () => {
+      const plan = createMockTrainingPlan("daniels");
+
       const transition = system.createMethodologyTransition(
         plan,
-        'daniels',
-        'lydiard',
-        'base',
-        undefined // No user profile
+        "daniels",
+        "lydiard",
+        "base",
+        undefined, // No user profile
       );
 
       expect(transition).toBeDefined();
