@@ -1,5 +1,10 @@
-import { RunData, FitnessMetrics, WeeklyPatterns, TrainingLoad } from './types';
-import { differenceInDays, differenceInWeeks, startOfWeek, format } from 'date-fns';
+import { RunData, FitnessMetrics, WeeklyPatterns, TrainingLoad } from "./types";
+import {
+  differenceInDays,
+  differenceInWeeks,
+  startOfWeek,
+  format,
+} from "date-fns";
 
 /**
  * Calculate VDOT (VO2max estimate) from race performances
@@ -7,12 +12,14 @@ import { differenceInDays, differenceInWeeks, startOfWeek, format } from 'date-f
  */
 export function calculateVDOT(runs: RunData[]): number {
   // Filter for race performances or time trials
-  const performances = runs.filter(run => run.isRace || (run.effortLevel && run.effortLevel >= 9));
+  const performances = runs.filter(
+    (run) => run.isRace || (run.effortLevel && run.effortLevel >= 9),
+  );
 
   if (performances.length === 0) {
     // Estimate from regular runs
     const fastRuns = runs
-      .filter(run => run.distance >= 3 && run.avgPace)
+      .filter((run) => run.distance >= 3 && run.avgPace)
       .sort((a, b) => a.avgPace! - b.avgPace!)
       .slice(0, 3);
 
@@ -23,9 +30,14 @@ export function calculateVDOT(runs: RunData[]): number {
       const velocity = distance / (time * 60); // m/s
 
       // Daniels' formula
-      const vo2 = -4.6 + 0.182258 * (velocity * 60) + 0.000104 * Math.pow(velocity * 60, 2);
+      const vo2 =
+        -4.6 +
+        0.182258 * (velocity * 60) +
+        0.000104 * Math.pow(velocity * 60, 2);
       const percentMax =
-        0.8 + 0.1894393 * Math.exp(-0.012778 * time) + 0.2989558 * Math.exp(-0.1932605 * time);
+        0.8 +
+        0.1894393 * Math.exp(-0.012778 * time) +
+        0.2989558 * Math.exp(-0.1932605 * time);
 
       return Math.round(vo2 / percentMax);
     }
@@ -41,8 +53,10 @@ export function calculateVDOT(runs: RunData[]): number {
  */
 export function calculateCriticalSpeed(runs: RunData[]): number {
   const timeTrials = runs
-    .filter(run => run.distance >= 3 && run.effortLevel && run.effortLevel >= 8)
-    .map(run => ({
+    .filter(
+      (run) => run.distance >= 3 && run.effortLevel && run.effortLevel >= 8,
+    )
+    .map((run) => ({
       distance: run.distance * 1000, // meters
       time: run.duration * 60, // seconds
     }));
@@ -69,24 +83,26 @@ export function calculateCriticalSpeed(runs: RunData[]): number {
  */
 export function estimateRunningEconomy(runs: RunData[]): number {
   const economyRuns = runs.filter(
-    run =>
+    (run) =>
       run.avgHeartRate &&
       run.avgPace &&
       run.duration > 20 &&
       run.effortLevel &&
-      run.effortLevel <= 6
+      run.effortLevel <= 6,
   );
 
   if (economyRuns.length > 0) {
     // Calculate oxygen cost per km
-    const economies = economyRuns.map(run => {
+    const economies = economyRuns.map((run) => {
       const pace = run.avgPace!; // min/km
       const hrReserve = (run.avgHeartRate! - 60) / (190 - 60); // Assuming rest HR 60, max HR 190
       const estimatedVO2 = hrReserve * 50; // Rough estimate of VO2
       return estimatedVO2 / (60 / pace); // ml/kg/km
     });
 
-    return Math.round(economies.reduce((sum, e) => sum + e, 0) / economies.length);
+    return Math.round(
+      economies.reduce((sum, e) => sum + e, 0) / economies.length,
+    );
   }
 
   return 200; // Default running economy
@@ -117,15 +133,20 @@ export function calculateTSS(run: RunData, thresholdPace: number): number {
 /**
  * Calculate training load metrics using EWMA
  */
-export function calculateTrainingLoad(runs: RunData[], thresholdPace: number): TrainingLoad {
-  const sortedRuns = [...runs].sort((a, b) => a.date.getTime() - b.date.getTime());
+export function calculateTrainingLoad(
+  runs: RunData[],
+  thresholdPace: number,
+): TrainingLoad {
+  const sortedRuns = [...runs].sort(
+    (a, b) => a.date.getTime() - b.date.getTime(),
+  );
 
   let acuteLoad = 0; // 7-day
   let chronicLoad = 0; // 28-day
   const acuteDecay = Math.exp(-1 / 7);
   const chronicDecay = Math.exp(-1 / 28);
 
-  const loads = sortedRuns.map(run => {
+  const loads = sortedRuns.map((run) => {
     const tss = calculateTSS(run, thresholdPace);
     acuteLoad = acuteLoad * acuteDecay + tss * (1 - acuteDecay);
     chronicLoad = chronicLoad * chronicDecay + tss * (1 - chronicDecay);
@@ -139,26 +160,32 @@ export function calculateTrainingLoad(runs: RunData[], thresholdPace: number): T
     };
   });
 
-  const current = loads[loads.length - 1] || { acuteLoad: 0, chronicLoad: 0, ratio: 1 };
-  
+  const current = loads[loads.length - 1] || {
+    acuteLoad: 0,
+    chronicLoad: 0,
+    ratio: 1,
+  };
+
   // Determine trend
-  let trend: 'increasing' | 'stable' | 'decreasing' = 'stable';
+  let trend: "increasing" | "stable" | "decreasing" = "stable";
   if (loads.length > 7) {
     const weekAgo = loads[loads.length - 8].acuteLoad;
-    if (current.acuteLoad > weekAgo * 1.1) trend = 'increasing';
-    else if (current.acuteLoad < weekAgo * 0.9) trend = 'decreasing';
+    if (current.acuteLoad > weekAgo * 1.1) trend = "increasing";
+    else if (current.acuteLoad < weekAgo * 0.9) trend = "decreasing";
   }
 
   // Generate recommendation
-  let recommendation = '';
+  let recommendation = "";
   if (current.ratio < 0.8) {
-    recommendation = 'Training load is low. Consider increasing volume gradually.';
+    recommendation =
+      "Training load is low. Consider increasing volume gradually.";
   } else if (current.ratio > 1.5) {
-    recommendation = 'Training load is very high. Risk of overtraining. Consider recovery.';
+    recommendation =
+      "Training load is very high. Risk of overtraining. Consider recovery.";
   } else if (current.ratio > 1.3) {
-    recommendation = 'Training load is high. Monitor fatigue carefully.';
+    recommendation = "Training load is high. Monitor fatigue carefully.";
   } else {
-    recommendation = 'Training load is in optimal range for adaptation.';
+    recommendation = "Training load is in optimal range for adaptation.";
   }
 
   return {
@@ -176,14 +203,17 @@ export function calculateTrainingLoad(runs: RunData[], thresholdPace: number): T
 export function calculateInjuryRisk(
   trainingLoad: TrainingLoad,
   weeklyMileageIncrease: number,
-  recoveryScore: number
+  recoveryScore: number,
 ): number {
   let risk = 0;
 
   // Acute:Chronic ratio contribution (0-40 points)
-  if (trainingLoad.ratio < 0.8) risk += 20; // Undertraining
-  else if (trainingLoad.ratio > 1.5) risk += 40; // High risk
-  else if (trainingLoad.ratio > 1.3) risk += 25; // Moderate risk
+  if (trainingLoad.ratio < 0.8)
+    risk += 20; // Undertraining
+  else if (trainingLoad.ratio > 1.5)
+    risk += 40; // High risk
+  else if (trainingLoad.ratio > 1.3)
+    risk += 25; // Moderate risk
   else risk += 10; // Low risk
 
   // Weekly mileage increase contribution (0-30 points)
@@ -203,15 +233,15 @@ export function calculateInjuryRisk(
 export function calculateRecoveryScore(
   runs: RunData[],
   restingHR?: number,
-  hrv?: number
+  hrv?: number,
 ): number {
   // Simplified recovery score
   let score = 70; // Base score
 
   // Recent high-intensity work
   const recentHardRuns = runs
-    .filter(run => run.date > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
-    .filter(run => run.effortLevel && run.effortLevel >= 7);
+    .filter((run) => run.date > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+    .filter((run) => run.effortLevel && run.effortLevel >= 7);
 
   score -= recentHardRuns.length * 5;
 
@@ -239,8 +269,8 @@ export function analyzeWeeklyPatterns(runs: RunData[]): WeeklyPatterns {
   const weeks: Map<string, RunData[]> = new Map();
 
   // Group runs by week
-  runs.forEach(run => {
-    const weekStart = format(startOfWeek(run.date), 'yyyy-MM-dd');
+  runs.forEach((run) => {
+    const weekStart = format(startOfWeek(run.date), "yyyy-MM-dd");
     if (!weeks.has(weekStart)) {
       weeks.set(weekStart, []);
     }
@@ -248,15 +278,17 @@ export function analyzeWeeklyPatterns(runs: RunData[]): WeeklyPatterns {
   });
 
   // Calculate weekly metrics
-  const weeklyDistances = Array.from(weeks.values()).map(weekRuns =>
-    weekRuns.reduce((sum, run) => sum + run.distance, 0)
+  const weeklyDistances = Array.from(weeks.values()).map((weekRuns) =>
+    weekRuns.reduce((sum, run) => sum + run.distance, 0),
   );
 
-  const weeklyRunCounts = Array.from(weeks.values()).map(weekRuns => weekRuns.length);
+  const weeklyRunCounts = Array.from(weeks.values()).map(
+    (weekRuns) => weekRuns.length,
+  );
 
   // Find typical training days
   const dayFrequency = new Array(7).fill(0);
-  runs.forEach(run => {
+  runs.forEach((run) => {
     dayFrequency[run.date.getDay()]++;
   });
 
@@ -265,12 +297,12 @@ export function analyzeWeeklyPatterns(runs: RunData[]): WeeklyPatterns {
     .map((count, day) => ({ day, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, Math.round(avgRunsPerWeek))
-    .map(d => d.day);
+    .map((d) => d.day);
 
   // Find typical long run day
-  const longRuns = runs.filter(run => run.distance > 15);
+  const longRuns = runs.filter((run) => run.distance > 15);
   const longRunDays = new Array(7).fill(0);
-  longRuns.forEach(run => {
+  longRuns.forEach((run) => {
     longRunDays[run.date.getDay()]++;
   });
   const typicalLongRunDay = longRunDays.indexOf(Math.max(...longRunDays));
@@ -282,7 +314,7 @@ export function analyzeWeeklyPatterns(runs: RunData[]): WeeklyPatterns {
 
   return {
     avgWeeklyMileage: Math.round(
-      weeklyDistances.reduce((sum, d) => sum + d, 0) / weeklyDistances.length
+      weeklyDistances.reduce((sum, d) => sum + d, 0) / weeklyDistances.length,
     ),
     maxWeeklyMileage: Math.round(Math.max(...weeklyDistances)),
     avgRunsPerWeek: Math.round(avgRunsPerWeek * 10) / 10,
@@ -300,23 +332,30 @@ export function calculateFitnessMetrics(runs: RunData[]): FitnessMetrics {
   const criticalSpeed = calculateCriticalSpeed(runs);
   const runningEconomy = estimateRunningEconomy(runs);
   const lactateThreshold = calculateLactateThreshold(vdot);
-  
+
   // Calculate threshold pace for TSS calculations
   const thresholdPace = 60 / lactateThreshold; // min/km
-  
+
   const trainingLoad = calculateTrainingLoad(runs, thresholdPace);
   const recoveryScore = calculateRecoveryScore(runs);
-  
+
   // Calculate weekly mileage increase
   const weeklyPatterns = analyzeWeeklyPatterns(runs);
   const recentWeekMileage = runs
-    .filter(run => run.date > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+    .filter((run) => run.date > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
     .reduce((sum, run) => sum + run.distance, 0);
-  const weeklyIncrease = weeklyPatterns.avgWeeklyMileage > 0
-    ? ((recentWeekMileage - weeklyPatterns.avgWeeklyMileage) / weeklyPatterns.avgWeeklyMileage) * 100
-    : 0;
-  
-  const injuryRisk = calculateInjuryRisk(trainingLoad, weeklyIncrease, recoveryScore);
+  const weeklyIncrease =
+    weeklyPatterns.avgWeeklyMileage > 0
+      ? ((recentWeekMileage - weeklyPatterns.avgWeeklyMileage) /
+          weeklyPatterns.avgWeeklyMileage) *
+        100
+      : 0;
+
+  const injuryRisk = calculateInjuryRisk(
+    trainingLoad,
+    weeklyIncrease,
+    recoveryScore,
+  );
 
   return {
     vdot,

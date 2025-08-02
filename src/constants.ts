@@ -37,8 +37,8 @@ export const INTENSITY_MODELS = {
 export const PROGRESSION_RATES = {
   beginner: 0.05, // 5% weekly increase
   intermediate: 0.08, // 8% weekly increase
-  advanced: 0.10, // 10% weekly increase
-  maxSingleWeek: 0.20, // 20% max in any single week
+  advanced: 0.1, // 10% weekly increase
+  maxSingleWeek: 0.2, // 20% max in any single week
 } as const;
 
 /**
@@ -92,14 +92,14 @@ export const WORKOUT_DURATIONS = {
  * Race distance constants (km)
  */
 export const RACE_DISTANCES = {
-  '5K': 5,
-  '10K': 10,
-  'HALF_MARATHON': 21.0975,
-  'MARATHON': 42.195,
-  '50K': 50,
-  '50_MILE': 80.4672,
-  '100K': 100,
-  '100_MILE': 160.9344,
+  "5K": 5,
+  "10K": 10,
+  HALF_MARATHON: 21.0975,
+  MARATHON: 42.195,
+  "50K": 50,
+  "50_MILE": 80.4672,
+  "100K": 100,
+  "100_MILE": 160.9344,
 } as const;
 
 /**
@@ -130,65 +130,65 @@ export const ENVIRONMENTAL_FACTORS = {
  */
 export const TRAINING_METHODOLOGIES = {
   daniels: {
-    name: 'Jack Daniels',
-    intensityDistribution: { easy: 80, moderate: 10, hard: 10 },
-    workoutPriorities: ['tempo', 'vo2max', 'threshold', 'easy', 'long_run'],
+    name: "Jack Daniels",
+    intensityDistribution: { easy: 80, moderate: 10, hard: 10, veryHard: 0 },
+    workoutPriorities: ["tempo", "vo2max", "threshold", "easy", "long_run"],
     recoveryEmphasis: 0.7,
     phaseTransitions: {
-      base: { duration: 8, focus: 'aerobic' },
-      build: { duration: 6, focus: 'threshold' },
-      peak: { duration: 3, focus: 'vo2max' },
-      taper: { duration: 2, focus: 'maintenance' }
-    }
+      base: { duration: 8, focus: "aerobic" },
+      build: { duration: 6, focus: "threshold" },
+      peak: { duration: 3, focus: "vo2max" },
+      taper: { duration: 2, focus: "maintenance" },
+    },
   },
   lydiard: {
-    name: 'Arthur Lydiard',
-    intensityDistribution: { easy: 85, moderate: 10, hard: 5 },
-    workoutPriorities: ['easy', 'steady', 'long_run', 'hill_repeats', 'tempo'],
+    name: "Arthur Lydiard",
+    intensityDistribution: { easy: 85, moderate: 10, hard: 5, veryHard: 0 },
+    workoutPriorities: ["easy", "steady", "long_run", "hill_repeats", "tempo"],
     recoveryEmphasis: 0.9,
     phaseTransitions: {
-      base: { duration: 12, focus: 'aerobic' },
-      build: { duration: 4, focus: 'hills' },
-      peak: { duration: 4, focus: 'speed' },
-      taper: { duration: 2, focus: 'maintenance' }
-    }
+      base: { duration: 12, focus: "aerobic" },
+      build: { duration: 4, focus: "hills" },
+      peak: { duration: 4, focus: "speed" },
+      taper: { duration: 2, focus: "maintenance" },
+    },
   },
   pfitzinger: {
-    name: 'Pete Pfitzinger',
-    intensityDistribution: { easy: 75, moderate: 15, hard: 10 },
-    workoutPriorities: ['threshold', 'long_run', 'tempo', 'vo2max', 'easy'],
+    name: "Pete Pfitzinger",
+    intensityDistribution: { easy: 75, moderate: 15, hard: 10, veryHard: 0 },
+    workoutPriorities: ["threshold", "long_run", "tempo", "vo2max", "easy"],
     recoveryEmphasis: 0.8,
     phaseTransitions: {
-      base: { duration: 6, focus: 'aerobic' },
-      build: { duration: 8, focus: 'threshold' },
-      peak: { duration: 3, focus: 'race_pace' },
-      taper: { duration: 2, focus: 'maintenance' }
-    }
+      base: { duration: 6, focus: "aerobic" },
+      build: { duration: 8, focus: "threshold" },
+      peak: { duration: 3, focus: "race_pace" },
+      taper: { duration: 2, focus: "maintenance" },
+    },
   },
   hudson: {
-    name: 'Brad Hudson',
-    intensityDistribution: { easy: 70, moderate: 20, hard: 10 },
-    workoutPriorities: ['tempo', 'fartlek', 'long_run', 'vo2max', 'easy'],
+    name: "Brad Hudson",
+    intensityDistribution: { easy: 70, moderate: 20, hard: 10, veryHard: 0 },
+    workoutPriorities: ["tempo", "fartlek", "long_run", "vo2max", "easy"],
     recoveryEmphasis: 0.75,
     phaseTransitions: {
-      base: { duration: 8, focus: 'aerobic' },
-      build: { duration: 6, focus: 'tempo' },
-      peak: { duration: 4, focus: 'race_pace' },
-      taper: { duration: 2, focus: 'maintenance' }
-    }
+      base: { duration: 8, focus: "aerobic" },
+      build: { duration: 6, focus: "tempo" },
+      peak: { duration: 4, focus: "race_pace" },
+      taper: { duration: 2, focus: "maintenance" },
+    },
   },
   custom: {
-    name: 'Custom',
-    intensityDistribution: { easy: 75, moderate: 15, hard: 10 },
-    workoutPriorities: ['easy', 'tempo', 'long_run', 'vo2max', 'threshold'],
+    name: "Custom",
+    intensityDistribution: { easy: 75, moderate: 15, hard: 10, veryHard: 0 },
+    workoutPriorities: ["easy", "tempo", "long_run", "vo2max", "threshold"],
     recoveryEmphasis: 0.8,
     phaseTransitions: {
-      base: { duration: 8, focus: 'aerobic' },
-      build: { duration: 6, focus: 'threshold' },
-      peak: { duration: 3, focus: 'vo2max' },
-      taper: { duration: 2, focus: 'maintenance' }
-    }
-  }
+      base: { duration: 8, focus: "aerobic" },
+      build: { duration: 6, focus: "threshold" },
+      peak: { duration: 3, focus: "vo2max" },
+      taper: { duration: 2, focus: "maintenance" },
+    },
+  },
 } as const;
 
 /**
@@ -198,50 +198,88 @@ export const WORKOUT_EMPHASIS = {
   daniels: {
     recovery: 1.0,
     easy: 1.2,
+    steady: 1.1,
     tempo: 1.5,
     threshold: 1.4,
     vo2max: 1.3,
     speed: 1.1,
-    long_run: 1.2
+    hill_repeats: 1.2,
+    fartlek: 1.2,
+    progression: 1.2,
+    long_run: 1.2,
+    race_pace: 1.3,
+    time_trial: 1.1,
+    cross_training: 0.8,
+    strength: 0.9,
   },
   lydiard: {
     recovery: 1.0,
     easy: 1.5,
+    steady: 1.3,
     tempo: 1.1,
     threshold: 1.0,
     vo2max: 0.8,
     speed: 0.9,
+    hill_repeats: 1.3,
+    fartlek: 1.0,
+    progression: 1.2,
     long_run: 1.4,
-    hill_repeats: 1.3
+    race_pace: 1.0,
+    time_trial: 0.9,
+    cross_training: 0.7,
+    strength: 0.8,
   },
   pfitzinger: {
     recovery: 1.0,
     easy: 1.3,
+    steady: 1.2,
     tempo: 1.2,
     threshold: 1.5,
     vo2max: 1.1,
     speed: 1.0,
-    long_run: 1.3
+    hill_repeats: 1.1,
+    fartlek: 1.0,
+    progression: 1.2,
+    long_run: 1.3,
+    race_pace: 1.4,
+    time_trial: 1.2,
+    cross_training: 0.8,
+    strength: 0.9,
   },
   hudson: {
     recovery: 1.0,
     easy: 1.2,
+    steady: 1.1,
     tempo: 1.4,
     threshold: 1.2,
     vo2max: 1.1,
     speed: 1.0,
+    hill_repeats: 1.1,
+    fartlek: 1.3,
+    progression: 1.2,
     long_run: 1.2,
-    fartlek: 1.3
+    race_pace: 1.2,
+    time_trial: 1.1,
+    cross_training: 0.9,
+    strength: 1.0,
   },
   custom: {
     recovery: 1.0,
     easy: 1.2,
+    steady: 1.1,
     tempo: 1.2,
     threshold: 1.2,
     vo2max: 1.1,
     speed: 1.0,
-    long_run: 1.2
-  }
+    hill_repeats: 1.1,
+    fartlek: 1.2,
+    progression: 1.1,
+    long_run: 1.2,
+    race_pace: 1.2,
+    time_trial: 1.1,
+    cross_training: 0.8,
+    strength: 0.9,
+  },
 } as const;
 
 /**
@@ -250,40 +288,40 @@ export const WORKOUT_EMPHASIS = {
  */
 export const METHODOLOGY_INTENSITY_DISTRIBUTIONS = {
   daniels: {
-    base: { easy: 85, moderate: 10, hard: 5 },   // 80/20 approach with slight emphasis on aerobic base
-    build: { easy: 80, moderate: 15, hard: 5 },  // Standard Daniels distribution
-    peak: { easy: 75, moderate: 15, hard: 10 },  // More VO2max work for race preparation
-    taper: { easy: 80, moderate: 15, hard: 5 },  // Return to more conservative distribution
-    recovery: { easy: 95, moderate: 5, hard: 0 } // Complete aerobic recovery
+    base: { easy: 85, moderate: 10, hard: 5, veryHard: 0 }, // 80/20 approach with slight emphasis on aerobic base
+    build: { easy: 80, moderate: 15, hard: 5, veryHard: 0 }, // Standard Daniels distribution
+    peak: { easy: 75, moderate: 15, hard: 10, veryHard: 0 }, // More VO2max work for race preparation
+    taper: { easy: 80, moderate: 15, hard: 5, veryHard: 0 }, // Return to more conservative distribution
+    recovery: { easy: 95, moderate: 5, hard: 0, veryHard: 0 }, // Complete aerobic recovery
   },
   lydiard: {
-    base: { easy: 90, moderate: 8, hard: 2 },    // Lydiard's signature 85%+ easy running in base
-    build: { easy: 85, moderate: 12, hard: 3 },  // Maintain heavy aerobic emphasis
-    peak: { easy: 80, moderate: 15, hard: 5 },   // Limited speed work after base building
-    taper: { easy: 85, moderate: 12, hard: 3 },  // Conservative approach to taper
-    recovery: { easy: 100, moderate: 0, hard: 0 } // Complete rest philosophy
+    base: { easy: 90, moderate: 8, hard: 2, veryHard: 0 }, // Lydiard's signature 85%+ easy running in base
+    build: { easy: 85, moderate: 12, hard: 3, veryHard: 0 }, // Maintain heavy aerobic emphasis
+    peak: { easy: 80, moderate: 15, hard: 5, veryHard: 0 }, // Limited speed work after base building
+    taper: { easy: 85, moderate: 12, hard: 3, veryHard: 0 }, // Conservative approach to taper
+    recovery: { easy: 100, moderate: 0, hard: 0, veryHard: 0 }, // Complete rest philosophy
   },
   pfitzinger: {
-    base: { easy: 75, moderate: 20, hard: 5 },   // Higher moderate emphasis (threshold work)
-    build: { easy: 70, moderate: 25, hard: 5 },  // Significant lactate threshold volume
-    peak: { easy: 70, moderate: 20, hard: 10 },  // Race-specific pace work increase
-    taper: { easy: 75, moderate: 20, hard: 5 },  // Maintain some threshold work
-    recovery: { easy: 90, moderate: 10, hard: 0 } // Active recovery approach
+    base: { easy: 75, moderate: 20, hard: 5, veryHard: 0 }, // Higher moderate emphasis (threshold work)
+    build: { easy: 70, moderate: 25, hard: 5, veryHard: 0 }, // Significant lactate threshold volume
+    peak: { easy: 70, moderate: 20, hard: 10, veryHard: 0 }, // Race-specific pace work increase
+    taper: { easy: 75, moderate: 20, hard: 5, veryHard: 0 }, // Maintain some threshold work
+    recovery: { easy: 90, moderate: 10, hard: 0, veryHard: 0 }, // Active recovery approach
   },
   hudson: {
-    base: { easy: 80, moderate: 15, hard: 5 },   // Balanced approach with tempo emphasis
-    build: { easy: 75, moderate: 20, hard: 5 },  // Tempo endurance focus
-    peak: { easy: 70, moderate: 20, hard: 10 },  // Race pace and neuromuscular work
-    taper: { easy: 80, moderate: 15, hard: 5 },  // Return to base distribution
-    recovery: { easy: 90, moderate: 10, hard: 0 } // Moderate recovery approach
+    base: { easy: 80, moderate: 15, hard: 5, veryHard: 0 }, // Balanced approach with tempo emphasis
+    build: { easy: 75, moderate: 20, hard: 5, veryHard: 0 }, // Tempo endurance focus
+    peak: { easy: 70, moderate: 20, hard: 10, veryHard: 0 }, // Race pace and neuromuscular work
+    taper: { easy: 80, moderate: 15, hard: 5, veryHard: 0 }, // Return to base distribution
+    recovery: { easy: 90, moderate: 10, hard: 0, veryHard: 0 }, // Moderate recovery approach
   },
   custom: {
-    base: { easy: 80, moderate: 15, hard: 5 },   // Default polarized approach
-    build: { easy: 75, moderate: 20, hard: 5 },  // Moderate build phase
-    peak: { easy: 70, moderate: 20, hard: 10 },  // Increased intensity for peaking
-    taper: { easy: 80, moderate: 15, hard: 5 },  // Return to conservative distribution
-    recovery: { easy: 90, moderate: 10, hard: 0 } // Standard recovery distribution
-  }
+    base: { easy: 80, moderate: 15, hard: 5, veryHard: 0 }, // Default polarized approach
+    build: { easy: 75, moderate: 20, hard: 5, veryHard: 0 }, // Moderate build phase
+    peak: { easy: 70, moderate: 20, hard: 10, veryHard: 0 }, // Increased intensity for peaking
+    taper: { easy: 80, moderate: 15, hard: 5, veryHard: 0 }, // Return to conservative distribution
+    recovery: { easy: 90, moderate: 10, hard: 0, veryHard: 0 }, // Standard recovery distribution
+  },
 } as const;
 
 /**
@@ -291,33 +329,33 @@ export const METHODOLOGY_INTENSITY_DISTRIBUTIONS = {
  */
 export const METHODOLOGY_PHASE_TARGETS = {
   daniels: {
-    base: ['aerobic_capacity', 'mitochondrial'],
-    build: ['lactate_threshold', 'aerobic_power'],
-    peak: ['vo2max', 'neuromuscular'],
-    taper: ['maintenance', 'freshness']
+    base: ["aerobic_capacity", "mitochondrial"],
+    build: ["lactate_threshold", "aerobic_power"],
+    peak: ["vo2max", "neuromuscular"],
+    taper: ["maintenance", "freshness"],
   },
   lydiard: {
-    base: ['aerobic_capacity', 'capillarization'],
-    build: ['hill_strength', 'aerobic_power'],
-    peak: ['speed', 'neuromuscular'],
-    taper: ['maintenance', 'freshness']
+    base: ["aerobic_capacity", "capillarization"],
+    build: ["hill_strength", "aerobic_power"],
+    peak: ["speed", "neuromuscular"],
+    taper: ["maintenance", "freshness"],
   },
   pfitzinger: {
-    base: ['aerobic_capacity', 'mitochondrial'],
-    build: ['lactate_threshold', 'marathon_pace'],
-    peak: ['race_pace', 'aerobic_power'],
-    taper: ['maintenance', 'race_readiness']
+    base: ["aerobic_capacity", "mitochondrial"],
+    build: ["lactate_threshold", "marathon_pace"],
+    peak: ["race_pace", "aerobic_power"],
+    taper: ["maintenance", "race_readiness"],
   },
   hudson: {
-    base: ['aerobic_capacity', 'mitochondrial'],
-    build: ['tempo_endurance', 'lactate_buffering'],
-    peak: ['race_pace', 'neuromuscular'],
-    taper: ['maintenance', 'freshness']
+    base: ["aerobic_capacity", "mitochondrial"],
+    build: ["tempo_endurance", "lactate_buffering"],
+    peak: ["race_pace", "neuromuscular"],
+    taper: ["maintenance", "freshness"],
   },
   custom: {
-    base: ['aerobic_capacity', 'mitochondrial'],
-    build: ['lactate_threshold', 'aerobic_power'],
-    peak: ['vo2max', 'race_pace'],
-    taper: ['maintenance', 'freshness']
-  }
+    base: ["aerobic_capacity", "mitochondrial"],
+    build: ["lactate_threshold", "aerobic_power"],
+    peak: ["vo2max", "race_pace"],
+    taper: ["maintenance", "freshness"],
+  },
 } as const;

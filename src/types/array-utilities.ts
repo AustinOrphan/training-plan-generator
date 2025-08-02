@@ -1,20 +1,25 @@
 /**
  * Typed Array Utilities for Collection Operations
- * 
+ *
  * Provides type-safe array transformation functions and collection utilities
  * that preserve type information while leveraging native TypeScript array methods.
  * These utilities ensure type safety throughout array operations and provide
  * enhanced collection handling capabilities.
- * 
+ *
  * @fileoverview Type-safe array and collection utilities
  */
 
-import { TypedCollection, ArrayElement, TypedResult, TypeValidationError } from './base-types';
+import {
+  TypedCollection,
+  ArrayElement,
+  TypedResult,
+  TypeValidationError,
+} from "./base-types";
 
 /**
  * Result type for batch collection operations
  * Provides structured results for operations that process multiple items
- * 
+ *
  * @template T The element type in the collection
  * @template E The error type for failed operations
  */
@@ -54,7 +59,7 @@ export interface ArrayTransformOptions {
 /**
  * Type-safe array wrapper that provides enhanced array operations
  * Preserves type information and adds validation capabilities
- * 
+ *
  * @template T The element type
  */
 export class TypedArray<T> {
@@ -65,12 +70,12 @@ export class TypedArray<T> {
     readonly frozen: boolean;
   };
 
-  constructor(items: T[], elementType: string = 'unknown') {
+  constructor(items: T[], elementType: string = "unknown") {
     this._items = [...items]; // Create defensive copy
     this._metadata = {
       elementType,
       created: new Date(),
-      frozen: false
+      frozen: false,
     };
   }
 
@@ -97,43 +102,51 @@ export class TypedArray<T> {
 
   /**
    * Type-safe map operation that preserves element type information
-   * 
+   *
    * @template U The mapped element type
    * @param fn Transformation function
    * @param targetType Optional type name for the resulting array
    * @returns New TypedArray with transformed elements
    */
-  map<U>(fn: (item: T, index: number, array: readonly T[]) => U, targetType?: string): TypedArray<U> {
+  map<U>(
+    fn: (item: T, index: number, array: readonly T[]) => U,
+    targetType?: string,
+  ): TypedArray<U> {
     const mapped = this._items.map(fn);
-    return new TypedArray(mapped, targetType || 'mapped');
+    return new TypedArray(mapped, targetType || "mapped");
   }
 
   /**
    * Type-safe filter operation that maintains element type
-   * 
+   *
    * @param predicate Filtering predicate function
    * @returns New TypedArray with filtered elements
    */
-  filter(predicate: (item: T, index: number, array: readonly T[]) => boolean): TypedArray<T> {
+  filter(
+    predicate: (item: T, index: number, array: readonly T[]) => boolean,
+  ): TypedArray<T> {
     const filtered = this._items.filter(predicate);
     return new TypedArray(filtered, this._metadata.elementType);
   }
 
   /**
    * Type-safe reduce operation with proper type inference
-   * 
+   *
    * @template U The accumulator type
    * @param fn Reducer function
    * @param initialValue Initial accumulator value
    * @returns Reduced value
    */
-  reduce<U>(fn: (acc: U, item: T, index: number, array: readonly T[]) => U, initialValue: U): U {
+  reduce<U>(
+    fn: (acc: U, item: T, index: number, array: readonly T[]) => U,
+    initialValue: U,
+  ): U {
     return this._items.reduce(fn, initialValue);
   }
 
   /**
    * Type-safe forEach operation for side effects
-   * 
+   *
    * @param fn Function to execute for each element
    */
   forEach(fn: (item: T, index: number, array: readonly T[]) => void): void {
@@ -142,47 +155,55 @@ export class TypedArray<T> {
 
   /**
    * Type-safe find operation
-   * 
+   *
    * @param predicate Search predicate
    * @returns Found element or undefined
    */
-  find(predicate: (item: T, index: number, array: readonly T[]) => boolean): T | undefined {
+  find(
+    predicate: (item: T, index: number, array: readonly T[]) => boolean,
+  ): T | undefined {
     return this._items.find(predicate);
   }
 
   /**
    * Type-safe some operation
-   * 
+   *
    * @param predicate Test predicate
    * @returns Whether any element matches the predicate
    */
-  some(predicate: (item: T, index: number, array: readonly T[]) => boolean): boolean {
+  some(
+    predicate: (item: T, index: number, array: readonly T[]) => boolean,
+  ): boolean {
     return this._items.some(predicate);
   }
 
   /**
    * Type-safe every operation
-   * 
+   *
    * @param predicate Test predicate
    * @returns Whether all elements match the predicate
    */
-  every(predicate: (item: T, index: number, array: readonly T[]) => boolean): boolean {
+  every(
+    predicate: (item: T, index: number, array: readonly T[]) => boolean,
+  ): boolean {
     return this._items.every(predicate);
   }
 
   /**
    * Safe array access with bounds checking
-   * 
+   *
    * @param index Array index
    * @returns Element at index or undefined if out of bounds
    */
   at(index: number): T | undefined {
-    return index >= 0 && index < this._items.length ? this._items[index] : undefined;
+    return index >= 0 && index < this._items.length
+      ? this._items[index]
+      : undefined;
   }
 
   /**
    * Type-safe slice operation
-   * 
+   *
    * @param start Start index
    * @param end End index
    * @returns New TypedArray with sliced elements
@@ -194,7 +215,7 @@ export class TypedArray<T> {
 
   /**
    * Convert to plain JavaScript array
-   * 
+   *
    * @returns Plain array copy
    */
   toArray(): T[] {
@@ -203,7 +224,7 @@ export class TypedArray<T> {
 
   /**
    * Convert to TypedCollection
-   * 
+   *
    * @returns TypedCollection representation
    */
   toCollection(): TypedCollection<T> {
@@ -214,14 +235,14 @@ export class TypedArray<T> {
         type: this._metadata.elementType,
         indexed: false,
         createdAt: this._metadata.created,
-        updatedAt: new Date()
-      }
+        updatedAt: new Date(),
+      },
     };
   }
 
   /**
    * Create a TypedArray from a regular array
-   * 
+   *
    * @template T The element type
    * @param items Source array
    * @param elementType Type name for metadata
@@ -233,7 +254,7 @@ export class TypedArray<T> {
 
   /**
    * Create an empty TypedArray
-   * 
+   *
    * @template T The element type
    * @param elementType Type name for metadata
    * @returns Empty TypedArray instance
@@ -251,7 +272,7 @@ export class ArrayUtils {
   /**
    * Type-safe map with error handling
    * Maps over an array and collects both successes and failures
-   * 
+   *
    * @template T Input element type
    * @template U Output element type
    * @param items Input array
@@ -262,7 +283,7 @@ export class ArrayUtils {
   static safeMap<T, U>(
     items: T[],
     fn: (item: T, index: number) => U,
-    options: ArrayTransformOptions = {}
+    options: ArrayTransformOptions = {},
   ): CollectionResult<U, Error> {
     const successes: U[] = [];
     const failures: Array<{ item: T; error: Error }> = [];
@@ -273,9 +294,10 @@ export class ArrayUtils {
         const result = fn(items[i], i);
         successes.push(result);
       } catch (error) {
-        const errorObj = error instanceof Error ? error : new Error(String(error));
+        const errorObj =
+          error instanceof Error ? error : new Error(String(error));
         failures.push({ item: items[i], error: errorObj });
-        
+
         if (errorHandler) {
           errorHandler(error, items[i], i);
         }
@@ -297,15 +319,15 @@ export class ArrayUtils {
         total,
         successCount,
         failureCount,
-        successRate: total > 0 ? (successCount / total) * 100 : 0
-      }
+        successRate: total > 0 ? (successCount / total) * 100 : 0,
+      },
     };
   }
 
   /**
    * Type-safe filter with error handling
    * Filters an array and tracks any predicate errors
-   * 
+   *
    * @template T Element type
    * @param items Input array
    * @param predicate Filter predicate
@@ -315,7 +337,7 @@ export class ArrayUtils {
   static safeFilter<T>(
     items: T[],
     predicate: (item: T, index: number) => boolean,
-    options: ArrayTransformOptions = {}
+    options: ArrayTransformOptions = {},
   ): CollectionResult<T, Error> {
     const successes: T[] = [];
     const failures: Array<{ item: T; error: Error }> = [];
@@ -327,9 +349,10 @@ export class ArrayUtils {
           successes.push(items[i]);
         }
       } catch (error) {
-        const errorObj = error instanceof Error ? error : new Error(String(error));
+        const errorObj =
+          error instanceof Error ? error : new Error(String(error));
         failures.push({ item: items[i], error: errorObj });
-        
+
         if (errorHandler) {
           errorHandler(error, items[i], i);
         }
@@ -351,15 +374,15 @@ export class ArrayUtils {
         total,
         successCount,
         failureCount,
-        successRate: total > 0 ? (successCount / total) * 100 : 0
-      }
+        successRate: total > 0 ? (successCount / total) * 100 : 0,
+      },
     };
   }
 
   /**
    * Partition an array into chunks of specified size
    * Maintains type safety while chunking arrays
-   * 
+   *
    * @template T Element type
    * @param items Input array
    * @param chunkSize Size of each chunk
@@ -368,10 +391,10 @@ export class ArrayUtils {
   static chunk<T>(items: T[], chunkSize: number): T[][] {
     if (chunkSize <= 0) {
       throw new TypeValidationError(
-        'Chunk size must be positive',
-        'positive number',
+        "Chunk size must be positive",
+        "positive number",
         chunkSize,
-        'array-chunking'
+        "array-chunking",
       );
     }
 
@@ -385,7 +408,7 @@ export class ArrayUtils {
   /**
    * Group array elements by a key function
    * Creates a Map with type-safe grouping
-   * 
+   *
    * @template T Element type
    * @template K Key type
    * @param items Input array
@@ -394,7 +417,7 @@ export class ArrayUtils {
    */
   static groupBy<T, K>(items: T[], keyFn: (item: T) => K): Map<K, T[]> {
     const groups = new Map<K, T[]>();
-    
+
     for (const item of items) {
       const key = keyFn(item);
       const existing = groups.get(key);
@@ -404,14 +427,14 @@ export class ArrayUtils {
         groups.set(key, [item]);
       }
     }
-    
+
     return groups;
   }
 
   /**
    * Remove duplicate elements from an array
    * Uses a key function for complex deduplication logic
-   * 
+   *
    * @template T Element type
    * @template K Key type for deduplication
    * @param items Input array
@@ -421,7 +444,7 @@ export class ArrayUtils {
   static uniqueBy<T, K>(items: T[], keyFn: (item: T) => K): T[] {
     const seen = new Set<K>();
     const unique: T[] = [];
-    
+
     for (const item of items) {
       const key = keyFn(item);
       if (!seen.has(key)) {
@@ -429,13 +452,13 @@ export class ArrayUtils {
         unique.push(item);
       }
     }
-    
+
     return unique;
   }
 
   /**
    * Flatten nested arrays while preserving type safety
-   * 
+   *
    * @template T Element type
    * @param items Array of arrays
    * @returns Flattened array
@@ -447,7 +470,7 @@ export class ArrayUtils {
   /**
    * Type-safe array intersection
    * Finds elements that exist in all provided arrays
-   * 
+   *
    * @template T Element type
    * @param arrays Arrays to intersect
    * @param keyFn Function to extract comparison key
@@ -459,25 +482,25 @@ export class ArrayUtils {
 
     const [first, ...rest] = arrays;
     const intersection: T[] = [];
-    
+
     for (const item of first) {
       const key = keyFn(item);
-      const existsInAll = rest.every(arr => 
-        arr.some(otherItem => keyFn(otherItem) === key)
+      const existsInAll = rest.every((arr) =>
+        arr.some((otherItem) => keyFn(otherItem) === key),
       );
-      
+
       if (existsInAll) {
         intersection.push(item);
       }
     }
-    
+
     return intersection;
   }
 
   /**
    * Type-safe array union
    * Combines arrays while removing duplicates
-   * 
+   *
    * @template T Element type
    * @template K Key type for deduplication
    * @param arrays Arrays to unite
@@ -492,25 +515,25 @@ export class ArrayUtils {
   /**
    * Check if an array is properly typed (not containing any)
    * Runtime validation for array type safety
-   * 
+   *
    * @param items Array to check
    * @param typeName Expected type name for error messages
    * @returns TypedResult indicating if array is properly typed
    */
   static validateTypedArray<T>(
     items: unknown[],
-    typeName: string
+    typeName: string,
   ): TypedResult<T[], TypeValidationError> {
     // Basic array validation
     if (!Array.isArray(items)) {
       return {
         success: false,
         error: new TypeValidationError(
-          'Expected array',
-          'Array',
+          "Expected array",
+          "Array",
           items,
-          'array-validation'
-        )
+          "array-validation",
+        ),
       };
     }
 
@@ -524,11 +547,11 @@ export class ArrayUtils {
       return {
         success: false,
         error: new TypeValidationError(
-          `Array contains undefined/null values at indices: ${anyIndices.join(', ')}`,
+          `Array contains undefined/null values at indices: ${anyIndices.join(", ")}`,
           typeName,
           items,
-          'array-type-validation'
-        )
+          "array-type-validation",
+        ),
       };
     }
 
@@ -543,7 +566,7 @@ export class ArrayUtils {
 export class FunctionalArrayUtils {
   /**
    * Create a type-safe compose function for array transformations
-   * 
+   *
    * @template T Input type
    * @template U Intermediate type
    * @template V Output type
@@ -553,14 +576,14 @@ export class FunctionalArrayUtils {
    */
   static compose<T, U, V>(
     fn1: (items: T[]) => U[],
-    fn2: (items: U[]) => V[]
+    fn2: (items: U[]) => V[],
   ): (items: T[]) => V[] {
     return (items: T[]) => fn2(fn1(items));
   }
 
   /**
    * Create a curried map function
-   * 
+   *
    * @template T Input element type
    * @template U Output element type
    * @param fn Transformation function
@@ -572,18 +595,20 @@ export class FunctionalArrayUtils {
 
   /**
    * Create a curried filter function
-   * 
+   *
    * @template T Element type
    * @param predicate Filter predicate
    * @returns Curried filter function
    */
-  static filter<T>(predicate: (item: T, index: number) => boolean): (items: T[]) => T[] {
+  static filter<T>(
+    predicate: (item: T, index: number) => boolean,
+  ): (items: T[]) => T[] {
     return (items: T[]) => items.filter(predicate);
   }
 
   /**
    * Create a pipeline of array transformations
-   * 
+   *
    * @template T Input type
    * @param transformations Array of transformation functions
    * @returns Single transformation function that applies all transformations
@@ -603,7 +628,7 @@ export class CollectionBuilder<T> {
   private items: T[] = [];
   private readonly elementType: string;
 
-  constructor(elementType: string = 'unknown') {
+  constructor(elementType: string = "unknown") {
     this.elementType = elementType;
   }
 
@@ -668,8 +693,8 @@ export class CollectionBuilder<T> {
         type: this.elementType,
         indexed: false,
         createdAt: new Date(),
-        updatedAt: new Date()
-      }
+        updatedAt: new Date(),
+      },
     };
   }
 
@@ -695,7 +720,7 @@ export class CollectionBuilder<T> {
 export class ArrayTypeAssertions {
   /**
    * Assert that an array contains only elements of a specific type
-   * 
+   *
    * @template T Expected element type
    * @param items Array to validate
    * @param typeGuard Type guard function
@@ -705,22 +730,22 @@ export class ArrayTypeAssertions {
   static assertElementType<T>(
     items: unknown[],
     typeGuard: (item: unknown) => item is T,
-    typeName: string
+    typeName: string,
   ): TypedResult<T[], TypeValidationError> {
     if (!Array.isArray(items)) {
       return {
         success: false,
         error: new TypeValidationError(
-          'Expected array',
-          'Array',
+          "Expected array",
+          "Array",
           items,
-          'array-type-assertion'
-        )
+          "array-type-assertion",
+        ),
       };
     }
 
     const invalidItems: Array<{ index: number; item: unknown }> = [];
-    
+
     for (let i = 0; i < items.length; i++) {
       if (!typeGuard(items[i])) {
         invalidItems.push({ index: i, item: items[i] });
@@ -728,15 +753,15 @@ export class ArrayTypeAssertions {
     }
 
     if (invalidItems.length > 0) {
-      const invalidIndices = invalidItems.map(({ index }) => index).join(', ');
+      const invalidIndices = invalidItems.map(({ index }) => index).join(", ");
       return {
         success: false,
         error: new TypeValidationError(
           `Array contains invalid ${typeName} elements at indices: ${invalidIndices}`,
           `${typeName}[]`,
           items,
-          'array-element-type-validation'
-        )
+          "array-element-type-validation",
+        ),
       };
     }
 
@@ -745,7 +770,7 @@ export class ArrayTypeAssertions {
 
   /**
    * Assert minimum array length
-   * 
+   *
    * @template T Element type
    * @param items Array to validate
    * @param minLength Minimum required length
@@ -753,7 +778,7 @@ export class ArrayTypeAssertions {
    */
   static assertMinLength<T>(
     items: T[],
-    minLength: number
+    minLength: number,
   ): TypedResult<T[], TypeValidationError> {
     if (items.length < minLength) {
       return {
@@ -762,8 +787,8 @@ export class ArrayTypeAssertions {
           `Array length ${items.length} is less than required minimum ${minLength}`,
           `Array with min length ${minLength}`,
           items,
-          'array-length-validation'
-        )
+          "array-length-validation",
+        ),
       };
     }
 
@@ -772,7 +797,7 @@ export class ArrayTypeAssertions {
 
   /**
    * Assert maximum array length
-   * 
+   *
    * @template T Element type
    * @param items Array to validate
    * @param maxLength Maximum allowed length
@@ -780,7 +805,7 @@ export class ArrayTypeAssertions {
    */
   static assertMaxLength<T>(
     items: T[],
-    maxLength: number
+    maxLength: number,
   ): TypedResult<T[], TypeValidationError> {
     if (items.length > maxLength) {
       return {
@@ -789,8 +814,8 @@ export class ArrayTypeAssertions {
           `Array length ${items.length} exceeds maximum allowed ${maxLength}`,
           `Array with max length ${maxLength}`,
           items,
-          'array-length-validation'
-        )
+          "array-length-validation",
+        ),
       };
     }
 

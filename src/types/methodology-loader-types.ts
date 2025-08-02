@@ -3,13 +3,18 @@
  * Provides type safety for dynamic methodology imports and progressive loading
  */
 
-import { TrainingMethodology, TrainingPhase, FitnessAssessment, AdvancedPlanConfig } from '../types';
-import { TrainingPhilosophy } from '../philosophies';
+import {
+  TrainingMethodology,
+  TrainingPhase,
+  FitnessAssessment,
+  AdvancedPlanConfig,
+} from "../types";
+import { TrainingPhilosophy } from "../philosophies";
 
 /**
  * Progressive enhancement levels for methodologies
  */
-export type FeatureLevel = 'basic' | 'standard' | 'advanced' | 'expert';
+export type FeatureLevel = "basic" | "standard" | "advanced" | "expert";
 
 /**
  * Environmental constraints for training adaptation
@@ -18,7 +23,7 @@ export interface EnvironmentalConstraints {
   temperature?: {
     min: number;
     max: number;
-    unit: 'celsius' | 'fahrenheit';
+    unit: "celsius" | "fahrenheit";
   };
   altitude?: {
     meters: number;
@@ -33,7 +38,7 @@ export interface EnvironmentalConstraints {
     restrictions: string[];
   };
   weather?: {
-    conditions: 'clear' | 'rain' | 'snow' | 'wind' | 'storm';
+    conditions: "clear" | "rain" | "snow" | "wind" | "storm";
     windSpeed?: number;
     precipitation?: number;
   };
@@ -42,13 +47,15 @@ export interface EnvironmentalConstraints {
 /**
  * Base type for methodology loader operations
  */
-export interface MethodologyLoader<T extends TrainingPhilosophy = TrainingPhilosophy> {
+export interface MethodologyLoader<
+  T extends TrainingPhilosophy = TrainingPhilosophy,
+> {
   /**
    * Load methodology with specified feature level
    */
   loadMethodology(
     methodology: TrainingMethodology,
-    targetLevel?: FeatureLevel
+    targetLevel?: FeatureLevel,
   ): Promise<T>;
 
   /**
@@ -56,7 +63,7 @@ export interface MethodologyLoader<T extends TrainingPhilosophy = TrainingPhilos
    */
   isMethodologyLoaded(
     methodology: TrainingMethodology,
-    requiredLevel: FeatureLevel
+    requiredLevel: FeatureLevel,
   ): boolean;
 
   /**
@@ -73,7 +80,9 @@ export interface MethodologyLoader<T extends TrainingPhilosophy = TrainingPhilos
 /**
  * Methodology-specific options for dynamic loading
  */
-export interface MethodologyLoadingOptions<T extends TrainingPhilosophy = TrainingPhilosophy> {
+export interface MethodologyLoadingOptions<
+  T extends TrainingPhilosophy = TrainingPhilosophy,
+> {
   /**
    * Target feature level for loading
    */
@@ -133,9 +142,10 @@ export interface LydiardMethodologyOptions extends MethodologyLoadingOptions {
   };
 }
 
-export interface PfitzingerMethodologyOptions extends MethodologyLoadingOptions {
+export interface PfitzingerMethodologyOptions
+  extends MethodologyLoadingOptions {
   lactateThreshold?: {
-    testingProtocol: 'field' | 'lab' | 'estimate';
+    testingProtocol: "field" | "lab" | "estimate";
     customThreshold?: number;
   };
   mediumLongRuns?: {
@@ -191,7 +201,7 @@ export interface TypedMethodologyLoader extends MethodologyLoader {
    */
   loadMethodologyWithOptions<M extends TrainingMethodology>(
     methodology: M,
-    options: MethodologyOptionsMap[M]
+    options: MethodologyOptionsMap[M],
   ): Promise<TrainingPhilosophy>;
 
   /**
@@ -200,7 +210,7 @@ export interface TypedMethodologyLoader extends MethodologyLoader {
   loadWithEnvironmentalAdaptation(
     methodology: TrainingMethodology,
     constraints: EnvironmentalConstraints,
-    options?: MethodologyLoadingOptions
+    options?: MethodologyLoadingOptions,
   ): Promise<TrainingPhilosophy>;
 
   /**
@@ -209,14 +219,16 @@ export interface TypedMethodologyLoader extends MethodologyLoader {
   loadWithPerformanceOptimization(
     methodology: TrainingMethodology,
     config: AdvancedPlanConfig,
-    options?: MethodologyLoadingOptions
+    options?: MethodologyLoadingOptions,
   ): Promise<TrainingPhilosophy>;
 }
 
 /**
  * Dynamic import result for methodology modules
  */
-export interface MethodologyImportResult<T extends TrainingPhilosophy = TrainingPhilosophy> {
+export interface MethodologyImportResult<
+  T extends TrainingPhilosophy = TrainingPhilosophy,
+> {
   /**
    * Philosophy class constructor
    */
@@ -235,11 +247,14 @@ export interface MethodologyImportResult<T extends TrainingPhilosophy = Training
   /**
    * Feature definitions for progressive loading
    */
-  features: Record<FeatureLevel, {
-    components: string[];
-    dependencies: string[];
-    loadTime: number;
-  }>;
+  features: Record<
+    FeatureLevel,
+    {
+      components: string[];
+      dependencies: string[];
+      loadTime: number;
+    }
+  >;
 
   /**
    * Validation functions
@@ -253,23 +268,22 @@ export interface MethodologyImportResult<T extends TrainingPhilosophy = Training
 /**
  * Dynamic import function type
  */
-export type MethodologyImportFunction<T extends TrainingPhilosophy = TrainingPhilosophy> = (
-  methodology: TrainingMethodology
-) => Promise<MethodologyImportResult<T>>;
+export type MethodologyImportFunction<
+  T extends TrainingPhilosophy = TrainingPhilosophy,
+> = (methodology: TrainingMethodology) => Promise<MethodologyImportResult<T>>;
 
 /**
  * Feature enhancement function type
  */
-export type FeatureEnhancementFunction<T extends TrainingPhilosophy = TrainingPhilosophy> = (
-  philosophy: T,
-  features: string[]
-) => Promise<T>;
+export type FeatureEnhancementFunction<
+  T extends TrainingPhilosophy = TrainingPhilosophy,
+> = (philosophy: T, features: string[]) => Promise<T>;
 
 /**
  * Environmental adaptation function type
  */
 export type EnvironmentalAdaptationFunction = (
-  constraints: EnvironmentalConstraints
+  constraints: EnvironmentalConstraints,
 ) => {
   paceAdjustments: Record<string, number>;
   workoutModifications: string[];
@@ -279,9 +293,7 @@ export type EnvironmentalAdaptationFunction = (
 /**
  * Performance optimization function type
  */
-export type PerformanceOptimizationFunction = (
-  config: AdvancedPlanConfig
-) => {
+export type PerformanceOptimizationFunction = (config: AdvancedPlanConfig) => {
   optimizedSettings: Partial<AdvancedPlanConfig>;
   performanceMetrics: Record<string, number>;
   recommendations: string[];
@@ -321,7 +333,7 @@ export interface PerformanceMonitoringDecorator {
    */
   <TArgs extends readonly unknown[], TReturn>(
     operation: string,
-    fn: (...args: TArgs) => TReturn
+    fn: (...args: TArgs) => TReturn,
   ): (...args: TArgs) => TReturn;
 }
 
@@ -334,7 +346,7 @@ export interface AsyncPerformanceMonitoringDecorator {
    */
   <TArgs extends readonly unknown[], TReturn>(
     operation: string,
-    fn: (...args: TArgs) => Promise<TReturn>
+    fn: (...args: TArgs) => Promise<TReturn>,
   ): (...args: TArgs) => Promise<TReturn>;
 }
 
@@ -376,10 +388,13 @@ export interface TypedLazyLoadingConfig {
     readonly workoutSelection: number;
     readonly comparison: number;
   };
-  readonly featureLevelDefaults: Record<'beginner' | 'intermediate' | 'advanced' | 'expert', FeatureLevel>;
+  readonly featureLevelDefaults: Record<
+    "beginner" | "intermediate" | "advanced" | "expert",
+    FeatureLevel
+  >;
   readonly memoryOptimization: {
     readonly enableAutoCleanup: boolean;
     readonly cleanupThreshold: number;
-    readonly retentionPolicy: 'lru' | 'priority' | 'time-based';
+    readonly retentionPolicy: "lru" | "priority" | "time-based";
   };
 }
