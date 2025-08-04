@@ -6,13 +6,10 @@
  * and precise pace calculations.
  */
 
-import {
-  AdvancedTrainingPlanGenerator,
-  PhilosophyFactory,
-  calculateVDOTCached,
-  type AdvancedPlanConfig,
-  type TrainingPlan
-} from '../src/index';
+import { AdvancedTrainingPlanGenerator } from '../src/advanced-generator';
+import { PhilosophyFactory } from '../src/philosophies';
+import { calculateVDOTCached } from '../src/calculation-cache';
+import type { AdvancedPlanConfig, TrainingPlan } from '../src/types';
 
 class DanielsTrainingExamples {
   
@@ -56,7 +53,8 @@ class DanielsTrainingExamples {
         vdot: 55, // Strong club-level runner
         weeklyMileage: 60, // km/week
         longestRecentRun: 25,
-        trainingAge: 6
+        trainingAge: 6,
+        overallScore: 78 // VDOT: 68.8 + Volume: 60 + Experience: 100 + Recovery: 75 * weights = 78
       },
       
       preferences: {
@@ -120,7 +118,8 @@ class DanielsTrainingExamples {
         vdot: 42, // Intermediate runner
         weeklyMileage: 40,
         longestRecentRun: 18,
-        trainingAge: 2
+        trainingAge: 2,
+        overallScore: 59 // VDOT: 52.5 + Volume: 40 + Experience: 40 + Recovery: 75 * weights = 59
       },
       
       preferences: {
@@ -179,7 +178,8 @@ class DanielsTrainingExamples {
         vdot: 48,
         weeklyMileage: 35,
         longestRecentRun: 16,
-        trainingAge: 3
+        trainingAge: 3,
+        overallScore: 66 // VDOT: 60 + Volume: 35 + Experience: 60 + Recovery: 75 * weights = 66
       },
       
       preferences: {
@@ -235,7 +235,8 @@ class DanielsTrainingExamples {
         vdot: 60, // High-level club runner
         weeklyMileage: 85,
         longestRecentRun: 35,
-        trainingAge: 8
+        trainingAge: 8,
+        overallScore: 86 // VDOT: 75 + Volume: 85 + Experience: 100 + Recovery: 75 * weights = 86
       },
       
       preferences: {

@@ -1,21 +1,21 @@
 /**
  * Test-Specific Type Extensions
- * 
+ *
  * Provides extended interfaces for test scenarios that need additional properties
  * for backward compatibility or test-specific functionality. These extensions
  * replace 'as any' usage in test files with proper type definitions.
- * 
+ *
  * @fileoverview Type extensions for test scenarios
  */
 
-import type { 
-  ProgressData, 
-  CompletedWorkout, 
-  RecoveryMetrics, 
+import type {
+  ProgressData,
+  CompletedWorkout,
+  RecoveryMetrics,
   TrainingPlan,
-  PlannedWorkout
-} from '../types';
-import type { TestAssertion } from './test-types';
+  PlannedWorkout,
+} from "../types";
+import type { TestAssertion } from "./test-types";
 
 /**
  * Extended ProgressData for test scenarios with backward compatibility fields
@@ -25,7 +25,7 @@ export interface ExtendedProgressData extends ProgressData {
   /** Fitness improvement measurement for test scenarios */
   fitnessChange?: number;
   /** Progress trend for test validation */
-  trend?: 'improving' | 'declining' | 'stable';
+  trend?: "improving" | "declining" | "stable";
   /** Additional test metadata */
   testMetadata?: {
     generatedBy?: string;
@@ -41,8 +41,6 @@ export interface ExtendedProgressData extends ProgressData {
 export interface ExtendedCompletedWorkout extends CompletedWorkout {
   /** Legacy workout ID field for backward compatibility */
   workoutId?: string;
-  /** Explicit date field for tests */
-  date?: Date;
   /** Test-specific validation markers */
   testMarkers?: {
     isValidationTest?: boolean;
@@ -57,7 +55,7 @@ export interface ExtendedCompletedWorkout extends CompletedWorkout {
  */
 export interface ExtendedRecoveryMetrics extends RecoveryMetrics {
   /** Injury status for health tracking tests */
-  injuryStatus?: 'healthy' | 'minor' | 'moderate' | 'severe';
+  injuryStatus?: "healthy" | "minor" | "moderate" | "severe";
   /** Resting heart rate for fitness tests */
   restingHR?: number;
   /** Extended health metrics for advanced test scenarios */
@@ -81,7 +79,7 @@ export interface ExtendedTrainingPlan extends TrainingPlan {
   /** Test metadata for tracking */
   testContext?: {
     generatorVersion?: string;
-    testType?: 'unit' | 'integration' | 'performance';
+    testType?: "unit" | "integration" | "performance";
     expectedErrors?: string[];
   };
 }
@@ -120,11 +118,11 @@ export interface InvalidDataAssertion<T> extends TestAssertion<T> {
  */
 export function createExtendedProgressData(
   base: ProgressData,
-  extensions?: Partial<ExtendedProgressData>
+  extensions?: Partial<ExtendedProgressData>,
 ): ExtendedProgressData {
   return {
     ...base,
-    ...extensions
+    ...extensions,
   };
 }
 
@@ -134,11 +132,11 @@ export function createExtendedProgressData(
  */
 export function createExtendedCompletedWorkout(
   base: CompletedWorkout,
-  extensions?: Partial<ExtendedCompletedWorkout>
+  extensions?: Partial<ExtendedCompletedWorkout>,
 ): ExtendedCompletedWorkout {
   return {
     ...base,
-    ...extensions
+    ...extensions,
   };
 }
 
@@ -148,11 +146,11 @@ export function createExtendedCompletedWorkout(
  */
 export function createExtendedRecoveryMetrics(
   base: RecoveryMetrics,
-  extensions?: Partial<ExtendedRecoveryMetrics>
+  extensions?: Partial<ExtendedRecoveryMetrics>,
 ): ExtendedRecoveryMetrics {
   return {
     ...base,
-    ...extensions
+    ...extensions,
   };
 }
 
@@ -163,7 +161,7 @@ export function createExtendedRecoveryMetrics(
 export function createInvalidDataAssertion<T>(
   invalidData: InvalidTestData[keyof InvalidTestData],
   expectedError: string | RegExp | Error,
-  expectedType: string
+  expectedType: string,
 ): InvalidDataAssertion<T> {
   return {
     value: invalidData,
@@ -172,55 +170,66 @@ export function createInvalidDataAssertion<T>(
     invalidData,
     expectedError,
     shouldFail: true,
-    context: 'invalid-data-test'
+    context: "invalid-data-test",
   };
 }
 
 /**
  * Type guard for checking if data is extended progress data
  */
-export function isExtendedProgressData(data: unknown): data is ExtendedProgressData {
-  return typeof data === 'object' && 
-         data !== null && 
-         'date' in data &&
-         ('fitnessChange' in data || 'trend' in data || !('fitnessChange' in data));
+export function isExtendedProgressData(
+  data: unknown,
+): data is ExtendedProgressData {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "date" in data &&
+    ("fitnessChange" in data || "trend" in data || !("fitnessChange" in data))
+  );
 }
 
 /**
  * Type guard for checking if data is extended completed workout
  */
-export function isExtendedCompletedWorkout(data: unknown): data is ExtendedCompletedWorkout {
-  return typeof data === 'object' && 
-         data !== null && 
-         'completionRate' in data &&
-         ('workoutId' in data || 'date' in data || !('workoutId' in data));
+export function isExtendedCompletedWorkout(
+  data: unknown,
+): data is ExtendedCompletedWorkout {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "completionRate" in data &&
+    ("workoutId" in data || "date" in data || !("workoutId" in data))
+  );
 }
 
 /**
  * Type guard for checking if data is extended recovery metrics
  */
-export function isExtendedRecoveryMetrics(data: unknown): data is ExtendedRecoveryMetrics {
-  return typeof data === 'object' && 
-         data !== null && 
-         'recoveryScore' in data &&
-         ('injuryStatus' in data || 'restingHR' in data || !('injuryStatus' in data));
+export function isExtendedRecoveryMetrics(
+  data: unknown,
+): data is ExtendedRecoveryMetrics {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "recoveryScore" in data &&
+    ("injuryStatus" in data || "restingHR" in data || !("injuryStatus" in data))
+  );
 }
 
 /**
  * Utility to safely cast test data with proper type checking
  * Replaces 'as any' with type-safe casting for test scenarios
  */
-export function safeTestCast<T extends Record<string, unknown>, E extends Record<string, unknown>>(
-  base: T,
-  extensions: E,
-  validator?: (result: T & E) => boolean
-): T & E {
+export function safeTestCast<
+  T extends Record<string, unknown>,
+  E extends Record<string, unknown>,
+>(base: T, extensions: E, validator?: (result: T & E) => boolean): T & E {
   const result = { ...base, ...extensions };
-  
+
   if (validator && !validator(result)) {
     throw new Error(`Safe test cast validation failed for type ${typeof base}`);
   }
-  
+
   return result;
 }
 
@@ -229,26 +238,44 @@ export function safeTestCast<T extends Record<string, unknown>, E extends Record
  * Replaces any-typed workout creation in tests
  */
 export interface TestWorkoutFactory {
-  createWithInvalidDate(base: PlannedWorkout, invalidDate: InvalidTestData['invalidDate']): PlannedWorkout & { date: any };
-  createWithInvalidProperties(base: PlannedWorkout, invalidProps: Record<string, unknown>): PlannedWorkout & Record<string, unknown>;
-  createWithExtensions(base: PlannedWorkout, extensions: Record<string, unknown>): PlannedWorkout & Record<string, unknown>;
+  createWithInvalidDate(
+    base: PlannedWorkout,
+    invalidDate: InvalidTestData["invalidDate"],
+  ): PlannedWorkout & { date: any };
+  createWithInvalidProperties(
+    base: PlannedWorkout,
+    invalidProps: Record<string, unknown>,
+  ): PlannedWorkout & Record<string, unknown>;
+  createWithExtensions(
+    base: PlannedWorkout,
+    extensions: Record<string, unknown>,
+  ): PlannedWorkout & Record<string, unknown>;
 }
 
 /**
  * Implementation of test workout factory
  */
 export const testWorkoutFactory: TestWorkoutFactory = {
-  createWithInvalidDate(base: PlannedWorkout, invalidDate: InvalidTestData['invalidDate']) {
-    return { ...base, date: invalidDate };
+  createWithInvalidDate(
+    base: PlannedWorkout,
+    invalidDate: InvalidTestData["invalidDate"],
+  ) {
+    return { ...base, date: invalidDate as any };
   },
-  
-  createWithInvalidProperties(base: PlannedWorkout, invalidProps: Record<string, unknown>) {
+
+  createWithInvalidProperties(
+    base: PlannedWorkout,
+    invalidProps: Record<string, unknown>,
+  ) {
     return { ...base, ...invalidProps };
   },
-  
-  createWithExtensions(base: PlannedWorkout, extensions: Record<string, unknown>) {
+
+  createWithExtensions(
+    base: PlannedWorkout,
+    extensions: Record<string, unknown>,
+  ) {
     return { ...base, ...extensions };
-  }
+  },
 };
 
 /**
@@ -258,7 +285,7 @@ export const testWorkoutFactory: TestWorkoutFactory = {
 export interface TestOptionsFactory {
   createInvalidOptions<T extends Record<string, unknown>>(
     base: T,
-    invalidFields: Record<string, InvalidTestData[keyof InvalidTestData]>
+    invalidFields: Record<string, InvalidTestData[keyof InvalidTestData]>,
   ): T & Record<string, unknown>;
 }
 
@@ -268,8 +295,8 @@ export interface TestOptionsFactory {
 export const testOptionsFactory: TestOptionsFactory = {
   createInvalidOptions<T extends Record<string, unknown>>(
     base: T,
-    invalidFields: Record<string, InvalidTestData[keyof InvalidTestData]>
+    invalidFields: Record<string, InvalidTestData[keyof InvalidTestData]>,
   ): T & Record<string, unknown> {
     return { ...base, ...invalidFields };
-  }
+  },
 };

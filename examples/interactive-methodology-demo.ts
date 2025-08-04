@@ -365,7 +365,8 @@ class InteractiveMethodologyDemo {
             vdot: 42,
             weeklyMileage: 35,
             longestRecentRun: 16,
-            trainingAge: 2
+            trainingAge: 2,
+            overallScore: 58 // VDOT: 52.5 + Volume: 35 + Experience: 40 + Recovery: 75 * weights = 58
           },
           preferences: {
             availableDays: [1, 2, 3, 4, 6],
@@ -393,7 +394,8 @@ class InteractiveMethodologyDemo {
             vdot: 58,
             weeklyMileage: 70,
             longestRecentRun: 32,
-            trainingAge: 8
+            trainingAge: 8,
+            overallScore: 83 // VDOT: 72.5 + Volume: 70 + Experience: 100 + Recovery: 75 * weights = 83
           },
           preferences: {
             availableDays: [1, 2, 3, 4, 5, 6, 0],
@@ -421,7 +423,8 @@ class InteractiveMethodologyDemo {
             vdot: 48,
             weeklyMileage: 40,
             longestRecentRun: 18,
-            trainingAge: 4
+            trainingAge: 4,
+            overallScore: 67 // VDOT: 60 + Volume: 40 + Experience: 80 + Recovery: 75 * weights = 67
           },
           preferences: {
             availableDays: [1, 3, 5, 6],

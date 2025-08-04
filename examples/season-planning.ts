@@ -78,7 +78,8 @@ async function seasonPlanningExample() {
       weeklyMileage: 50,
       longestRecentRun: 25,
       trainingAge: 6,
-      recoveryRate: 78
+      recoveryRate: 78,
+      overallScore: 61 // VDOT: 62.5 + Volume: 50 + Experience: 60 + Recovery: 78 * weights = 61
     },
     preferences: {
       availableDays: [1, 2, 3, 4, 5, 6, 0], // All days available

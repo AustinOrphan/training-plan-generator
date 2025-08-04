@@ -1,15 +1,20 @@
 /**
  * Error Handling Types for Type Validation Failures
- * 
+ *
  * Comprehensive error handling system for type validation failures throughout
  * the training plan generator. Provides structured error types, factory functions,
  * and consistent error messaging for type safety violations.
- * 
+ *
  * @fileoverview Type-safe error handling utilities
  */
 
-import { TypeValidationError, SchemaValidationError, TypedResult } from './base-types';
-import type { ValidationError, ValidationWarning } from '../validation';
+import {
+  TypeValidationError,
+  SchemaValidationError,
+  TypedResult,
+} from "./base-types";
+import { defaultLogger, getLoggerFromOptions, type Logger, type LoggingConfig } from "./logging";
+import type { ValidationError, ValidationWarning } from "../validation";
 
 /**
  * Enhanced validation error that includes type information
@@ -41,7 +46,7 @@ export interface TypedValidationWarning extends ValidationWarning {
   /** Suggested type improvements */
   typeRecommendation?: string;
   /** Performance impact of the type issue */
-  performanceImpact?: 'none' | 'low' | 'medium' | 'high';
+  performanceImpact?: "none" | "low" | "medium" | "high";
 }
 
 /**
@@ -64,7 +69,7 @@ export interface TypedValidationResult {
     totalTypeErrors: number;
     totalTypeWarnings: number;
     affectedProperties: string[];
-    severityLevel: 'none' | 'low' | 'medium' | 'high';
+    severityLevel: "none" | "low" | "medium" | "high";
   };
 }
 
@@ -81,11 +86,11 @@ export class TypeValidationErrorFactory {
     field: string,
     expectedType: string,
     actualValue: unknown,
-    context?: string
+    context?: string,
   ): TypeValidationError {
-    const actualType = actualValue === null ? 'null' : typeof actualValue;
+    const actualType = actualValue === null ? "null" : typeof actualValue;
     const message = `Type mismatch in field '${field}': expected ${expectedType}, got ${actualType}`;
-    
+
     return new TypeValidationError(message, expectedType, actualValue, context);
   }
 
@@ -97,11 +102,17 @@ export class TypeValidationErrorFactory {
     schemaName: string,
     failedProperties: string[],
     actualValue: unknown,
-    context?: string
+    context?: string,
   ): SchemaValidationError {
-    const message = `Schema validation failed for '${schemaName}': missing or invalid properties [${failedProperties.join(', ')}]`;
-    
-    return new SchemaValidationError(message, schemaName, failedProperties, actualValue);
+    const message = `Schema validation failed for '${schemaName}': missing or invalid properties [${failedProperties.join(", ")}]`;
+
+    return new SchemaValidationError(
+      message,
+      schemaName,
+      failedProperties,
+      actualValue,
+      context,
+    );
   }
 
   /**
@@ -112,7 +123,7 @@ export class TypeValidationErrorFactory {
     message: string,
     expectedType: string,
     actualValue: unknown,
-    context?: string
+    context?: string,
   ): TypeValidationError {
     return new TypeValidationError(message, expectedType, actualValue, context);
   }
@@ -124,7 +135,7 @@ export class TypeValidationErrorFactory {
   static fromValidationError(
     validationError: ValidationError,
     expectedType: string,
-    actualValue: unknown
+    actualValue: unknown,
   ): TypedValidationError {
     return {
       ...validationError,
@@ -132,8 +143,8 @@ export class TypeValidationErrorFactory {
       actualValue,
       typeContext: {
         propertyPath: validationError.field,
-        violatedRule: 'type-conversion'
-      }
+        violatedRule: "type-conversion",
+      },
     };
   }
 }
@@ -152,7 +163,7 @@ export class TypedValidationResultBuilder {
    * Add a regular validation error
    */
   addError(field: string, message: string, context?: unknown): this {
-    this.errors.push({ field, message, severity: 'error', context });
+    this.errors.push({ field, message, severity: "error", context });
     return this;
   }
 
@@ -164,18 +175,18 @@ export class TypedValidationResultBuilder {
     message: string,
     expectedType: string,
     actualValue: unknown,
-    context?: unknown
+    context?: unknown,
   ): this {
     this.typeErrors.push({
       field,
       message,
-      severity: 'error',
+      severity: "error",
       context,
       expectedType,
       actualValue,
       typeContext: {
-        propertyPath: field
-      }
+        propertyPath: field,
+      },
     });
     return this;
   }
@@ -184,7 +195,7 @@ export class TypedValidationResultBuilder {
    * Add a regular validation warning
    */
   addWarning(field: string, message: string, context?: unknown): this {
-    this.warnings.push({ field, message, severity: 'warning', context });
+    this.warnings.push({ field, message, severity: "warning", context });
     return this;
   }
 
@@ -196,15 +207,15 @@ export class TypedValidationResultBuilder {
     message: string,
     warningType: string,
     recommendation?: string,
-    context?: unknown
+    context?: unknown,
   ): this {
     this.typeWarnings.push({
       field,
       message,
-      severity: 'warning',
+      severity: "warning",
       context,
       warningType,
-      typeRecommendation: recommendation
+      typeRecommendation: recommendation,
     });
     return this;
   }
@@ -217,19 +228,19 @@ export class TypedValidationResultBuilder {
     const totalTypeWarnings = this.typeWarnings.length;
     const affectedProperties = [
       ...new Set([
-        ...this.typeErrors.map(e => e.field),
-        ...this.typeWarnings.map(w => w.field)
-      ])
+        ...this.typeErrors.map((e) => e.field),
+        ...this.typeWarnings.map((w) => w.field),
+      ]),
     ];
 
     // Determine severity level based on error counts
-    let severityLevel: 'none' | 'low' | 'medium' | 'high' = 'none';
+    let severityLevel: "none" | "low" | "medium" | "high" = "none";
     if (totalTypeErrors > 10 || totalTypeWarnings > 20) {
-      severityLevel = 'high';
+      severityLevel = "high";
     } else if (totalTypeErrors > 5 || totalTypeWarnings > 10) {
-      severityLevel = 'medium';
+      severityLevel = "medium";
     } else if (totalTypeErrors > 0 || totalTypeWarnings > 5) {
-      severityLevel = 'low';
+      severityLevel = "low";
     }
 
     return {
@@ -242,8 +253,8 @@ export class TypedValidationResultBuilder {
         totalTypeErrors,
         totalTypeWarnings,
         affectedProperties,
-        severityLevel
-      }
+        severityLevel,
+      },
     };
   }
 
@@ -267,14 +278,18 @@ export class TypedResultUtils {
   /**
    * Check if a TypedResult is successful
    */
-  static isSuccess<T, E>(result: TypedResult<T, E>): result is { success: true; data: T } {
+  static isSuccess<T, E>(
+    result: TypedResult<T, E>,
+  ): result is { success: true; data: T } {
     return result.success === true;
   }
 
   /**
    * Check if a TypedResult is an error
    */
-  static isError<T, E>(result: TypedResult<T, E>): result is { success: false; error: E } {
+  static isError<T, E>(
+    result: TypedResult<T, E>,
+  ): result is { success: false; error: E } {
     return result.success === false;
   }
 
@@ -303,7 +318,7 @@ export class TypedResultUtils {
    */
   static map<T, U, E>(
     result: TypedResult<T, E>,
-    fn: (data: T) => U
+    fn: (data: T) => U,
   ): TypedResult<U, E> {
     return this.isSuccess(result)
       ? { success: true, data: fn(result.data) }
@@ -315,7 +330,7 @@ export class TypedResultUtils {
    */
   static mapError<T, E, F>(
     result: TypedResult<T, E>,
-    fn: (error: E) => F
+    fn: (error: E) => F,
   ): TypedResult<T, F> {
     return this.isError(result)
       ? { success: false, error: fn(result.error) }
@@ -327,7 +342,7 @@ export class TypedResultUtils {
    */
   static chain<T, U, E>(
     result: TypedResult<T, E>,
-    fn: (data: T) => TypedResult<U, E>
+    fn: (data: T) => TypedResult<U, E>,
   ): TypedResult<U, E> {
     return this.isSuccess(result) ? fn(result.data) : result;
   }
@@ -375,7 +390,7 @@ export class ValidationErrorAggregator {
    * Add multiple errors at once
    */
   addErrors(errors: (TypeValidationError | SchemaValidationError)[]): this {
-    errors.forEach(error => {
+    errors.forEach((error) => {
       if (error instanceof SchemaValidationError) {
         this.addSchemaError(error);
       } else {
@@ -402,14 +417,16 @@ export class ValidationErrorAggregator {
   /**
    * Create a TypedResult based on accumulated errors
    */
-  toResult<T>(data?: T): TypedResult<T, (TypeValidationError | SchemaValidationError)[]> {
+  toResult<T>(
+    data?: T,
+  ): TypedResult<T, (TypeValidationError | SchemaValidationError)[]> {
     if (this.hasErrors()) {
       return { success: false, error: this.getAllErrors() };
     }
     if (data !== undefined) {
       return { success: true, data };
     }
-    throw new Error('Cannot create successful result without data');
+    throw new Error("Cannot create successful result without data");
   }
 
   /**
@@ -431,38 +448,45 @@ export class ValidationErrorAggregator {
     affectedFields: string[];
   } {
     const allErrors = this.getAllErrors();
-    const affectedFields = [...new Set(allErrors.map(e => e.validationContext || 'unknown'))];
+    const affectedFields = [
+      ...new Set(allErrors.map((e) => e.validationContext || "unknown")),
+    ];
 
     return {
       totalErrors: allErrors.length,
       typeErrors: this.errors.length,
       schemaErrors: this.schemaErrors.length,
-      affectedFields
+      affectedFields,
     };
   }
 }
 
 /**
  * Type-safe error handler for common error scenarios
- * Provides standardized error handling patterns
+ * Provides standardized error handling patterns with configurable logging
  */
 export class TypeSafeErrorHandler {
   /**
    * Handle type validation errors with proper logging and user feedback
+   * 
+   * @param error The type validation error to handle
+   * @param context Context string for the error (default: "validation")
+   * @param logger Optional logger instance (default: defaultLogger)
    */
   static handleValidationError(
     error: TypeValidationError,
-    context: string = 'validation'
+    context: string = "validation",
+    logger: Logger = defaultLogger,
   ): TypedResult<never, string> {
     const userMessage = `${context}: ${error.message}`;
-    
+
     // Log detailed error information for debugging
-    console.error('Type validation error:', {
+    logger.error("Type validation error:", {
       message: error.message,
       expectedType: error.expectedType,
       actualValue: error.actualValue,
       context: error.validationContext,
-      stack: error.stack
+      stack: error.stack,
     });
 
     return TypedResultUtils.error(userMessage);
@@ -470,18 +494,23 @@ export class TypeSafeErrorHandler {
 
   /**
    * Handle schema validation errors with detailed feedback
+   * 
+   * @param error The schema validation error to handle
+   * @param context Context string for the error (default: "schema-validation")
+   * @param logger Optional logger instance (default: defaultLogger)
    */
   static handleSchemaError(
     error: SchemaValidationError,
-    context: string = 'schema-validation'
+    context: string = "schema-validation",
+    logger: Logger = defaultLogger,
   ): TypedResult<never, string> {
-    const userMessage = `${context}: Schema '${error.schemaName}' validation failed. Issues with: ${error.failedProperties.join(', ')}`;
-    
-    console.error('Schema validation error:', {
+    const userMessage = `${context}: Schema '${error.schemaName}' validation failed. Issues with: ${error.failedProperties.join(", ")}`;
+
+    logger.error("Schema validation error:", {
       schemaName: error.schemaName,
       failedProperties: error.failedProperties,
       actualValue: error.actualValue,
-      context: error.validationContext
+      context: error.validationContext,
     });
 
     return TypedResultUtils.error(userMessage);
@@ -492,7 +521,7 @@ export class TypeSafeErrorHandler {
    */
   static safelyHandle<T>(
     operation: () => T,
-    context: string = 'operation'
+    context: string = "operation",
   ): TypedResult<T, string> {
     try {
       const result = operation();
@@ -504,8 +533,172 @@ export class TypeSafeErrorHandler {
       if (error instanceof SchemaValidationError) {
         return this.handleSchemaError(error, context);
       }
-      
+
       const message = error instanceof Error ? error.message : String(error);
+      return TypedResultUtils.error(`${context}: ${message}`);
+    }
+  }
+
+  /**
+   * Handle validation error using logger from options
+   * 
+   * Delegates to the existing handleValidationError method while using the logger
+   * configuration from the provided options object. This method provides consistent
+   * error handling that respects the logging configuration used throughout the operation.
+   * 
+   * @param error The type validation error to handle
+   * @param context Context string for the error (default: "validation")
+   * @param options Options object that may contain logging configuration
+   * @returns TypedResult with error message for user feedback
+   * 
+   * @example
+   * ```typescript
+   * // Basic usage with options
+   * const options: BaseExportOptions = {
+   *   includePaces: true,
+   *   logging: { level: 'debug', backend: 'console' }
+   * };
+   * 
+   * const result = TypeSafeErrorHandler.handleValidationErrorWithOptions(
+   *   error,
+   *   "export-validation",
+   *   options
+   * );
+   * 
+   * // Without logging config - uses default logger
+   * const result2 = TypeSafeErrorHandler.handleValidationErrorWithOptions(
+   *   error,
+   *   "validation",
+   *   { customField: "value" }
+   * );
+   * 
+   * // No options - uses default logger
+   * const result3 = TypeSafeErrorHandler.handleValidationErrorWithOptions(error);
+   * ```
+   */
+  static handleValidationErrorWithOptions(
+    error: TypeValidationError,
+    context: string = "validation",
+    options?: { logging?: LoggingConfig }
+  ): TypedResult<never, string> {
+    const logger = getLoggerFromOptions(options);
+    return this.handleValidationError(error, context, logger);
+  }
+
+  /**
+   * Handle schema error using logger from options
+   * 
+   * Delegates to the existing handleSchemaError method while using the logger
+   * configuration from the provided options object. This ensures that schema
+   * validation errors are logged using the same configuration as the rest of the operation.
+   * 
+   * @param error The schema validation error to handle
+   * @param context Context string for the error (default: "schema-validation")
+   * @param options Options object that may contain logging configuration
+   * @returns TypedResult with error message for user feedback
+   * 
+   * @example
+   * ```typescript
+   * // With export options containing logging config
+   * const exportOptions: BaseExportOptions = {
+   *   includePaces: true,
+   *   logging: { level: 'info', backend: 'console' }
+   * };
+   * 
+   * const result = TypeSafeErrorHandler.handleSchemaErrorWithOptions(
+   *   schemaError,
+   *   "export-schema-validation",
+   *   exportOptions
+   * );
+   * 
+   * // With custom options
+   * const customOptions = {
+   *   customField: "value",
+   *   logging: { level: 'warn', backend: 'console' }
+   * };
+   * 
+   * const result2 = TypeSafeErrorHandler.handleSchemaErrorWithOptions(
+   *   schemaError,
+   *   "custom-validation",
+   *   customOptions
+   * );
+   * ```
+   */
+  static handleSchemaErrorWithOptions(
+    error: SchemaValidationError,
+    context: string = "schema-validation",
+    options?: { logging?: LoggingConfig }
+  ): TypedResult<never, string> {
+    const logger = getLoggerFromOptions(options);
+    return this.handleSchemaError(error, context, logger);
+  }
+
+  /**
+   * Handle any error with options-based logging
+   * 
+   * Provides general error handling for operations that may throw various types of errors,
+   * using the logger configuration from the provided options object. This method catches
+   * and handles TypeValidationError, SchemaValidationError, and generic Error instances
+   * with consistent logging behavior.
+   * 
+   * @template T The return type of the operation
+   * @param operation Function to execute that may throw errors
+   * @param context Context string for error reporting (default: "operation")
+   * @param options Options object that may contain logging configuration
+   * @returns TypedResult with success data or error message
+   * 
+   * @example
+   * ```typescript
+   * // Export operation with logging configuration
+   * const exportOptions: BaseExportOptions = {
+   *   includePaces: true,
+   *   logging: { level: 'debug', backend: 'console' }
+   * };
+   * 
+   * const result = TypeSafeErrorHandler.handleErrorWithOptions(
+   *   () => exportPlan(plan, exportOptions),
+   *   "pdf-export",
+   *   exportOptions
+   * );
+   * 
+   * // Database operation with custom logging
+   * const dbOptions = {
+   *   timeout: 5000,
+   *   logging: { level: 'error', backend: 'console' }
+   * };
+   * 
+   * const dbResult = TypeSafeErrorHandler.handleErrorWithOptions(
+   *   () => database.save(data),
+   *   "database-save",
+   *   dbOptions
+   * );
+   * 
+   * // No options - uses default logger
+   * const simpleResult = TypeSafeErrorHandler.handleErrorWithOptions(
+   *   () => riskyOperation(),
+   *   "simple-operation"
+   * );
+   * ```
+   */
+  static handleErrorWithOptions<T>(
+    operation: () => T,
+    context: string = "operation",
+    options?: { logging?: LoggingConfig }
+  ): TypedResult<T, string> {
+    try {
+      const result = operation();
+      return TypedResultUtils.success(result);
+    } catch (error) {
+      if (error instanceof TypeValidationError) {
+        return this.handleValidationErrorWithOptions(error, context, options);
+      }
+      if (error instanceof SchemaValidationError) {
+        return this.handleSchemaErrorWithOptions(error, context, options);
+      }
+      
+      const logger = getLoggerFromOptions(options);
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`${context}: ${message}`);
       return TypedResultUtils.error(`${context}: ${message}`);
     }
   }

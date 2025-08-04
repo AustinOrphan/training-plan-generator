@@ -119,7 +119,8 @@ class MethodologyCustomizationShowcase {
             vdot: 58,
             weeklyMileage: 75,
             longestRecentRun: 35,
-            trainingAge: 6
+            trainingAge: 6,
+            overallScore: 71 // VDOT: 72.5 + Volume: 75 + Experience: 60 + Recovery: 75 * weights = 71
           },
           preferences: {
             availableDays: [1, 2, 3, 4, 5, 6, 0],
@@ -179,7 +180,8 @@ class MethodologyCustomizationShowcase {
             vdot: 45,
             weeklyMileage: 40,
             longestRecentRun: 18,
-            trainingAge: 3
+            trainingAge: 3,
+            overallScore: 50 // VDOT: 56.3 + Volume: 40 + Experience: 30 + Recovery: 75 * weights = 50
           },
           preferences: {
             availableDays: [1, 3, 5, 6],
@@ -241,7 +243,8 @@ class MethodologyCustomizationShowcase {
             vdot: 62,
             weeklyMileage: 95,
             longestRecentRun: 40,
-            trainingAge: 8
+            trainingAge: 8,
+            overallScore: 82 // VDOT: 77.5 + Volume: 95 + Experience: 80 + Recovery: 75 * weights = 82
           },
           preferences: {
             availableDays: [1, 2, 3, 4, 5, 6, 0],
