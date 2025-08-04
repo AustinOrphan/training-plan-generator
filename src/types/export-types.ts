@@ -8,18 +8,156 @@
  * @fileoverview Export format type definitions for type-safe export operations
  */
 
-import { TypedOptions } from "./base-types";
+import { LoggableOptions } from "./base-types";
 import { ExportFormat } from "../types";
 
 /**
  * Base interface for all export format options
- * Provides common properties shared across all export formats
+ * 
+ * Provides common properties shared across all export formats while extending
+ * LoggableOptions to enable optional logging configuration for all export operations.
+ * This design ensures consistent logging behavior across all export formats 
+ * (PDF, iCal, CSV, JSON) while maintaining complete backward compatibility.
+ * 
+ * **Key Benefits:**
+ * - **Unified Logging**: All export formats automatically inherit logging capabilities
+ * - **Format-Agnostic**: Same logging configuration works across PDF, iCal, CSV, and JSON
+ * - **Zero Breaking Changes**: Existing export code continues to work unchanged
+ * - **Environment-Aware**: Easy to configure different logging for dev/production
  *
  * @template TCustomFields Type-constrained custom fields for format extensions
+ * 
+ * @example Basic Export Without Logging (Backward Compatible)
+ * ```typescript
+ * // Existing code continues to work unchanged
+ * const options: BaseExportOptions = {
+ *   includePaces: true,
+ *   units: 'metric'
+ * };
+ * 
+ * const exporter = new MultiFormatExporter();
+ * const result = await exporter.exportPlan(trainingPlan, 'pdf', options);
+ * ```
+ * 
+ * @example Enhanced Export with Logging Configuration
+ * ```typescript
+ * import { LOGGING_PRESETS } from '../types/logging';
+ * 
+ * // Environment-specific logging
+ * const devOptions: BaseExportOptions = {
+ *   includePaces: true,
+ *   units: 'metric',
+ *   logging: LOGGING_PRESETS.development // Full debug output
+ * };
+ * 
+ * const prodOptions: BaseExportOptions = {
+ *   includePaces: true,
+ *   units: 'metric',
+ *   logging: LOGGING_PRESETS.production // Silent logging
+ * };
+ * 
+ * // Custom logging configuration
+ * const customOptions: BaseExportOptions = {
+ *   includePaces: true,
+ *   units: 'metric',
+ *   logging: { level: 'info', backend: 'console' }
+ * };
+ * ```
+ * 
+ * @example Format-Specific Options with Logging
+ * ```typescript
+ * // PDF export with logging
+ * const pdfOptions: PDFOptions = {
+ *   pageSize: 'A4',
+ *   orientation: 'portrait',
+ *   margins: { top: 20, right: 20, bottom: 20, left: 20 },
+ *   includeCharts: true,
+ *   logging: { level: 'debug', backend: 'console' }
+ * };
+ * 
+ * // iCal export with logging
+ * const icalOptions: iCalOptions = {
+ *   calendarName: 'Training Schedule',
+ *   defaultEventDuration: 60,
+ *   includeAlarms: true,
+ *   logging: { level: 'info', backend: 'console' }
+ * };
+ * 
+ * // All format-specific options inherit logging capability
+ * const csvOptions: CSVOptions = {
+ *   delimiter: ',',
+ *   includeHeaders: true,
+ *   dateFormat: 'ISO',
+ *   logging: LOGGING_PRESETS.development
+ * };
+ * ```
+ * 
+ * @example Migration from Manual Error Handling
+ * ```typescript
+ * // Before: Manual console.error statements
+ * function exportTrainingPlan(plan: TrainingPlan, format: ExportFormat) {
+ *   try {
+ *     // ... export logic
+ *     console.error('Export failed:', error); // Manual logging
+ *   } catch (error) {
+ *     console.error('Export failed:', error);
+ *   }
+ * }
+ * 
+ * // After: Configurable logging through options
+ * function exportTrainingPlan(
+ *   plan: TrainingPlan, 
+ *   format: ExportFormat, 
+ *   options: BaseExportOptions
+ * ) {
+ *   const logger = getLoggerFromOptions(options);
+ *   
+ *   try {
+ *     // Export operations automatically use configured logger
+ *     const result = TypeSafeErrorHandler.handleErrorWithOptions(
+ *       () => performExport(plan, format, options),
+ *       'export-operation',
+ *       options
+ *     );
+ *     return result;
+ *   } catch (error) {
+ *     // Logger configuration from options applied automatically
+ *     logger.error('Export failed', { format, error: error.message });
+ *     throw error;
+ *   }
+ * }
+ * ```
+ * 
+ * @example Error Handling Integration
+ * ```typescript
+ * import { TypeSafeErrorHandler } from '../types/error-types';
+ * 
+ * const exportOptions: BaseExportOptions = {
+ *   includePaces: true,
+ *   logging: { level: 'error', backend: 'console' }
+ * };
+ * 
+ * // Error handlers automatically use logging configuration from options
+ * const result = TypeSafeErrorHandler.handleValidationErrorWithOptions(
+ *   validationError,
+ *   'export-validation',
+ *   exportOptions // Logging config used automatically
+ * );
+ * 
+ * if (!result.success) {
+ *   // Error already logged according to options.logging configuration
+ *   return { error: result.error };
+ * }
+ * ```
+ * 
+ * @see {@link LoggableOptions} For the base logging capability interface
+ * @see {@link getLoggerFromOptions} For extracting loggers from export options
+ * @see {@link LOGGING_PRESETS} For common environment-specific logging configurations
+ * @see {@link TypeSafeErrorHandler} For error handling with automatic logging configuration
  */
 export interface BaseExportOptions<
   TCustomFields extends Record<string, unknown> = Record<string, unknown>,
-> extends TypedOptions<TCustomFields> {
+> extends LoggableOptions<TCustomFields> {
   /** Include workout pace information in export */
   includePaces?: boolean;
   /** Include heart rate zone information */

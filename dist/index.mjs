@@ -1,896 +1,2512 @@
-// src/calculator.ts
-import { startOfWeek, format } from "date-fns";
-function calculateVDOT(runs) {
-  const performances = runs.filter((run) => run.isRace || run.effortLevel && run.effortLevel >= 9);
-  if (performances.length === 0) {
-    const fastRuns = runs.filter((run) => run.distance >= 3 && run.avgPace).sort((a, b) => a.avgPace - b.avgPace).slice(0, 3);
-    if (fastRuns.length > 0) {
-      const bestRun = fastRuns[0];
-      const distance = bestRun.distance * 1e3;
-      const time = bestRun.duration;
-      const velocity = distance / (time * 60);
-      const vo2 = -4.6 + 0.182258 * (velocity * 60) + 104e-6 * Math.pow(velocity * 60, 2);
-      const percentMax = 0.8 + 0.1894393 * Math.exp(-0.012778 * time) + 0.2989558 * Math.exp(-0.1932605 * time);
-      return Math.round(vo2 / percentMax);
+import {
+  ADAPTATION_TIMELINE,
+  BaseTrainingPhilosophy,
+  CacheManager,
+  CalculationProfiler,
+  ENVIRONMENTAL_FACTORS,
+  INTENSITY_MODELS,
+  LOAD_THRESHOLDS,
+  METHODOLOGY_INTENSITY_DISTRIBUTIONS,
+  METHODOLOGY_PHASE_TARGETS,
+  MemoryMonitor,
+  OptimizationAnalyzer,
+  PHASE_DURATION,
+  PROGRESSION_RATES,
+  PhilosophyFactory,
+  PhilosophyUtils,
+  RACE_DISTANCES,
+  RECOVERY_MULTIPLIERS,
+  TRAINING_METHODOLOGIES,
+  TRAINING_ZONES,
+  WORKOUT_DURATIONS,
+  WORKOUT_EMPHASIS,
+  WORKOUT_TEMPLATES,
+  analyzeWeeklyPatterns,
+  batchCalculateVDOT,
+  cacheInstances,
+  calculateCriticalSpeed,
+  calculateCriticalSpeedCached,
+  calculateFitnessMetrics,
+  calculateFitnessMetricsCached,
+  calculateInjuryRisk,
+  calculateLactateThreshold,
+  calculatePersonalizedZones,
+  calculateRecoveryScore,
+  calculateTSS,
+  calculateTrainingLoad,
+  calculateTrainingPaces,
+  calculateTrainingPacesCached,
+  calculateVDOT,
+  calculateVDOTCached,
+  createCustomWorkout,
+  estimateRunningEconomy,
+  getZoneByIntensity
+} from "./chunk-I3SGBMDX.mjs";
+
+// src/types.ts
+var TypeValidationError = class extends Error {
+  constructor(message, expectedType, actualValue) {
+    super(
+      `Type validation failed: ${message}. Expected ${expectedType}, got ${typeof actualValue}`
+    );
+    this.expectedType = expectedType;
+    this.actualValue = actualValue;
+    this.name = "TypeValidationError";
+  }
+};
+
+// src/types/base-types.ts
+var TypeValidationError2 = class _TypeValidationError extends Error {
+  constructor(message, expectedType, actualValue, validationContext) {
+    super(message);
+    this.expectedType = expectedType;
+    this.actualValue = actualValue;
+    this.validationContext = validationContext;
+    this.name = "TypeValidationError";
+  }
+  /**
+   * Create an error for a missing required field
+   */
+  static missingField(field) {
+    return new _TypeValidationError(
+      `Missing required field: ${field}`,
+      "required",
+      void 0,
+      field
+    );
+  }
+  /**
+   * Create an error for an incorrect type
+   */
+  static incorrectType(field, expected, actual) {
+    return new _TypeValidationError(
+      `Field '${field}' expected ${expected}, got ${typeof actual}`,
+      expected,
+      actual,
+      field
+    );
+  }
+  /**
+   * Create an error for an invalid value
+   */
+  static invalidValue(field, value, constraint) {
+    return new _TypeValidationError(
+      `Field '${field}' has invalid value: ${constraint}`,
+      constraint,
+      value,
+      field
+    );
+  }
+};
+var SchemaValidationError = class extends Error {
+  constructor(message, schemaName, failedProperties, actualValue, validationContext) {
+    super(message);
+    this.schemaName = schemaName;
+    this.failedProperties = failedProperties;
+    this.actualValue = actualValue;
+    this.validationContext = validationContext;
+    this.name = "SchemaValidationError";
+  }
+};
+
+// src/types/logging.ts
+var DEFAULT_LOGGING_CONFIG = {
+  level: "error",
+  backend: "console"
+};
+var SILENT_LOGGING_CONFIG = {
+  level: "silent",
+  backend: "silent"
+};
+var DEVELOPMENT_LOGGING_CONFIG = {
+  level: "debug",
+  backend: "console"
+};
+var LOG_LEVEL_PRIORITIES = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+  silent: 4
+};
+function shouldLog(messageLevel, configLevel) {
+  return LOG_LEVEL_PRIORITIES[messageLevel] >= LOG_LEVEL_PRIORITIES[configLevel];
+}
+var ConsoleLogger = class {
+  constructor(config) {
+    this.config = config;
+  }
+  error(message, context) {
+    if (shouldLog("error", this.config.level)) {
+      if (context) {
+        console.error(message, context);
+      } else {
+        console.error(message);
+      }
     }
   }
-  return 35;
-}
-function calculateCriticalSpeed(runs) {
-  const timeTrials = runs.filter((run) => run.distance >= 3 && run.effortLevel && run.effortLevel >= 8).map((run) => ({
-    distance: run.distance * 1e3,
-    // meters
-    time: run.duration * 60
-    // seconds
-  }));
-  if (timeTrials.length >= 2) {
-    const sorted = timeTrials.sort((a, b) => a.distance - b.distance);
-    const d1 = sorted[0].distance;
-    const t1 = sorted[0].time;
-    const d2 = sorted[sorted.length - 1].distance;
-    const t2 = sorted[sorted.length - 1].time;
-    const cs = (d2 - d1) / (t2 - t1);
-    return cs * 3.6;
+  warn(message, context) {
+    if (shouldLog("warn", this.config.level)) {
+      if (context) {
+        console.warn(message, context);
+      } else {
+        console.warn(message);
+      }
+    }
   }
-  return 10;
-}
-function estimateRunningEconomy(runs) {
-  const economyRuns = runs.filter(
-    (run) => run.avgHeartRate && run.avgPace && run.duration > 20 && run.effortLevel && run.effortLevel <= 6
-  );
-  if (economyRuns.length > 0) {
-    const economies = economyRuns.map((run) => {
-      const pace = run.avgPace;
-      const hrReserve = (run.avgHeartRate - 60) / (190 - 60);
-      const estimatedVO2 = hrReserve * 50;
-      return estimatedVO2 / (60 / pace);
-    });
-    return Math.round(economies.reduce((sum, e) => sum + e, 0) / economies.length);
+  info(message, context) {
+    if (shouldLog("info", this.config.level)) {
+      if (context) {
+        console.info(message, context);
+      } else {
+        console.info(message);
+      }
+    }
   }
-  return 200;
+  debug(message, context) {
+    if (shouldLog("debug", this.config.level)) {
+      if (context) {
+        console.debug(message, context);
+      } else {
+        console.debug(message);
+      }
+    }
+  }
+};
+var SilentLogger = class {
+  error() {
+  }
+  warn() {
+  }
+  info() {
+  }
+  debug() {
+  }
+};
+function createLogger(config = DEFAULT_LOGGING_CONFIG) {
+  switch (config.backend) {
+    case "console":
+      return new ConsoleLogger(config);
+    case "silent":
+      return new SilentLogger();
+    case "custom":
+      if (!config.customLogger) {
+        throw new Error('Custom logger required when backend is "custom"');
+      }
+      return config.customLogger;
+    default:
+      throw new Error(`Unknown logging backend: ${config.backend}`);
+  }
 }
-function calculateLactateThreshold(vdot) {
-  const thresholdVelocity = vdot * 0.88 / 3.5;
-  return thresholdVelocity;
+var defaultLogger = createLogger(DEFAULT_LOGGING_CONFIG);
+var silentLogger = createLogger(SILENT_LOGGING_CONFIG);
+var developmentLogger = createLogger(DEVELOPMENT_LOGGING_CONFIG);
+function validateLoggingConfig(config) {
+  const errors = [];
+  if (!(config.level in LOG_LEVEL_PRIORITIES)) {
+    errors.push(`Invalid log level: ${config.level}`);
+  }
+  if (!["console", "silent", "custom"].includes(config.backend)) {
+    errors.push(`Invalid backend: ${config.backend}`);
+  }
+  if (config.backend === "custom" && !config.customLogger) {
+    errors.push('Custom logger is required when backend is "custom"');
+  }
+  if (config.customLogger) {
+    const required = ["error", "warn", "info", "debug"];
+    const missing = required.filter(
+      (method) => typeof config.customLogger?.[method] !== "function"
+    );
+    if (missing.length > 0) {
+      errors.push(`Custom logger missing methods: ${missing.join(", ")}`);
+    }
+  }
+  return errors;
 }
-function calculateTSS(run, thresholdPace) {
-  if (!run.avgPace) return 0;
-  const intensityFactor = thresholdPace / run.avgPace;
-  const tss = run.duration * Math.pow(intensityFactor, 2) * 100 / 60;
-  return Math.round(tss);
+function isLogger(obj) {
+  if (!obj || typeof obj !== "object") {
+    return false;
+  }
+  const logger = obj;
+  return typeof logger.error === "function" && typeof logger.warn === "function" && typeof logger.info === "function" && typeof logger.debug === "function";
 }
-function calculateTrainingLoad(runs, thresholdPace) {
-  const sortedRuns = [...runs].sort((a, b) => a.date.getTime() - b.date.getTime());
-  let acuteLoad = 0;
-  let chronicLoad = 0;
-  const acuteDecay = Math.exp(-1 / 7);
-  const chronicDecay = Math.exp(-1 / 28);
-  const loads = sortedRuns.map((run) => {
-    const tss = calculateTSS(run, thresholdPace);
-    acuteLoad = acuteLoad * acuteDecay + tss * (1 - acuteDecay);
-    chronicLoad = chronicLoad * chronicDecay + tss * (1 - chronicDecay);
+function getLoggerFromOptions(options) {
+  try {
+    if (!options?.logging) {
+      return defaultLogger;
+    }
+    const validationErrors = validateLoggingConfig(options.logging);
+    if (validationErrors.length > 0) {
+      console.warn("Invalid logging config, using default logger:", validationErrors);
+      return defaultLogger;
+    }
+    return createLogger(options.logging);
+  } catch (error) {
+    console.warn("Failed to create logger from options, using default logger:", error);
+    return defaultLogger;
+  }
+}
+function withLogging(options, logging) {
+  return { ...options, logging };
+}
+var LOGGING_PRESETS = {
+  /** Full console output with debug level - ideal for development environments */
+  development: DEVELOPMENT_LOGGING_CONFIG,
+  /** Silent logging - ideal for production environments */
+  production: SILENT_LOGGING_CONFIG,
+  /** Silent logging - ideal for testing environments to avoid output pollution */
+  testing: SILENT_LOGGING_CONFIG,
+  /** Verbose console output - ideal for troubleshooting specific issues */
+  debug: { level: "debug", backend: "console" }
+};
+
+// src/types/error-types.ts
+var TypeValidationErrorFactory = class {
+  /**
+   * Create a type mismatch error
+   * Used when a value doesn't match its expected type
+   */
+  static createTypeMismatchError(field, expectedType, actualValue, context) {
+    const actualType = actualValue === null ? "null" : typeof actualValue;
+    const message = `Type mismatch in field '${field}': expected ${expectedType}, got ${actualType}`;
+    return new TypeValidationError2(message, expectedType, actualValue, context);
+  }
+  /**
+   * Create a schema validation error
+   * Used when an object doesn't conform to its schema
+   */
+  static createSchemaError(schemaName, failedProperties, actualValue, context) {
+    const message = `Schema validation failed for '${schemaName}': missing or invalid properties [${failedProperties.join(", ")}]`;
+    return new SchemaValidationError(
+      message,
+      schemaName,
+      failedProperties,
+      actualValue,
+      context
+    );
+  }
+  /**
+   * Create a generic type validation error
+   * Used for complex type validation scenarios
+   */
+  static createGenericTypeError(message, expectedType, actualValue, context) {
+    return new TypeValidationError2(message, expectedType, actualValue, context);
+  }
+  /**
+   * Create a typed validation error from existing ValidationError
+   * Converts regular validation errors to type-aware ones
+   */
+  static fromValidationError(validationError, expectedType, actualValue) {
     return {
-      date: run.date,
-      tss,
-      acuteLoad,
-      chronicLoad,
-      ratio: chronicLoad > 0 ? acuteLoad / chronicLoad : 1
+      ...validationError,
+      expectedType,
+      actualValue,
+      typeContext: {
+        propertyPath: validationError.field,
+        violatedRule: "type-conversion"
+      }
     };
-  });
-  const current = loads[loads.length - 1] || { acuteLoad: 0, chronicLoad: 0, ratio: 1 };
-  let trend = "stable";
-  if (loads.length > 7) {
-    const weekAgo = loads[loads.length - 8].acuteLoad;
-    if (current.acuteLoad > weekAgo * 1.1) trend = "increasing";
-    else if (current.acuteLoad < weekAgo * 0.9) trend = "decreasing";
   }
-  let recommendation = "";
-  if (current.ratio < 0.8) {
-    recommendation = "Training load is low. Consider increasing volume gradually.";
-  } else if (current.ratio > 1.5) {
-    recommendation = "Training load is very high. Risk of overtraining. Consider recovery.";
-  } else if (current.ratio > 1.3) {
-    recommendation = "Training load is high. Monitor fatigue carefully.";
-  } else {
-    recommendation = "Training load is in optimal range for adaptation.";
+};
+var TypedValidationResultBuilder = class {
+  constructor() {
+    this.errors = [];
+    this.typeErrors = [];
+    this.warnings = [];
+    this.typeWarnings = [];
   }
+  /**
+   * Add a regular validation error
+   */
+  addError(field, message, context) {
+    this.errors.push({ field, message, severity: "error", context });
+    return this;
+  }
+  /**
+   * Add a type-specific validation error
+   */
+  addTypeError(field, message, expectedType, actualValue, context) {
+    this.typeErrors.push({
+      field,
+      message,
+      severity: "error",
+      context,
+      expectedType,
+      actualValue,
+      typeContext: {
+        propertyPath: field
+      }
+    });
+    return this;
+  }
+  /**
+   * Add a regular validation warning
+   */
+  addWarning(field, message, context) {
+    this.warnings.push({ field, message, severity: "warning", context });
+    return this;
+  }
+  /**
+   * Add a type-specific validation warning
+   */
+  addTypeWarning(field, message, warningType, recommendation, context) {
+    this.typeWarnings.push({
+      field,
+      message,
+      severity: "warning",
+      context,
+      warningType,
+      typeRecommendation: recommendation
+    });
+    return this;
+  }
+  /**
+   * Build the final validation result
+   */
+  build() {
+    const totalTypeErrors = this.typeErrors.length;
+    const totalTypeWarnings = this.typeWarnings.length;
+    const affectedProperties = [
+      .../* @__PURE__ */ new Set([
+        ...this.typeErrors.map((e) => e.field),
+        ...this.typeWarnings.map((w) => w.field)
+      ])
+    ];
+    let severityLevel = "none";
+    if (totalTypeErrors > 10 || totalTypeWarnings > 20) {
+      severityLevel = "high";
+    } else if (totalTypeErrors > 5 || totalTypeWarnings > 10) {
+      severityLevel = "medium";
+    } else if (totalTypeErrors > 0 || totalTypeWarnings > 5) {
+      severityLevel = "low";
+    }
+    return {
+      isValid: this.errors.length === 0 && this.typeErrors.length === 0,
+      errors: [...this.errors],
+      typeErrors: [...this.typeErrors],
+      warnings: [...this.warnings],
+      typeWarnings: [...this.typeWarnings],
+      typeSummary: {
+        totalTypeErrors,
+        totalTypeWarnings,
+        affectedProperties,
+        severityLevel
+      }
+    };
+  }
+  /**
+   * Reset the builder for reuse
+   */
+  reset() {
+    this.errors = [];
+    this.typeErrors = [];
+    this.warnings = [];
+    this.typeWarnings = [];
+    return this;
+  }
+};
+var TypedResultUtils = class {
+  /**
+   * Check if a TypedResult is successful
+   */
+  static isSuccess(result) {
+    return result.success === true;
+  }
+  /**
+   * Check if a TypedResult is an error
+   */
+  static isError(result) {
+    return result.success === false;
+  }
+  /**
+   * Extract data from a successful result, or throw if error
+   */
+  static unwrap(result) {
+    if (this.isSuccess(result)) {
+      return result.data;
+    }
+    if (result.error instanceof Error) {
+      throw result.error;
+    }
+    throw new Error(`Operation failed: ${String(result.error)}`);
+  }
+  /**
+   * Extract data from a successful result, or return default if error
+   */
+  static unwrapOr(result, defaultValue) {
+    return this.isSuccess(result) ? result.data : defaultValue;
+  }
+  /**
+   * Transform the data in a successful result
+   */
+  static map(result, fn) {
+    return this.isSuccess(result) ? { success: true, data: fn(result.data) } : result;
+  }
+  /**
+   * Transform the error in a failed result
+   */
+  static mapError(result, fn) {
+    return this.isError(result) ? { success: false, error: fn(result.error) } : result;
+  }
+  /**
+   * Chain multiple operations that return TypedResult
+   */
+  static chain(result, fn) {
+    return this.isSuccess(result) ? fn(result.data) : result;
+  }
+  /**
+   * Create a successful result
+   */
+  static success(data) {
+    return { success: true, data };
+  }
+  /**
+   * Create an error result
+   */
+  static error(error) {
+    return { success: false, error };
+  }
+};
+var ValidationErrorAggregator = class {
+  constructor() {
+    this.errors = [];
+    this.schemaErrors = [];
+  }
+  /**
+   * Add a type validation error
+   */
+  addError(error) {
+    this.errors.push(error);
+    return this;
+  }
+  /**
+   * Add a schema validation error
+   */
+  addSchemaError(error) {
+    this.schemaErrors.push(error);
+    return this;
+  }
+  /**
+   * Add multiple errors at once
+   */
+  addErrors(errors) {
+    errors.forEach((error) => {
+      if (error instanceof SchemaValidationError) {
+        this.addSchemaError(error);
+      } else {
+        this.addError(error);
+      }
+    });
+    return this;
+  }
+  /**
+   * Check if there are any errors
+   */
+  hasErrors() {
+    return this.errors.length > 0 || this.schemaErrors.length > 0;
+  }
+  /**
+   * Get all errors
+   */
+  getAllErrors() {
+    return [...this.errors, ...this.schemaErrors];
+  }
+  /**
+   * Create a TypedResult based on accumulated errors
+   */
+  toResult(data) {
+    if (this.hasErrors()) {
+      return { success: false, error: this.getAllErrors() };
+    }
+    if (data !== void 0) {
+      return { success: true, data };
+    }
+    throw new Error("Cannot create successful result without data");
+  }
+  /**
+   * Clear all accumulated errors
+   */
+  clear() {
+    this.errors = [];
+    this.schemaErrors = [];
+    return this;
+  }
+  /**
+   * Get error summary for reporting
+   */
+  getSummary() {
+    const allErrors = this.getAllErrors();
+    const affectedFields = [
+      ...new Set(allErrors.map((e) => e.validationContext || "unknown"))
+    ];
+    return {
+      totalErrors: allErrors.length,
+      typeErrors: this.errors.length,
+      schemaErrors: this.schemaErrors.length,
+      affectedFields
+    };
+  }
+};
+var TypeSafeErrorHandler = class {
+  /**
+   * Handle type validation errors with proper logging and user feedback
+   * 
+   * @param error The type validation error to handle
+   * @param context Context string for the error (default: "validation")
+   * @param logger Optional logger instance (default: defaultLogger)
+   */
+  static handleValidationError(error, context = "validation", logger = defaultLogger) {
+    const userMessage = `${context}: ${error.message}`;
+    logger.error("Type validation error:", {
+      message: error.message,
+      expectedType: error.expectedType,
+      actualValue: error.actualValue,
+      context: error.validationContext,
+      stack: error.stack
+    });
+    return TypedResultUtils.error(userMessage);
+  }
+  /**
+   * Handle schema validation errors with detailed feedback
+   * 
+   * @param error The schema validation error to handle
+   * @param context Context string for the error (default: "schema-validation")
+   * @param logger Optional logger instance (default: defaultLogger)
+   */
+  static handleSchemaError(error, context = "schema-validation", logger = defaultLogger) {
+    const userMessage = `${context}: Schema '${error.schemaName}' validation failed. Issues with: ${error.failedProperties.join(", ")}`;
+    logger.error("Schema validation error:", {
+      schemaName: error.schemaName,
+      failedProperties: error.failedProperties,
+      actualValue: error.actualValue,
+      context: error.validationContext
+    });
+    return TypedResultUtils.error(userMessage);
+  }
+  /**
+   * Convert any error to a typed result with consistent handling
+   */
+  static safelyHandle(operation, context = "operation") {
+    try {
+      const result = operation();
+      return TypedResultUtils.success(result);
+    } catch (error) {
+      if (error instanceof TypeValidationError2) {
+        return this.handleValidationError(error, context);
+      }
+      if (error instanceof SchemaValidationError) {
+        return this.handleSchemaError(error, context);
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      return TypedResultUtils.error(`${context}: ${message}`);
+    }
+  }
+  /**
+   * Handle validation error using logger from options
+   * 
+   * Delegates to the existing handleValidationError method while using the logger
+   * configuration from the provided options object. This method provides consistent
+   * error handling that respects the logging configuration used throughout the operation.
+   * 
+   * @param error The type validation error to handle
+   * @param context Context string for the error (default: "validation")
+   * @param options Options object that may contain logging configuration
+   * @returns TypedResult with error message for user feedback
+   * 
+   * @example
+   * ```typescript
+   * // Basic usage with options
+   * const options: BaseExportOptions = {
+   *   includePaces: true,
+   *   logging: { level: 'debug', backend: 'console' }
+   * };
+   * 
+   * const result = TypeSafeErrorHandler.handleValidationErrorWithOptions(
+   *   error,
+   *   "export-validation",
+   *   options
+   * );
+   * 
+   * // Without logging config - uses default logger
+   * const result2 = TypeSafeErrorHandler.handleValidationErrorWithOptions(
+   *   error,
+   *   "validation",
+   *   { customField: "value" }
+   * );
+   * 
+   * // No options - uses default logger
+   * const result3 = TypeSafeErrorHandler.handleValidationErrorWithOptions(error);
+   * ```
+   */
+  static handleValidationErrorWithOptions(error, context = "validation", options) {
+    const logger = getLoggerFromOptions(options);
+    return this.handleValidationError(error, context, logger);
+  }
+  /**
+   * Handle schema error using logger from options
+   * 
+   * Delegates to the existing handleSchemaError method while using the logger
+   * configuration from the provided options object. This ensures that schema
+   * validation errors are logged using the same configuration as the rest of the operation.
+   * 
+   * @param error The schema validation error to handle
+   * @param context Context string for the error (default: "schema-validation")
+   * @param options Options object that may contain logging configuration
+   * @returns TypedResult with error message for user feedback
+   * 
+   * @example
+   * ```typescript
+   * // With export options containing logging config
+   * const exportOptions: BaseExportOptions = {
+   *   includePaces: true,
+   *   logging: { level: 'info', backend: 'console' }
+   * };
+   * 
+   * const result = TypeSafeErrorHandler.handleSchemaErrorWithOptions(
+   *   schemaError,
+   *   "export-schema-validation",
+   *   exportOptions
+   * );
+   * 
+   * // With custom options
+   * const customOptions = {
+   *   customField: "value",
+   *   logging: { level: 'warn', backend: 'console' }
+   * };
+   * 
+   * const result2 = TypeSafeErrorHandler.handleSchemaErrorWithOptions(
+   *   schemaError,
+   *   "custom-validation",
+   *   customOptions
+   * );
+   * ```
+   */
+  static handleSchemaErrorWithOptions(error, context = "schema-validation", options) {
+    const logger = getLoggerFromOptions(options);
+    return this.handleSchemaError(error, context, logger);
+  }
+  /**
+   * Handle any error with options-based logging
+   * 
+   * Provides general error handling for operations that may throw various types of errors,
+   * using the logger configuration from the provided options object. This method catches
+   * and handles TypeValidationError, SchemaValidationError, and generic Error instances
+   * with consistent logging behavior.
+   * 
+   * @template T The return type of the operation
+   * @param operation Function to execute that may throw errors
+   * @param context Context string for error reporting (default: "operation")
+   * @param options Options object that may contain logging configuration
+   * @returns TypedResult with success data or error message
+   * 
+   * @example
+   * ```typescript
+   * // Export operation with logging configuration
+   * const exportOptions: BaseExportOptions = {
+   *   includePaces: true,
+   *   logging: { level: 'debug', backend: 'console' }
+   * };
+   * 
+   * const result = TypeSafeErrorHandler.handleErrorWithOptions(
+   *   () => exportPlan(plan, exportOptions),
+   *   "pdf-export",
+   *   exportOptions
+   * );
+   * 
+   * // Database operation with custom logging
+   * const dbOptions = {
+   *   timeout: 5000,
+   *   logging: { level: 'error', backend: 'console' }
+   * };
+   * 
+   * const dbResult = TypeSafeErrorHandler.handleErrorWithOptions(
+   *   () => database.save(data),
+   *   "database-save",
+   *   dbOptions
+   * );
+   * 
+   * // No options - uses default logger
+   * const simpleResult = TypeSafeErrorHandler.handleErrorWithOptions(
+   *   () => riskyOperation(),
+   *   "simple-operation"
+   * );
+   * ```
+   */
+  static handleErrorWithOptions(operation, context = "operation", options) {
+    try {
+      const result = operation();
+      return TypedResultUtils.success(result);
+    } catch (error) {
+      if (error instanceof TypeValidationError2) {
+        return this.handleValidationErrorWithOptions(error, context, options);
+      }
+      if (error instanceof SchemaValidationError) {
+        return this.handleSchemaErrorWithOptions(error, context, options);
+      }
+      const logger = getLoggerFromOptions(options);
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`${context}: ${message}`);
+      return TypedResultUtils.error(`${context}: ${message}`);
+    }
+  }
+};
+
+// src/types/methodology-types.ts
+function hasIntensityConfig(config) {
+  return typeof config === "object" && config !== null && "intensity" in config && typeof config.intensity === "object" && config.intensity !== null;
+}
+function hasVolumeConfig(config) {
+  return typeof config === "object" && config !== null && "volume" in config && typeof config.volume === "object" && config.volume !== null;
+}
+function hasRecoveryConfig(config) {
+  return typeof config === "object" && config !== null && "recovery" in config && typeof config.recovery === "object" && config.recovery !== null;
+}
+function getIntensityConfig(config) {
+  if (hasIntensityConfig(config)) {
+    return config.intensity;
+  }
+  return void 0;
+}
+function getVolumeConfig(config) {
+  if (hasVolumeConfig(config)) {
+    return config.volume;
+  }
+  return void 0;
+}
+function getRecoveryConfig(config) {
+  if (hasRecoveryConfig(config)) {
+    return config.recovery;
+  }
+  return void 0;
+}
+function isTestableGenerator(generator) {
+  return typeof generator === "object" && generator !== null && "generateMicrocycles" in generator && typeof generator.generateMicrocycles === "function";
+}
+function createEmptyScores() {
   return {
-    acute: Math.round(current.acuteLoad),
-    chronic: Math.round(current.chronicLoad),
-    ratio: Math.round(current.ratio * 100) / 100,
-    trend,
-    recommendation
+    daniels: {},
+    lydiard: {},
+    pfitzinger: {},
+    hudson: {},
+    custom: {}
   };
 }
-function calculateInjuryRisk(trainingLoad, weeklyMileageIncrease, recoveryScore) {
-  let risk = 0;
-  if (trainingLoad.ratio < 0.8) risk += 20;
-  else if (trainingLoad.ratio > 1.5) risk += 40;
-  else if (trainingLoad.ratio > 1.3) risk += 25;
-  else risk += 10;
-  if (weeklyMileageIncrease > 20) risk += 30;
-  else if (weeklyMileageIncrease > 10) risk += 20;
-  else if (weeklyMileageIncrease > 5) risk += 10;
-  risk += Math.round((100 - recoveryScore) * 0.3);
-  return Math.min(100, risk);
+function getHighestSeverity(severities) {
+  if (severities.includes("critical")) return "critical";
+  if (severities.includes("high")) return "high";
+  if (severities.includes("moderate")) return "moderate";
+  return "low";
 }
-function calculateRecoveryScore(runs, restingHR, hrv) {
-  let score = 70;
-  const recentHardRuns = runs.filter((run) => run.date > new Date(Date.now() - 7 * 24 * 60 * 60 * 1e3)).filter((run) => run.effortLevel && run.effortLevel >= 7);
-  score -= recentHardRuns.length * 5;
-  if (hrv) {
-    if (hrv > 60) score += 10;
-    else if (hrv < 40) score -= 10;
-  }
-  if (restingHR) {
-    if (restingHR < 50) score += 10;
-    else if (restingHR > 65) score -= 10;
-  }
-  return Math.max(0, Math.min(100, score));
+function compareSeverity(a, b) {
+  const severityOrder = {
+    low: 0,
+    moderate: 1,
+    high: 2,
+    critical: 3
+  };
+  return severityOrder[a] - severityOrder[b];
 }
-function analyzeWeeklyPatterns(runs) {
-  const weeks = /* @__PURE__ */ new Map();
-  runs.forEach((run) => {
-    const weekStart = format(startOfWeek(run.date), "yyyy-MM-dd");
-    if (!weeks.has(weekStart)) {
-      weeks.set(weekStart, []);
+
+// src/types/methodology-cache-types.ts
+var DEFAULT_CACHE_CONFIG = {
+  maxSize: 100,
+  maxAgeMs: 5 * 60 * 1e3,
+  // 5 minutes
+  autoCleanup: true,
+  cleanupIntervalMs: 60 * 1e3,
+  // 1 minute
+  memoryLimitBytes: 50 * 1024 * 1024,
+  // 50MB
+  persistToDisk: false
+};
+
+// src/types/export-types.ts
+function isOptionsForFormat(options, format2) {
+  if (!options || typeof options !== "object") {
+    return false;
+  }
+  return true;
+}
+var DEFAULT_EXPORT_OPTIONS = {
+  pdf: {
+    pageSize: "A4",
+    orientation: "portrait",
+    margins: { top: 20, right: 20, bottom: 20, left: 20 },
+    includeCharts: true,
+    chartTypes: ["weeklyVolume", "intensityDistribution"],
+    colorScheme: "default",
+    includeTableOfContents: true,
+    includePageNumbers: true,
+    detailLevel: "standard",
+    units: "metric",
+    includePaces: true,
+    includeHeartRates: true,
+    includePower: false
+  },
+  ical: {
+    calendarName: "Training Plan",
+    defaultEventDuration: 60,
+    includeLocation: false,
+    includeAlarms: true,
+    alarmSettings: {
+      minutesBefore: 30,
+      action: "DISPLAY"
+    },
+    includeWorkoutNotes: true,
+    includeTSSInTitle: true,
+    eventTitleFormat: "{type} - {duration}min",
+    detailLevel: "standard",
+    units: "metric",
+    includePaces: true,
+    includeHeartRates: true
+  },
+  csv: {
+    delimiter: ",",
+    quoteChar: '"',
+    includeHeaders: true,
+    dateFormat: "ISO",
+    numberFormat: {
+      decimalPlaces: 2,
+      thousandsSeparator: "",
+      decimalSeparator: "."
+    },
+    encoding: "utf-8",
+    includeSummary: false,
+    groupByWeek: false,
+    detailLevel: "standard",
+    units: "metric",
+    includePaces: true,
+    includeHeartRates: true
+  },
+  json: {
+    formatting: "pretty",
+    indentation: 2,
+    includeSchema: false,
+    includeMetadata: true,
+    metadataFields: ["exportDate", "generatorVersion", "planStatistics"],
+    dateFormat: "iso",
+    arrayFormat: "nested",
+    nullHandling: "omit",
+    includeChecksums: false,
+    detailLevel: "comprehensive",
+    units: "metric",
+    includePaces: true,
+    includeHeartRates: true,
+    includePower: true
+  }
+};
+function createExportOptions(format2, userOptions) {
+  const defaults = DEFAULT_EXPORT_OPTIONS[format2];
+  return { ...defaults, ...userOptions };
+}
+var EXPORT_OPTION_VALIDATORS = {
+  pdf: (options) => {
+    const errors = [];
+    if (!["A4", "letter", "legal", "A3"].includes(options.pageSize)) {
+      errors.push("Invalid page size for PDF export");
     }
-    weeks.get(weekStart).push(run);
-  });
-  const weeklyDistances = Array.from(weeks.values()).map(
-    (weekRuns) => weekRuns.reduce((sum, run) => sum + run.distance, 0)
-  );
-  const weeklyRunCounts = Array.from(weeks.values()).map((weekRuns) => weekRuns.length);
-  const dayFrequency = new Array(7).fill(0);
-  runs.forEach((run) => {
-    dayFrequency[run.date.getDay()]++;
-  });
-  const avgRunsPerWeek = runs.length / weeks.size;
-  const optimalDays = dayFrequency.map((count, day) => ({ day, count })).sort((a, b) => b.count - a.count).slice(0, Math.round(avgRunsPerWeek)).map((d) => d.day);
-  const longRuns = runs.filter((run) => run.distance > 15);
-  const longRunDays = new Array(7).fill(0);
-  longRuns.forEach((run) => {
-    longRunDays[run.date.getDay()]++;
-  });
-  const typicalLongRunDay = longRunDays.indexOf(Math.max(...longRunDays));
-  const expectedRuns = avgRunsPerWeek * weeks.size;
-  const actualRuns = runs.length;
-  const consistencyScore = Math.round(actualRuns / expectedRuns * 100);
+    if (options.margins) {
+      const { top, right, bottom, left } = options.margins;
+      if ([top, right, bottom, left].some((margin) => margin < 0 || margin > 100)) {
+        errors.push("PDF margins must be between 0 and 100mm");
+      }
+    }
+    if (options.customColors && options.colorScheme !== "custom") {
+      errors.push("Custom colors can only be used with custom color scheme");
+    }
+    return errors;
+  },
+  ical: (options) => {
+    const errors = [];
+    if (!options.calendarName || options.calendarName.trim().length === 0) {
+      errors.push("Calendar name is required for iCal export");
+    }
+    if (options.defaultEventDuration <= 0 || options.defaultEventDuration > 1440) {
+      errors.push("Default event duration must be between 1 and 1440 minutes");
+    }
+    if (options.alarmSettings && options.alarmSettings.minutesBefore < 0) {
+      errors.push("Alarm minutes before must be non-negative");
+    }
+    return errors;
+  },
+  csv: (options) => {
+    const errors = [];
+    if (!options.delimiter || ![",", ";", "	", "|"].includes(options.delimiter)) {
+      errors.push("Invalid CSV delimiter");
+    }
+    if (options.numberFormat && options.numberFormat.decimalPlaces < 0) {
+      errors.push("Decimal places must be non-negative");
+    }
+    if (options.customDateFormat && options.dateFormat !== "custom") {
+      errors.push(
+        "Custom date format can only be used with custom date format setting"
+      );
+    }
+    return errors;
+  },
+  json: (options) => {
+    const errors = [];
+    if (!["compact", "pretty", "minified"].includes(options.formatting)) {
+      errors.push("Invalid JSON formatting option");
+    }
+    if (options.formatting === "pretty" && options.indentation !== void 0) {
+      if (typeof options.indentation === "number" && options.indentation < 0) {
+        errors.push("JSON indentation must be non-negative");
+      }
+    }
+    if (options.compression?.enabled && options.compression.level !== void 0) {
+      if (options.compression.level < 1 || options.compression.level > 9) {
+        errors.push("Compression level must be between 1 and 9");
+      }
+    }
+    return errors;
+  }
+};
+function validateExportOptions(format2, options) {
+  const validator = EXPORT_OPTION_VALIDATORS[format2];
+  return validator(options);
+}
+
+// src/types/export-validation-types.ts
+function isBaseExportOptions(value) {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const obj = value;
+  const booleanProps = [
+    "includePaces",
+    "includeHeartRates",
+    "includePower",
+    "includePhilosophyPrinciples",
+    "includeResearchCitations",
+    "includeCoachBiography",
+    "includeMethodologyComparison",
+    "includeTrainingZoneExplanations",
+    "includeWorkoutRationale"
+  ];
+  for (const prop of booleanProps) {
+    if (prop in obj && typeof obj[prop] !== "boolean" && obj[prop] !== void 0) {
+      return false;
+    }
+  }
+  if ("timeZone" in obj && typeof obj.timeZone !== "string" && obj.timeZone !== void 0) {
+    return false;
+  }
+  if ("language" in obj && typeof obj.language !== "string" && obj.language !== void 0) {
+    return false;
+  }
+  if ("units" in obj && obj.units !== void 0 && !["metric", "imperial"].includes(obj.units)) {
+    return false;
+  }
+  if ("detailLevel" in obj && obj.detailLevel !== void 0 && !["basic", "standard", "comprehensive"].includes(obj.detailLevel)) {
+    return false;
+  }
+  return true;
+}
+function isPDFOptions(value) {
+  if (!isBaseExportOptions(value)) {
+    return false;
+  }
+  const obj = value;
+  if ("pageSize" in obj && obj.pageSize !== void 0 && !["A4", "letter", "legal", "A3"].includes(obj.pageSize)) {
+    return false;
+  }
+  if ("orientation" in obj && obj.orientation !== void 0 && !["portrait", "landscape"].includes(obj.orientation)) {
+    return false;
+  }
+  if ("margins" in obj && obj.margins !== void 0) {
+    const margins = obj.margins;
+    if (typeof margins !== "object" || margins === null) {
+      return false;
+    }
+    const marginObj = margins;
+    const marginProps = ["top", "right", "bottom", "left"];
+    for (const prop of marginProps) {
+      if (prop in marginObj && typeof marginObj[prop] !== "number") {
+        return false;
+      }
+    }
+  }
+  if ("includeImages" in obj && typeof obj.includeImages !== "boolean" && obj.includeImages !== void 0) {
+    return false;
+  }
+  return true;
+}
+function isiCalOptions(value) {
+  if (!isBaseExportOptions(value)) {
+    return false;
+  }
+  const obj = value;
+  if ("calendarName" in obj && typeof obj.calendarName !== "string" && obj.calendarName !== void 0) {
+    return false;
+  }
+  if ("organizer" in obj && obj.organizer !== void 0) {
+    const organizer = obj.organizer;
+    if (typeof organizer !== "object" || organizer === null) {
+      return false;
+    }
+    const orgObj = organizer;
+    if ("name" in orgObj && typeof orgObj.name !== "string") {
+      return false;
+    }
+    if ("email" in orgObj && typeof orgObj.email !== "string") {
+      return false;
+    }
+  }
+  if ("reminderMinutes" in obj && typeof obj.reminderMinutes !== "number" && obj.reminderMinutes !== void 0) {
+    return false;
+  }
+  if ("includeLocation" in obj && typeof obj.includeLocation !== "boolean" && obj.includeLocation !== void 0) {
+    return false;
+  }
+  return true;
+}
+function isCSVOptions(value) {
+  if (!isBaseExportOptions(value)) {
+    return false;
+  }
+  const obj = value;
+  if ("delimiter" in obj && typeof obj.delimiter !== "string" && obj.delimiter !== void 0) {
+    return false;
+  }
+  if ("includeHeaders" in obj && typeof obj.includeHeaders !== "boolean" && obj.includeHeaders !== void 0) {
+    return false;
+  }
+  if ("dateFormat" in obj && typeof obj.dateFormat !== "string" && obj.dateFormat !== void 0) {
+    return false;
+  }
+  if ("encoding" in obj && obj.encoding !== void 0 && !["utf-8", "utf-16", "ascii"].includes(obj.encoding)) {
+    return false;
+  }
+  return true;
+}
+function isJSONOptions(value) {
+  if (!isBaseExportOptions(value)) {
+    return false;
+  }
+  const obj = value;
+  if ("indent" in obj && typeof obj.indent !== "number" && obj.indent !== void 0) {
+    return false;
+  }
+  if ("includeSchema" in obj && typeof obj.includeSchema !== "boolean" && obj.includeSchema !== void 0) {
+    return false;
+  }
+  if ("prettify" in obj && typeof obj.prettify !== "boolean" && obj.prettify !== void 0) {
+    return false;
+  }
+  if ("compression" in obj && obj.compression !== void 0 && !["none", "gzip", "deflate"].includes(obj.compression)) {
+    return false;
+  }
+  return true;
+}
+function isValidTrainingPlan(value) {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const obj = value;
+  if (!("config" in obj) || typeof obj.config !== "object" || obj.config === null) {
+    return false;
+  }
+  if (!("workouts" in obj) || !Array.isArray(obj.workouts)) {
+    return false;
+  }
+  if (!("blocks" in obj) || !Array.isArray(obj.blocks)) {
+    return false;
+  }
+  if (!("summary" in obj) || typeof obj.summary !== "object" || obj.summary === null) {
+    return false;
+  }
+  for (const workout of obj.workouts) {
+    if (!isValidPlannedWorkout(workout)) {
+      return false;
+    }
+  }
+  return true;
+}
+function isValidPlannedWorkout(value) {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const obj = value;
+  const requiredStringProps = ["id", "name", "type"];
+  for (const prop of requiredStringProps) {
+    if (!(prop in obj) || typeof obj[prop] !== "string") {
+      return false;
+    }
+  }
+  if (!("date" in obj) || !(obj.date instanceof Date)) {
+    return false;
+  }
+  if (!("targetMetrics" in obj) || typeof obj.targetMetrics !== "object" || obj.targetMetrics === null) {
+    return false;
+  }
+  if (!("workout" in obj) || typeof obj.workout !== "object" || obj.workout === null) {
+    return false;
+  }
+  return true;
+}
+function createTypedPlanGuard() {
+  return (value) => {
+    return isValidTrainingPlan(value);
+  };
+}
+function createExportValidator(format2, optionsGuard, planGuard = createTypedPlanGuard()) {
   return {
-    avgWeeklyMileage: Math.round(
-      weeklyDistances.reduce((sum, d) => sum + d, 0) / weeklyDistances.length
+    format: format2,
+    validateOptions(options) {
+      const errors = [];
+      const warnings = [];
+      if (!optionsGuard(options)) {
+        errors.push(`Invalid ${format2} export options`);
+        return {
+          isValid: false,
+          errors,
+          warnings,
+          context: {
+            validatorName: `${format2}OptionsValidator`,
+            timestamp: /* @__PURE__ */ new Date(),
+            validatedProperties: []
+          }
+        };
+      }
+      return {
+        isValid: true,
+        validatedValue: options,
+        errors,
+        warnings,
+        context: {
+          validatorName: `${format2}OptionsValidator`,
+          timestamp: /* @__PURE__ */ new Date(),
+          validatedProperties: Object.keys(
+            options
+          )
+        }
+      };
+    },
+    validatePlan(plan) {
+      const errors = [];
+      const warnings = [];
+      if (!planGuard(plan)) {
+        errors.push(`Invalid training plan for ${format2} export`);
+        return {
+          isValid: false,
+          errors,
+          warnings,
+          context: {
+            validatorName: `${format2}PlanValidator`,
+            timestamp: /* @__PURE__ */ new Date(),
+            validatedProperties: []
+          }
+        };
+      }
+      return {
+        isValid: true,
+        validatedValue: plan,
+        errors,
+        warnings,
+        context: {
+          validatorName: `${format2}PlanValidator`,
+          timestamp: /* @__PURE__ */ new Date(),
+          validatedProperties: Object.keys(plan)
+        }
+      };
+    },
+    validateCompatibility(plan, options) {
+      const errors = [];
+      const warnings = [];
+      let compatible = true;
+      return {
+        isValid: compatible,
+        validatedValue: { plan, options, compatible },
+        errors,
+        warnings,
+        context: {
+          validatorName: `${format2}CompatibilityValidator`,
+          timestamp: /* @__PURE__ */ new Date(),
+          validatedProperties: ["plan", "options", "compatible"]
+        }
+      };
+    },
+    getSchema() {
+      return {
+        validate: (data) => {
+          if (optionsGuard(data)) {
+            return { success: true, data };
+          } else {
+            return {
+              success: false,
+              error: new TypeValidationError2(
+                `Invalid ${format2} export options`,
+                "VALIDATION_ERROR",
+                data
+              )
+            };
+          }
+        },
+        properties: {},
+        // This would be populated with actual property names in a real implementation
+        required: [],
+        name: `${format2}ExportOptionsSchema`
+      };
+    }
+  };
+}
+var EXPORT_VALIDATORS = {
+  pdf: createExportValidator("pdf", isPDFOptions),
+  ical: createExportValidator("ical", isiCalOptions),
+  csv: createExportValidator("csv", isCSVOptions),
+  json: createExportValidator("json", isJSONOptions)
+};
+function validateExport(format2, plan, options) {
+  const validator = EXPORT_VALIDATORS[format2];
+  if (!validator) {
+    return {
+      isValid: false,
+      errors: [`Unsupported export format: ${format2}`],
+      warnings: [],
+      context: {
+        validatorName: "masterExportValidator",
+        timestamp: /* @__PURE__ */ new Date(),
+        validatedProperties: []
+      }
+    };
+  }
+  const planValidation = validator.validatePlan(plan);
+  const optionsValidation = validator.validateOptions(options);
+  if (!planValidation.isValid || !optionsValidation.isValid) {
+    return {
+      isValid: false,
+      errors: [...planValidation.errors, ...optionsValidation.errors],
+      warnings: [...planValidation.warnings, ...optionsValidation.warnings],
+      context: {
+        validatorName: "masterExportValidator",
+        timestamp: /* @__PURE__ */ new Date(),
+        validatedProperties: []
+      }
+    };
+  }
+  return {
+    isValid: true,
+    validatedValue: {
+      plan: planValidation.validatedValue,
+      options: optionsValidation.validatedValue
+    },
+    errors: [],
+    warnings: [...planValidation.warnings, ...optionsValidation.warnings],
+    context: {
+      validatorName: "masterExportValidator",
+      timestamp: /* @__PURE__ */ new Date(),
+      validatedProperties: ["plan", "options"]
+    }
+  };
+}
+function createExportTypeGuard(name, validator) {
+  return {
+    check: validator,
+    name
+  };
+}
+
+// src/types/array-utilities.ts
+var TypedArray = class _TypedArray {
+  constructor(items, elementType = "unknown") {
+    this._items = [...items];
+    this._metadata = {
+      elementType,
+      created: /* @__PURE__ */ new Date(),
+      frozen: false
+    };
+  }
+  /**
+   * Get the underlying array (defensive copy)
+   */
+  get items() {
+    return [...this._items];
+  }
+  /**
+   * Get the length of the array
+   */
+  get length() {
+    return this._items.length;
+  }
+  /**
+   * Get array metadata
+   */
+  get metadata() {
+    return { ...this._metadata };
+  }
+  /**
+   * Type-safe map operation that preserves element type information
+   *
+   * @template U The mapped element type
+   * @param fn Transformation function
+   * @param targetType Optional type name for the resulting array
+   * @returns New TypedArray with transformed elements
+   */
+  map(fn, targetType) {
+    const mapped = this._items.map(fn);
+    return new _TypedArray(mapped, targetType || "mapped");
+  }
+  /**
+   * Type-safe filter operation that maintains element type
+   *
+   * @param predicate Filtering predicate function
+   * @returns New TypedArray with filtered elements
+   */
+  filter(predicate) {
+    const filtered = this._items.filter(predicate);
+    return new _TypedArray(filtered, this._metadata.elementType);
+  }
+  /**
+   * Type-safe reduce operation with proper type inference
+   *
+   * @template U The accumulator type
+   * @param fn Reducer function
+   * @param initialValue Initial accumulator value
+   * @returns Reduced value
+   */
+  reduce(fn, initialValue) {
+    return this._items.reduce(fn, initialValue);
+  }
+  /**
+   * Type-safe forEach operation for side effects
+   *
+   * @param fn Function to execute for each element
+   */
+  forEach(fn) {
+    this._items.forEach(fn);
+  }
+  /**
+   * Type-safe find operation
+   *
+   * @param predicate Search predicate
+   * @returns Found element or undefined
+   */
+  find(predicate) {
+    return this._items.find(predicate);
+  }
+  /**
+   * Type-safe some operation
+   *
+   * @param predicate Test predicate
+   * @returns Whether any element matches the predicate
+   */
+  some(predicate) {
+    return this._items.some(predicate);
+  }
+  /**
+   * Type-safe every operation
+   *
+   * @param predicate Test predicate
+   * @returns Whether all elements match the predicate
+   */
+  every(predicate) {
+    return this._items.every(predicate);
+  }
+  /**
+   * Safe array access with bounds checking
+   *
+   * @param index Array index
+   * @returns Element at index or undefined if out of bounds
+   */
+  at(index) {
+    return index >= 0 && index < this._items.length ? this._items[index] : void 0;
+  }
+  /**
+   * Type-safe slice operation
+   *
+   * @param start Start index
+   * @param end End index
+   * @returns New TypedArray with sliced elements
+   */
+  slice(start, end) {
+    const sliced = this._items.slice(start, end);
+    return new _TypedArray(sliced, this._metadata.elementType);
+  }
+  /**
+   * Convert to plain JavaScript array
+   *
+   * @returns Plain array copy
+   */
+  toArray() {
+    return [...this._items];
+  }
+  /**
+   * Convert to TypedCollection
+   *
+   * @returns TypedCollection representation
+   */
+  toCollection() {
+    return {
+      items: [...this._items],
+      count: this._items.length,
+      metadata: {
+        type: this._metadata.elementType,
+        indexed: false,
+        createdAt: this._metadata.created,
+        updatedAt: /* @__PURE__ */ new Date()
+      }
+    };
+  }
+  /**
+   * Create a TypedArray from a regular array
+   *
+   * @template T The element type
+   * @param items Source array
+   * @param elementType Type name for metadata
+   * @returns New TypedArray instance
+   */
+  static from(items, elementType) {
+    return new _TypedArray(items, elementType);
+  }
+  /**
+   * Create an empty TypedArray
+   *
+   * @template T The element type
+   * @param elementType Type name for metadata
+   * @returns Empty TypedArray instance
+   */
+  static empty(elementType) {
+    return new _TypedArray([], elementType);
+  }
+};
+var ArrayUtils = class {
+  /**
+   * Type-safe map with error handling
+   * Maps over an array and collects both successes and failures
+   *
+   * @template T Input element type
+   * @template U Output element type
+   * @param items Input array
+   * @param fn Transformation function
+   * @param options Transformation options
+   * @returns CollectionResult with successes and failures
+   */
+  static safeMap(items, fn, options = {}) {
+    const successes = [];
+    const failures = [];
+    const { continueOnError = true, errorHandler } = options;
+    for (let i = 0; i < items.length; i++) {
+      try {
+        const result = fn(items[i], i);
+        successes.push(result);
+      } catch (error) {
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        failures.push({ item: items[i], error: errorObj });
+        if (errorHandler) {
+          errorHandler(error, items[i], i);
+        }
+        if (!continueOnError) {
+          break;
+        }
+      }
+    }
+    const total = items.length;
+    const successCount = successes.length;
+    const failureCount = failures.length;
+    return {
+      successes,
+      failures,
+      summary: {
+        total,
+        successCount,
+        failureCount,
+        successRate: total > 0 ? successCount / total * 100 : 0
+      }
+    };
+  }
+  /**
+   * Type-safe filter with error handling
+   * Filters an array and tracks any predicate errors
+   *
+   * @template T Element type
+   * @param items Input array
+   * @param predicate Filter predicate
+   * @param options Filter options
+   * @returns CollectionResult with filtered items and errors
+   */
+  static safeFilter(items, predicate, options = {}) {
+    const successes = [];
+    const failures = [];
+    const { continueOnError = true, errorHandler } = options;
+    for (let i = 0; i < items.length; i++) {
+      try {
+        if (predicate(items[i], i)) {
+          successes.push(items[i]);
+        }
+      } catch (error) {
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        failures.push({ item: items[i], error: errorObj });
+        if (errorHandler) {
+          errorHandler(error, items[i], i);
+        }
+        if (!continueOnError) {
+          break;
+        }
+      }
+    }
+    const total = items.length;
+    const successCount = successes.length;
+    const failureCount = failures.length;
+    return {
+      successes,
+      failures,
+      summary: {
+        total,
+        successCount,
+        failureCount,
+        successRate: total > 0 ? successCount / total * 100 : 0
+      }
+    };
+  }
+  /**
+   * Partition an array into chunks of specified size
+   * Maintains type safety while chunking arrays
+   *
+   * @template T Element type
+   * @param items Input array
+   * @param chunkSize Size of each chunk
+   * @returns Array of chunks
+   */
+  static chunk(items, chunkSize) {
+    if (chunkSize <= 0) {
+      throw new TypeValidationError2(
+        "Chunk size must be positive",
+        "positive number",
+        chunkSize,
+        "array-chunking"
+      );
+    }
+    const chunks = [];
+    for (let i = 0; i < items.length; i += chunkSize) {
+      chunks.push(items.slice(i, i + chunkSize));
+    }
+    return chunks;
+  }
+  /**
+   * Group array elements by a key function
+   * Creates a Map with type-safe grouping
+   *
+   * @template T Element type
+   * @template K Key type
+   * @param items Input array
+   * @param keyFn Function to extract grouping key
+   * @returns Map of grouped elements
+   */
+  static groupBy(items, keyFn) {
+    const groups = /* @__PURE__ */ new Map();
+    for (const item of items) {
+      const key = keyFn(item);
+      const existing = groups.get(key);
+      if (existing) {
+        existing.push(item);
+      } else {
+        groups.set(key, [item]);
+      }
+    }
+    return groups;
+  }
+  /**
+   * Remove duplicate elements from an array
+   * Uses a key function for complex deduplication logic
+   *
+   * @template T Element type
+   * @template K Key type for deduplication
+   * @param items Input array
+   * @param keyFn Function to extract comparison key
+   * @returns Deduplicated array
+   */
+  static uniqueBy(items, keyFn) {
+    const seen = /* @__PURE__ */ new Set();
+    const unique = [];
+    for (const item of items) {
+      const key = keyFn(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(item);
+      }
+    }
+    return unique;
+  }
+  /**
+   * Flatten nested arrays while preserving type safety
+   *
+   * @template T Element type
+   * @param items Array of arrays
+   * @returns Flattened array
+   */
+  static flatten(items) {
+    return items.flat();
+  }
+  /**
+   * Type-safe array intersection
+   * Finds elements that exist in all provided arrays
+   *
+   * @template T Element type
+   * @param arrays Arrays to intersect
+   * @param keyFn Function to extract comparison key
+   * @returns Array of intersecting elements
+   */
+  static intersection(arrays, keyFn) {
+    if (arrays.length === 0) return [];
+    if (arrays.length === 1) return [...arrays[0]];
+    const [first, ...rest] = arrays;
+    const intersection = [];
+    for (const item of first) {
+      const key = keyFn(item);
+      const existsInAll = rest.every(
+        (arr) => arr.some((otherItem) => keyFn(otherItem) === key)
+      );
+      if (existsInAll) {
+        intersection.push(item);
+      }
+    }
+    return intersection;
+  }
+  /**
+   * Type-safe array union
+   * Combines arrays while removing duplicates
+   *
+   * @template T Element type
+   * @template K Key type for deduplication
+   * @param arrays Arrays to unite
+   * @param keyFn Function to extract comparison key
+   * @returns Union array without duplicates
+   */
+  static union(arrays, keyFn) {
+    const combined = arrays.flat();
+    return this.uniqueBy(combined, keyFn);
+  }
+  /**
+   * Check if an array is properly typed (not containing any)
+   * Runtime validation for array type safety
+   *
+   * @param items Array to check
+   * @param typeName Expected type name for error messages
+   * @returns TypedResult indicating if array is properly typed
+   */
+  static validateTypedArray(items, typeName) {
+    if (!Array.isArray(items)) {
+      return {
+        success: false,
+        error: new TypeValidationError2(
+          "Expected array",
+          "Array",
+          items,
+          "array-validation"
+        )
+      };
+    }
+    const anyIndices = items.map((item, index) => ({ item, index })).filter(({ item }) => item === void 0 || item === null).map(({ index }) => index);
+    if (anyIndices.length > 0) {
+      return {
+        success: false,
+        error: new TypeValidationError2(
+          `Array contains undefined/null values at indices: ${anyIndices.join(", ")}`,
+          typeName,
+          items,
+          "array-type-validation"
+        )
+      };
+    }
+    return { success: true, data: items };
+  }
+};
+var FunctionalArrayUtils = class {
+  /**
+   * Create a type-safe compose function for array transformations
+   *
+   * @template T Input type
+   * @template U Intermediate type
+   * @template V Output type
+   * @param fn1 First transformation function
+   * @param fn2 Second transformation function
+   * @returns Composed transformation function
+   */
+  static compose(fn1, fn2) {
+    return (items) => fn2(fn1(items));
+  }
+  /**
+   * Create a curried map function
+   *
+   * @template T Input element type
+   * @template U Output element type
+   * @param fn Transformation function
+   * @returns Curried map function
+   */
+  static map(fn) {
+    return (items) => items.map(fn);
+  }
+  /**
+   * Create a curried filter function
+   *
+   * @template T Element type
+   * @param predicate Filter predicate
+   * @returns Curried filter function
+   */
+  static filter(predicate) {
+    return (items) => items.filter(predicate);
+  }
+  /**
+   * Create a pipeline of array transformations
+   *
+   * @template T Input type
+   * @param transformations Array of transformation functions
+   * @returns Single transformation function that applies all transformations
+   */
+  static pipeline(...transformations) {
+    return (items) => transformations.reduce((acc, fn) => fn(acc), items);
+  }
+};
+var CollectionBuilder = class _CollectionBuilder {
+  constructor(elementType = "unknown") {
+    this.items = [];
+    this.elementType = elementType;
+  }
+  /**
+   * Add a single item to the collection
+   */
+  add(item) {
+    this.items.push(item);
+    return this;
+  }
+  /**
+   * Add multiple items to the collection
+   */
+  addAll(items) {
+    this.items.push(...items);
+    return this;
+  }
+  /**
+   * Add an item conditionally
+   */
+  addIf(condition, item) {
+    if (condition) {
+      this.items.push(item);
+    }
+    return this;
+  }
+  /**
+   * Transform and add items
+   */
+  addMapped(sourceItems, mapFn) {
+    const mapped = sourceItems.map(mapFn);
+    this.items.push(...mapped);
+    return this;
+  }
+  /**
+   * Clear all items
+   */
+  clear() {
+    this.items = [];
+    return this;
+  }
+  /**
+   * Build the final TypedArray
+   */
+  build() {
+    return new TypedArray([...this.items], this.elementType);
+  }
+  /**
+   * Build as TypedCollection
+   */
+  buildCollection() {
+    return {
+      items: [...this.items],
+      count: this.items.length,
+      metadata: {
+        type: this.elementType,
+        indexed: false,
+        createdAt: /* @__PURE__ */ new Date(),
+        updatedAt: /* @__PURE__ */ new Date()
+      }
+    };
+  }
+  /**
+   * Build as plain array
+   */
+  buildArray() {
+    return [...this.items];
+  }
+  /**
+   * Create a new builder
+   */
+  static create(elementType) {
+    return new _CollectionBuilder(elementType);
+  }
+};
+var ArrayTypeAssertions = class {
+  /**
+   * Assert that an array contains only elements of a specific type
+   *
+   * @template T Expected element type
+   * @param items Array to validate
+   * @param typeGuard Type guard function
+   * @param typeName Type name for error messages
+   * @returns TypedResult with validated array or error
+   */
+  static assertElementType(items, typeGuard, typeName) {
+    if (!Array.isArray(items)) {
+      return {
+        success: false,
+        error: new TypeValidationError2(
+          "Expected array",
+          "Array",
+          items,
+          "array-type-assertion"
+        )
+      };
+    }
+    const invalidItems = [];
+    for (let i = 0; i < items.length; i++) {
+      if (!typeGuard(items[i])) {
+        invalidItems.push({ index: i, item: items[i] });
+      }
+    }
+    if (invalidItems.length > 0) {
+      const invalidIndices = invalidItems.map(({ index }) => index).join(", ");
+      return {
+        success: false,
+        error: new TypeValidationError2(
+          `Array contains invalid ${typeName} elements at indices: ${invalidIndices}`,
+          `${typeName}[]`,
+          items,
+          "array-element-type-validation"
+        )
+      };
+    }
+    return { success: true, data: items };
+  }
+  /**
+   * Assert minimum array length
+   *
+   * @template T Element type
+   * @param items Array to validate
+   * @param minLength Minimum required length
+   * @returns TypedResult with validated array or error
+   */
+  static assertMinLength(items, minLength) {
+    if (items.length < minLength) {
+      return {
+        success: false,
+        error: new TypeValidationError2(
+          `Array length ${items.length} is less than required minimum ${minLength}`,
+          `Array with min length ${minLength}`,
+          items,
+          "array-length-validation"
+        )
+      };
+    }
+    return { success: true, data: items };
+  }
+  /**
+   * Assert maximum array length
+   *
+   * @template T Element type
+   * @param items Array to validate
+   * @param maxLength Maximum allowed length
+   * @returns TypedResult with validated array or error
+   */
+  static assertMaxLength(items, maxLength) {
+    if (items.length > maxLength) {
+      return {
+        success: false,
+        error: new TypeValidationError2(
+          `Array length ${items.length} exceeds maximum allowed ${maxLength}`,
+          `Array with max length ${maxLength}`,
+          items,
+          "array-length-validation"
+        )
+      };
+    }
+    return { success: true, data: items };
+  }
+};
+
+// src/types/type-guards.ts
+var primitiveGuards = {
+  isString: (value) => typeof value === "string",
+  isNumber: (value) => typeof value === "number" && !isNaN(value),
+  isBoolean: (value) => typeof value === "boolean",
+  isDate: (value) => value instanceof Date && !isNaN(value.getTime()),
+  isArray: (value, elementGuard) => {
+    if (!Array.isArray(value)) return false;
+    if (!elementGuard) return true;
+    return value.every(elementGuard);
+  },
+  isObject: (value) => typeof value === "object" && value !== null && !Array.isArray(value),
+  isNonEmptyString: (value) => typeof value === "string" && value.trim().length > 0,
+  isPositiveNumber: (value) => typeof value === "number" && !isNaN(value) && value > 0,
+  isNonNegativeNumber: (value) => typeof value === "number" && !isNaN(value) && value >= 0
+};
+function createValidationGuard(typeGuard, typeName, getValidationErrors) {
+  return {
+    check: typeGuard,
+    name: typeName,
+    validateWithContext: (value, context) => {
+      if (typeGuard(value)) {
+        return { success: true, data: value };
+      }
+      const errors = getValidationErrors ? getValidationErrors(value) : [`Expected ${typeName}`];
+      const errorMessage = errors.join("; ");
+      const validationError = new TypeValidationError2(
+        errorMessage,
+        typeName,
+        value,
+        context
+      );
+      return { success: false, error: validationError };
+    },
+    isValid: (value) => typeGuard(value),
+    getValidationErrors: getValidationErrors || ((value) => typeGuard(value) ? [] : [`Expected ${typeName}, got ${typeof value}`])
+  };
+}
+function createSchemaGuard(typeName, requiredProperties, optionalProperties = [], propertyValidators = {}) {
+  const typeGuard = (value) => {
+    if (!primitiveGuards.isObject(value)) return false;
+    for (const prop of requiredProperties) {
+      if (!(prop in value)) return false;
+      const validator = propertyValidators[prop];
+      if (validator && !validator(value[prop])) return false;
+    }
+    for (const prop of optionalProperties) {
+      if (prop in value) {
+        const validator = propertyValidators[prop];
+        if (validator && !validator(value[prop])) return false;
+      }
+    }
+    return true;
+  };
+  const getValidationErrors = (value) => {
+    const errors = [];
+    if (!primitiveGuards.isObject(value)) {
+      errors.push(`Expected object, got ${typeof value}`);
+      return errors;
+    }
+    for (const prop of requiredProperties) {
+      if (!(prop in value)) {
+        errors.push(`Missing required property: ${String(prop)}`);
+      } else {
+        const validator = propertyValidators[prop];
+        if (validator && !validator(value[prop])) {
+          errors.push(`Invalid value for property: ${String(prop)}`);
+        }
+      }
+    }
+    for (const prop of optionalProperties) {
+      if (prop in value) {
+        const validator = propertyValidators[prop];
+        if (validator && !validator(value[prop])) {
+          errors.push(`Invalid value for optional property: ${String(prop)}`);
+        }
+      }
+    }
+    return errors;
+  };
+  return {
+    check: typeGuard,
+    name: typeName,
+    requiredProperties,
+    optionalProperties,
+    propertyValidators,
+    validateWithContext: (value, context) => {
+      if (typeGuard(value)) {
+        return { success: true, data: value };
+      }
+      const errors = getValidationErrors(value);
+      const errorMessage = errors.join("; ");
+      const validationError = new TypeValidationError2(
+        errorMessage,
+        typeName,
+        value,
+        context
+      );
+      return { success: false, error: validationError };
+    },
+    isValid: typeGuard,
+    getValidationErrors
+  };
+}
+var isFitnessAssessment = createSchemaGuard(
+  "FitnessAssessment",
+  [
+    "vdot",
+    "criticalSpeed",
+    "lactateThreshold",
+    "runningEconomy",
+    "weeklyMileage",
+    "longestRecentRun",
+    "trainingAge",
+    "injuryHistory",
+    "recoveryRate"
+  ],
+  [],
+  {
+    vdot: primitiveGuards.isPositiveNumber,
+    criticalSpeed: primitiveGuards.isPositiveNumber,
+    lactateThreshold: primitiveGuards.isPositiveNumber,
+    runningEconomy: primitiveGuards.isPositiveNumber,
+    weeklyMileage: primitiveGuards.isNonNegativeNumber,
+    longestRecentRun: primitiveGuards.isNonNegativeNumber,
+    trainingAge: primitiveGuards.isNonNegativeNumber,
+    injuryHistory: (value) => primitiveGuards.isArray(value, primitiveGuards.isString),
+    recoveryRate: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100
+  }
+);
+var isTrainingPreferences = createSchemaGuard(
+  "TrainingPreferences",
+  [
+    "availableDays",
+    "preferredIntensity",
+    "crossTraining",
+    "strengthTraining",
+    "timeConstraints"
+  ],
+  [],
+  {
+    availableDays: (value) => primitiveGuards.isArray(value, primitiveGuards.isNumber),
+    preferredIntensity: (value) => typeof value === "string" && ["low", "moderate", "high"].includes(value),
+    crossTraining: primitiveGuards.isBoolean,
+    strengthTraining: primitiveGuards.isBoolean,
+    timeConstraints: (value) => {
+      if (!primitiveGuards.isObject(value)) return false;
+      return Object.values(value).every(primitiveGuards.isNumber);
+    }
+  }
+);
+var isEnvironmentalFactors = createSchemaGuard(
+  "EnvironmentalFactors",
+  ["altitude", "typicalTemperature", "humidity", "terrain"],
+  [],
+  {
+    altitude: primitiveGuards.isNumber,
+    typicalTemperature: primitiveGuards.isNumber,
+    humidity: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100,
+    terrain: (value) => typeof value === "string" && ["flat", "hilly", "mixed", "mountainous"].includes(value)
+  }
+);
+var isTrainingPlanConfig = createSchemaGuard(
+  "TrainingPlanConfig",
+  [
+    "name",
+    "goal",
+    "startDate",
+    "targetDate",
+    "currentFitness",
+    "preferences",
+    "environment"
+  ],
+  ["description"],
+  {
+    name: primitiveGuards.isNonEmptyString,
+    description: primitiveGuards.isString,
+    goal: primitiveGuards.isNonEmptyString,
+    startDate: primitiveGuards.isDate,
+    targetDate: primitiveGuards.isDate,
+    currentFitness: (value) => isFitnessAssessment.check(value),
+    preferences: (value) => isTrainingPreferences.check(value),
+    environment: (value) => isEnvironmentalFactors.check(value)
+  }
+);
+var isTargetRace = createSchemaGuard(
+  "TargetRace",
+  [
+    "distance",
+    "date",
+    "goalTime",
+    "priority",
+    "location",
+    "terrain",
+    "conditions"
+  ],
+  [],
+  {
+    distance: primitiveGuards.isNonEmptyString,
+    date: primitiveGuards.isDate,
+    goalTime: (value) => {
+      if (!primitiveGuards.isObject(value)) return false;
+      const time = value;
+      return primitiveGuards.isNonNegativeNumber(time.hours) && primitiveGuards.isNonNegativeNumber(time.minutes) && primitiveGuards.isNonNegativeNumber(time.seconds);
+    },
+    priority: (value) => typeof value === "string" && ["A", "B", "C"].includes(value),
+    location: primitiveGuards.isString,
+    terrain: (value) => typeof value === "string" && ["road", "trail", "track", "mixed"].includes(value),
+    conditions: (value) => isEnvironmentalFactors.check(value)
+  }
+);
+var isAdvancedPlanConfig = createSchemaGuard(
+  "AdvancedPlanConfig",
+  [
+    "name",
+    "goal",
+    "startDate",
+    "targetDate",
+    "currentFitness",
+    "preferences",
+    "environment",
+    "methodology",
+    "intensityDistribution",
+    "periodization",
+    "targetRaces"
+  ],
+  [
+    "description",
+    "seasonGoals",
+    "adaptationEnabled",
+    "recoveryMonitoring",
+    "progressTracking",
+    "exportFormats",
+    "platformIntegrations",
+    "multiRaceConfig",
+    "adaptationSettings"
+  ],
+  {
+    ...isTrainingPlanConfig.propertyValidators,
+    methodology: (value) => typeof value === "string" && ["daniels", "lydiard", "pfitzinger", "hanson", "custom"].includes(value),
+    intensityDistribution: (value) => {
+      if (!primitiveGuards.isObject(value)) return false;
+      const dist = value;
+      return primitiveGuards.isNumber(dist.easy) && primitiveGuards.isNumber(dist.moderate) && primitiveGuards.isNumber(dist.hard);
+    },
+    periodization: (value) => typeof value === "string" && ["linear", "block", "undulating"].includes(value),
+    targetRaces: (value) => primitiveGuards.isArray(
+      value,
+      (item) => isTargetRace.check(item)
     ),
-    maxWeeklyMileage: Math.round(Math.max(...weeklyDistances)),
-    avgRunsPerWeek: Math.round(avgRunsPerWeek * 10) / 10,
-    consistencyScore: Math.min(100, consistencyScore),
-    optimalDays,
-    typicalLongRunDay
-  };
-}
-function calculateFitnessMetrics(runs) {
-  const vdot = calculateVDOT(runs);
-  const criticalSpeed = calculateCriticalSpeed(runs);
-  const runningEconomy = estimateRunningEconomy(runs);
-  const lactateThreshold = calculateLactateThreshold(vdot);
-  const thresholdPace = 60 / lactateThreshold;
-  const trainingLoad = calculateTrainingLoad(runs, thresholdPace);
-  const recoveryScore = calculateRecoveryScore(runs);
-  const weeklyPatterns = analyzeWeeklyPatterns(runs);
-  const recentWeekMileage = runs.filter((run) => run.date > new Date(Date.now() - 7 * 24 * 60 * 60 * 1e3)).reduce((sum, run) => sum + run.distance, 0);
-  const weeklyIncrease = weeklyPatterns.avgWeeklyMileage > 0 ? (recentWeekMileage - weeklyPatterns.avgWeeklyMileage) / weeklyPatterns.avgWeeklyMileage * 100 : 0;
-  const injuryRisk = calculateInjuryRisk(trainingLoad, weeklyIncrease, recoveryScore);
-  return {
-    vdot,
-    criticalSpeed,
-    runningEconomy,
-    lactateThreshold,
-    trainingLoad,
-    injuryRisk,
-    recoveryScore
-  };
-}
-
-// src/constants.ts
-var ADAPTATION_TIMELINE = {
-  neuromuscular: 7,
-  anaerobic: 14,
-  aerobic_power: 21,
-  aerobic_capacity: 28,
-  mitochondrial: 42,
-  capillarization: 56
-};
-var PHASE_DURATION = {
-  base: { min: 4, max: 12, optimal: 8 },
-  build: { min: 3, max: 8, optimal: 6 },
-  peak: { min: 2, max: 4, optimal: 3 },
-  taper: { min: 1, max: 3, optimal: 2 },
-  recovery: { min: 1, max: 2, optimal: 1 }
-};
-var INTENSITY_MODELS = {
-  polarized: { easy: 80, moderate: 5, hard: 15 },
-  pyramidal: { easy: 70, moderate: 20, hard: 10 },
-  threshold: { easy: 60, moderate: 30, hard: 10 }
-};
-var PROGRESSION_RATES = {
-  beginner: 0.05,
-  // 5% weekly increase
-  intermediate: 0.08,
-  // 8% weekly increase
-  advanced: 0.1,
-  // 10% weekly increase
-  maxSingleWeek: 0.2
-  // 20% max in any single week
-};
-var RECOVERY_MULTIPLIERS = {
-  recovery: 0.5,
-  easy: 1,
-  steady: 1.5,
-  tempo: 2,
-  threshold: 3,
-  vo2max: 4,
-  speed: 3.5,
-  race: 5
-};
-var LOAD_THRESHOLDS = {
-  acute_chronic_ratio: {
-    veryLow: 0.8,
-    low: 1,
-    optimal: 1.25,
-    high: 1.5,
-    veryHigh: 2
-  },
-  weekly_tss: {
-    recovery: 300,
-    maintenance: 500,
-    productive: 700,
-    overreaching: 900,
-    risky: 1200
+    adaptationEnabled: primitiveGuards.isBoolean,
+    recoveryMonitoring: primitiveGuards.isBoolean,
+    progressTracking: primitiveGuards.isBoolean,
+    exportFormats: (value) => primitiveGuards.isArray(
+      value,
+      (item) => typeof item === "string" && ["pdf", "ical", "csv", "json"].includes(item)
+    )
   }
-};
-var WORKOUT_DURATIONS = {
-  recovery: { min: 20, max: 40, typical: 30 },
-  easy: { min: 30, max: 90, typical: 60 },
-  steady: { min: 40, max: 80, typical: 60 },
-  tempo: { min: 20, max: 60, typical: 40 },
-  threshold: { min: 20, max: 40, typical: 30 },
-  intervals: { min: 30, max: 60, typical: 45 },
-  long_run: { min: 60, max: 180, typical: 120 }
-};
-var RACE_DISTANCES = {
-  "5K": 5,
-  "10K": 10,
-  "HALF_MARATHON": 21.0975,
-  "MARATHON": 42.195,
-  "50K": 50,
-  "50_MILE": 80.4672,
-  "100K": 100,
-  "100_MILE": 160.9344
-};
-var ENVIRONMENTAL_FACTORS = {
-  altitude: {
-    seaLevel: 1,
-    moderate: 0.98,
-    // 1000-2000m
-    high: 0.94,
-    // 2000-3000m
-    veryHigh: 0.88
-    // >3000m
-  },
-  temperature: {
-    cold: 0.98,
-    // <5°C
-    cool: 1,
-    // 5-15°C
-    warm: 0.97,
-    // 15-25°C
-    hot: 0.92
-    // >25°C
-  },
-  humidity: {
-    low: 1,
-    // <40%
-    moderate: 0.98,
-    // 40-60%
-    high: 0.95
-    // >60%
+);
+var isPlannedWorkout = createSchemaGuard(
+  "PlannedWorkout",
+  ["id", "date", "type", "name", "targetMetrics", "workout"],
+  ["description"],
+  {
+    id: primitiveGuards.isNonEmptyString,
+    date: primitiveGuards.isDate,
+    type: primitiveGuards.isNonEmptyString,
+    name: primitiveGuards.isNonEmptyString,
+    description: primitiveGuards.isString,
+    targetMetrics: (value) => {
+      if (!primitiveGuards.isObject(value)) return false;
+      const metrics = value;
+      return primitiveGuards.isPositiveNumber(metrics.duration) && primitiveGuards.isPositiveNumber(metrics.distance) && primitiveGuards.isPositiveNumber(metrics.intensity);
+    },
+    workout: primitiveGuards.isObject
   }
-};
-var TRAINING_METHODOLOGIES = {
-  daniels: {
-    name: "Jack Daniels",
-    intensityDistribution: { easy: 80, moderate: 10, hard: 10 },
-    workoutPriorities: ["tempo", "vo2max", "threshold", "easy", "long_run"],
-    recoveryEmphasis: 0.7,
-    phaseTransitions: {
-      base: { duration: 8, focus: "aerobic" },
-      build: { duration: 6, focus: "threshold" },
-      peak: { duration: 3, focus: "vo2max" },
-      taper: { duration: 2, focus: "maintenance" }
+);
+var isCompletedWorkout = createSchemaGuard(
+  "CompletedWorkout",
+  [
+    "plannedWorkout",
+    "actualDuration",
+    "actualDistance",
+    "actualPace",
+    "avgHeartRate",
+    "maxHeartRate",
+    "completionRate",
+    "adherence",
+    "difficultyRating"
+  ],
+  [],
+  {
+    plannedWorkout: (value) => isPlannedWorkout.check(value),
+    actualDuration: primitiveGuards.isPositiveNumber,
+    actualDistance: primitiveGuards.isPositiveNumber,
+    actualPace: primitiveGuards.isPositiveNumber,
+    avgHeartRate: primitiveGuards.isPositiveNumber,
+    maxHeartRate: primitiveGuards.isPositiveNumber,
+    completionRate: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 1,
+    adherence: (value) => typeof value === "string" && ["none", "partial", "complete"].includes(value),
+    difficultyRating: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10
+  }
+);
+var isRecoveryMetrics = createSchemaGuard(
+  "RecoveryMetrics",
+  [
+    "recoveryScore",
+    "sleepQuality",
+    "sleepDuration",
+    "stressLevel",
+    "muscleSoreness",
+    "energyLevel",
+    "motivation"
+  ],
+  [],
+  {
+    recoveryScore: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100,
+    sleepQuality: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100,
+    sleepDuration: primitiveGuards.isPositiveNumber,
+    stressLevel: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100,
+    muscleSoreness: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10,
+    energyLevel: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10,
+    motivation: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10
+  }
+);
+var isProgressData = createSchemaGuard(
+  "ProgressData",
+  ["date", "perceivedExertion", "heartRateData", "performanceMetrics"],
+  ["completedWorkouts", "notes"],
+  {
+    date: primitiveGuards.isDate,
+    perceivedExertion: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10,
+    heartRateData: (value) => {
+      if (!primitiveGuards.isObject(value)) return false;
+      const hrData = value;
+      return primitiveGuards.isPositiveNumber(hrData.resting) && primitiveGuards.isPositiveNumber(hrData.average) && primitiveGuards.isPositiveNumber(hrData.maximum);
+    },
+    performanceMetrics: (value) => {
+      if (!primitiveGuards.isObject(value)) return false;
+      const metrics = value;
+      return primitiveGuards.isPositiveNumber(metrics.vo2max) && primitiveGuards.isPositiveNumber(metrics.lactateThreshold) && primitiveGuards.isPositiveNumber(metrics.runningEconomy);
+    },
+    completedWorkouts: (value) => primitiveGuards.isArray(
+      value,
+      (item) => isCompletedWorkout.check(item)
+    ),
+    notes: primitiveGuards.isString
+  }
+);
+var isRunData = createSchemaGuard(
+  "RunData",
+  [
+    "date",
+    "distance",
+    "duration",
+    "avgPace",
+    "avgHeartRate",
+    "maxHeartRate",
+    "elevation",
+    "effortLevel",
+    "notes",
+    "temperature",
+    "isRace"
+  ],
+  [],
+  {
+    date: primitiveGuards.isDate,
+    distance: primitiveGuards.isPositiveNumber,
+    duration: primitiveGuards.isPositiveNumber,
+    avgPace: primitiveGuards.isPositiveNumber,
+    avgHeartRate: primitiveGuards.isPositiveNumber,
+    maxHeartRate: primitiveGuards.isPositiveNumber,
+    elevation: primitiveGuards.isNumber,
+    effortLevel: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10,
+    notes: primitiveGuards.isString,
+    temperature: primitiveGuards.isNumber,
+    isRace: primitiveGuards.isBoolean
+  }
+);
+var isTrainingBlock = createSchemaGuard(
+  "TrainingBlock",
+  ["id", "phase", "startDate", "endDate", "weeks", "focusAreas", "microcycles"],
+  [],
+  {
+    id: primitiveGuards.isNonEmptyString,
+    phase: (value) => typeof value === "string" && ["base", "build", "peak", "taper", "recovery"].includes(value),
+    startDate: primitiveGuards.isDate,
+    endDate: primitiveGuards.isDate,
+    weeks: primitiveGuards.isPositiveNumber,
+    focusAreas: (value) => primitiveGuards.isArray(value, primitiveGuards.isString),
+    microcycles: primitiveGuards.isArray
+  }
+);
+var isTrainingPlan = createSchemaGuard(
+  "TrainingPlan",
+  ["config", "blocks", "summary", "workouts"],
+  ["id"],
+  {
+    id: primitiveGuards.isString,
+    config: (value) => isTrainingPlanConfig.check(value),
+    blocks: (value) => primitiveGuards.isArray(
+      value,
+      (item) => isTrainingBlock.check(item)
+    ),
+    summary: primitiveGuards.isObject,
+    workouts: (value) => primitiveGuards.isArray(
+      value,
+      (item) => isPlannedWorkout.check(item)
+    )
+  }
+);
+var validationUtils = {
+  /**
+   * Safely validate and cast unknown value to specific type
+   */
+  safeCast: (value, guard, context) => {
+    return guard.validateWithContext(value, context);
+  },
+  /**
+   * Assert that value is of specific type, throw if not
+   */
+  assertType: (value, guard, context) => {
+    const result = guard.validateWithContext(value, context);
+    if (!result.success) {
+      throw result.error;
     }
   },
-  lydiard: {
-    name: "Arthur Lydiard",
-    intensityDistribution: { easy: 85, moderate: 10, hard: 5 },
-    workoutPriorities: ["easy", "steady", "long_run", "hill_repeats", "tempo"],
-    recoveryEmphasis: 0.9,
-    phaseTransitions: {
-      base: { duration: 12, focus: "aerobic" },
-      build: { duration: 4, focus: "hills" },
-      peak: { duration: 4, focus: "speed" },
-      taper: { duration: 2, focus: "maintenance" }
-    }
+  /**
+   * Check if value matches type without throwing
+   */
+  isType: (value, guard) => {
+    return guard.isValid(value);
   },
-  pfitzinger: {
-    name: "Pete Pfitzinger",
-    intensityDistribution: { easy: 75, moderate: 15, hard: 10 },
-    workoutPriorities: ["threshold", "long_run", "tempo", "vo2max", "easy"],
-    recoveryEmphasis: 0.8,
-    phaseTransitions: {
-      base: { duration: 6, focus: "aerobic" },
-      build: { duration: 8, focus: "threshold" },
-      peak: { duration: 3, focus: "race_pace" },
-      taper: { duration: 2, focus: "maintenance" }
-    }
+  /**
+   * Get validation errors for a value
+   */
+  getErrors: (value, guard) => {
+    return guard.getValidationErrors(value);
   },
-  hudson: {
-    name: "Brad Hudson",
-    intensityDistribution: { easy: 70, moderate: 20, hard: 10 },
-    workoutPriorities: ["tempo", "fartlek", "long_run", "vo2max", "easy"],
-    recoveryEmphasis: 0.75,
-    phaseTransitions: {
-      base: { duration: 8, focus: "aerobic" },
-      build: { duration: 6, focus: "tempo" },
-      peak: { duration: 4, focus: "race_pace" },
-      taper: { duration: 2, focus: "maintenance" }
-    }
-  },
-  custom: {
-    name: "Custom",
-    intensityDistribution: { easy: 75, moderate: 15, hard: 10 },
-    workoutPriorities: ["easy", "tempo", "long_run", "vo2max", "threshold"],
-    recoveryEmphasis: 0.8,
-    phaseTransitions: {
-      base: { duration: 8, focus: "aerobic" },
-      build: { duration: 6, focus: "threshold" },
-      peak: { duration: 3, focus: "vo2max" },
-      taper: { duration: 2, focus: "maintenance" }
-    }
-  }
-};
-var WORKOUT_EMPHASIS = {
-  daniels: {
-    recovery: 1,
-    easy: 1.2,
-    tempo: 1.5,
-    threshold: 1.4,
-    vo2max: 1.3,
-    speed: 1.1,
-    long_run: 1.2
-  },
-  lydiard: {
-    recovery: 1,
-    easy: 1.5,
-    tempo: 1.1,
-    threshold: 1,
-    vo2max: 0.8,
-    speed: 0.9,
-    long_run: 1.4,
-    hill_repeats: 1.3
-  },
-  pfitzinger: {
-    recovery: 1,
-    easy: 1.3,
-    tempo: 1.2,
-    threshold: 1.5,
-    vo2max: 1.1,
-    speed: 1,
-    long_run: 1.3
-  },
-  hudson: {
-    recovery: 1,
-    easy: 1.2,
-    tempo: 1.4,
-    threshold: 1.2,
-    vo2max: 1.1,
-    speed: 1,
-    long_run: 1.2,
-    fartlek: 1.3
-  },
-  custom: {
-    recovery: 1,
-    easy: 1.2,
-    tempo: 1.2,
-    threshold: 1.2,
-    vo2max: 1.1,
-    speed: 1,
-    long_run: 1.2
-  }
-};
-var METHODOLOGY_INTENSITY_DISTRIBUTIONS = {
-  daniels: {
-    base: { easy: 85, moderate: 10, hard: 5 },
-    // 80/20 approach with slight emphasis on aerobic base
-    build: { easy: 80, moderate: 15, hard: 5 },
-    // Standard Daniels distribution
-    peak: { easy: 75, moderate: 15, hard: 10 },
-    // More VO2max work for race preparation
-    taper: { easy: 80, moderate: 15, hard: 5 },
-    // Return to more conservative distribution
-    recovery: { easy: 95, moderate: 5, hard: 0 }
-    // Complete aerobic recovery
-  },
-  lydiard: {
-    base: { easy: 90, moderate: 8, hard: 2 },
-    // Lydiard's signature 85%+ easy running in base
-    build: { easy: 85, moderate: 12, hard: 3 },
-    // Maintain heavy aerobic emphasis
-    peak: { easy: 80, moderate: 15, hard: 5 },
-    // Limited speed work after base building
-    taper: { easy: 85, moderate: 12, hard: 3 },
-    // Conservative approach to taper
-    recovery: { easy: 100, moderate: 0, hard: 0 }
-    // Complete rest philosophy
-  },
-  pfitzinger: {
-    base: { easy: 75, moderate: 20, hard: 5 },
-    // Higher moderate emphasis (threshold work)
-    build: { easy: 70, moderate: 25, hard: 5 },
-    // Significant lactate threshold volume
-    peak: { easy: 70, moderate: 20, hard: 10 },
-    // Race-specific pace work increase
-    taper: { easy: 75, moderate: 20, hard: 5 },
-    // Maintain some threshold work
-    recovery: { easy: 90, moderate: 10, hard: 0 }
-    // Active recovery approach
-  },
-  hudson: {
-    base: { easy: 80, moderate: 15, hard: 5 },
-    // Balanced approach with tempo emphasis
-    build: { easy: 75, moderate: 20, hard: 5 },
-    // Tempo endurance focus
-    peak: { easy: 70, moderate: 20, hard: 10 },
-    // Race pace and neuromuscular work
-    taper: { easy: 80, moderate: 15, hard: 5 },
-    // Return to base distribution
-    recovery: { easy: 90, moderate: 10, hard: 0 }
-    // Moderate recovery approach
-  },
-  custom: {
-    base: { easy: 80, moderate: 15, hard: 5 },
-    // Default polarized approach
-    build: { easy: 75, moderate: 20, hard: 5 },
-    // Moderate build phase
-    peak: { easy: 70, moderate: 20, hard: 10 },
-    // Increased intensity for peaking
-    taper: { easy: 80, moderate: 15, hard: 5 },
-    // Return to conservative distribution
-    recovery: { easy: 90, moderate: 10, hard: 0 }
-    // Standard recovery distribution
-  }
-};
-var METHODOLOGY_PHASE_TARGETS = {
-  daniels: {
-    base: ["aerobic_capacity", "mitochondrial"],
-    build: ["lactate_threshold", "aerobic_power"],
-    peak: ["vo2max", "neuromuscular"],
-    taper: ["maintenance", "freshness"]
-  },
-  lydiard: {
-    base: ["aerobic_capacity", "capillarization"],
-    build: ["hill_strength", "aerobic_power"],
-    peak: ["speed", "neuromuscular"],
-    taper: ["maintenance", "freshness"]
-  },
-  pfitzinger: {
-    base: ["aerobic_capacity", "mitochondrial"],
-    build: ["lactate_threshold", "marathon_pace"],
-    peak: ["race_pace", "aerobic_power"],
-    taper: ["maintenance", "race_readiness"]
-  },
-  hudson: {
-    base: ["aerobic_capacity", "mitochondrial"],
-    build: ["tempo_endurance", "lactate_buffering"],
-    peak: ["race_pace", "neuromuscular"],
-    taper: ["maintenance", "freshness"]
-  },
-  custom: {
-    base: ["aerobic_capacity", "mitochondrial"],
-    build: ["lactate_threshold", "aerobic_power"],
-    peak: ["vo2max", "race_pace"],
-    taper: ["maintenance", "freshness"]
-  }
-};
-
-// src/zones.ts
-var TRAINING_ZONES = {
-  RECOVERY: {
-    name: "Recovery",
-    rpe: 1,
-    heartRateRange: { min: 50, max: 60 },
-    paceRange: { min: 0, max: 75 },
-    description: "Very easy effort, conversational",
-    purpose: "Active recovery, promote blood flow"
-  },
-  EASY: {
-    name: "Easy",
-    rpe: 2,
-    heartRateRange: { min: 60, max: 70 },
-    paceRange: { min: 75, max: 85 },
-    description: "Comfortable, conversational pace",
-    purpose: "Build aerobic base, improve fat oxidation"
-  },
-  STEADY: {
-    name: "Steady",
-    rpe: 3,
-    heartRateRange: { min: 70, max: 80 },
-    paceRange: { min: 85, max: 90 },
-    description: "Moderate effort, slightly harder breathing",
-    purpose: "Aerobic development, mitochondrial density"
-  },
-  TEMPO: {
-    name: "Tempo",
-    rpe: 4,
-    heartRateRange: { min: 80, max: 87 },
-    paceRange: { min: 90, max: 95 },
-    description: "Comfortably hard, controlled discomfort",
-    purpose: "Improve lactate clearance, mental toughness"
-  },
-  THRESHOLD: {
-    name: "Threshold",
-    rpe: 5,
-    heartRateRange: { min: 87, max: 92 },
-    paceRange: { min: 95, max: 100 },
-    description: "Hard effort, sustainable for ~1 hour",
-    purpose: "Increase lactate threshold, improve efficiency"
-  },
-  VO2_MAX: {
-    name: "VO2 Max",
-    rpe: 6,
-    heartRateRange: { min: 92, max: 97 },
-    paceRange: { min: 105, max: 115 },
-    description: "Very hard, heavy breathing",
-    purpose: "Maximize oxygen uptake, increase power"
-  },
-  NEUROMUSCULAR: {
-    name: "Neuromuscular",
-    rpe: 7,
-    heartRateRange: { min: 97, max: 100 },
-    paceRange: { min: 115, max: 130 },
-    description: "Maximum effort, short duration",
-    purpose: "Improve speed, power, and running economy"
-  }
-};
-function calculatePersonalizedZones(maxHR, thresholdPace, vdot) {
-  const zones = {};
-  Object.entries(TRAINING_ZONES).forEach(([key, baseZone]) => {
-    const zone = { ...baseZone };
-    if (zone.heartRateRange) {
-      zone.heartRateRange = {
-        min: Math.round(zone.heartRateRange.min / 100 * maxHR),
-        max: Math.round(zone.heartRateRange.max / 100 * maxHR)
+  /**
+   * Validate array of values with element type guard
+   */
+  validateArray: (values, elementGuard, context) => {
+    if (!Array.isArray(values)) {
+      return {
+        success: false,
+        error: new TypeValidationError2(
+          "Expected array",
+          "Array",
+          values,
+          context
+        )
       };
     }
-    if (zone.paceRange) {
-      zone.paceRange = {
-        min: thresholdPace * zone.paceRange.min / 100,
-        max: thresholdPace * zone.paceRange.max / 100
-      };
+    const validatedItems = [];
+    for (let i = 0; i < values.length; i++) {
+      const result = elementGuard.validateWithContext(
+        values[i],
+        `${context}[${i}]`
+      );
+      if (!result.success) {
+        return result;
+      }
+      validatedItems.push(result.data);
     }
-    zones[key] = zone;
-  });
-  return zones;
-}
-function getZoneByIntensity(intensity) {
-  if (intensity < 60) return TRAINING_ZONES.RECOVERY;
-  if (intensity < 70) return TRAINING_ZONES.EASY;
-  if (intensity < 80) return TRAINING_ZONES.STEADY;
-  if (intensity < 87) return TRAINING_ZONES.TEMPO;
-  if (intensity < 92) return TRAINING_ZONES.THRESHOLD;
-  if (intensity < 97) return TRAINING_ZONES.VO2_MAX;
-  return TRAINING_ZONES.NEUROMUSCULAR;
-}
-function calculateTrainingPaces(vdot) {
-  const vdotMultipliers = {
-    easy: 0.7,
-    // % of VO2max
-    marathon: 0.84,
-    threshold: 0.88,
-    interval: 0.98,
-    repetition: 1.05
-  };
-  const vo2maxPace = 5.5 - (vdot - 30) * 0.05;
+    return { success: true, data: validatedItems };
+  }
+};
+var validationGuards = {
+  isFitnessAssessment,
+  isTrainingPreferences,
+  isEnvironmentalFactors,
+  isTrainingPlanConfig,
+  isAdvancedPlanConfig,
+  isTargetRace,
+  isPlannedWorkout,
+  isCompletedWorkout,
+  isRecoveryMetrics,
+  isProgressData,
+  isRunData,
+  isTrainingBlock,
+  isTrainingPlan
+};
+
+// src/types/test-types.ts
+function createTestAssertion(value, typeGuard, expectedType, context) {
   return {
-    easy: vo2maxPace / vdotMultipliers.easy,
-    marathon: vo2maxPace / vdotMultipliers.marathon,
-    threshold: vo2maxPace / vdotMultipliers.threshold,
-    interval: vo2maxPace / vdotMultipliers.interval,
-    repetition: vo2maxPace / vdotMultipliers.repetition
+    value,
+    expectedType,
+    assert: typeGuard,
+    context
+  };
+}
+function createMockConfig(baseValue, overrides) {
+  return {
+    baseValue,
+    overrides,
+    generateDefaults: true
+  };
+}
+function validateTestResult(result, validator, errorMessage) {
+  const isValid = validator(result);
+  return {
+    isValid,
+    validatedValue: isValid ? result : void 0,
+    errors: isValid ? [] : [errorMessage || "Validation failed"],
+    warnings: [],
+    metadata: {
+      validationTime: Date.now(),
+      ruleName: validator.name || "anonymous"
+    }
   };
 }
 
-// src/workouts.ts
-var WORKOUT_TEMPLATES = {
-  // Recovery Workouts
-  RECOVERY_JOG: {
-    type: "recovery",
-    primaryZone: TRAINING_ZONES.RECOVERY,
-    segments: [
-      {
-        duration: 30,
-        intensity: 50,
-        zone: TRAINING_ZONES.RECOVERY,
-        description: "Very easy jog, focus on form"
-      }
-    ],
-    adaptationTarget: "Active recovery and blood flow",
-    estimatedTSS: 20,
-    recoveryTime: 8
+// src/types/test-extensions.ts
+function createExtendedProgressData(base, extensions) {
+  return {
+    ...base,
+    ...extensions
+  };
+}
+function createExtendedCompletedWorkout(base, extensions) {
+  return {
+    ...base,
+    ...extensions
+  };
+}
+function createExtendedRecoveryMetrics(base, extensions) {
+  return {
+    ...base,
+    ...extensions
+  };
+}
+function createInvalidDataAssertion(invalidData, expectedError, expectedType) {
+  return {
+    value: invalidData,
+    expectedType,
+    assert: (value) => false,
+    // Always fails for invalid data
+    invalidData,
+    expectedError,
+    shouldFail: true,
+    context: "invalid-data-test"
+  };
+}
+function isExtendedProgressData(data) {
+  return typeof data === "object" && data !== null && "date" in data && ("fitnessChange" in data || "trend" in data || !("fitnessChange" in data));
+}
+function isExtendedCompletedWorkout(data) {
+  return typeof data === "object" && data !== null && "completionRate" in data && ("workoutId" in data || "date" in data || !("workoutId" in data));
+}
+function isExtendedRecoveryMetrics(data) {
+  return typeof data === "object" && data !== null && "recoveryScore" in data && ("injuryStatus" in data || "restingHR" in data || !("injuryStatus" in data));
+}
+function safeTestCast(base, extensions, validator) {
+  const result = { ...base, ...extensions };
+  if (validator && !validator(result)) {
+    throw new Error(`Safe test cast validation failed for type ${typeof base}`);
+  }
+  return result;
+}
+var testWorkoutFactory = {
+  createWithInvalidDate(base, invalidDate) {
+    return { ...base, date: invalidDate };
   },
-  // Aerobic Base Workouts
-  EASY_AEROBIC: {
-    type: "easy",
-    primaryZone: TRAINING_ZONES.EASY,
-    segments: [
-      {
-        duration: 60,
-        intensity: 65,
-        zone: TRAINING_ZONES.EASY,
-        description: "Conversational pace, nose breathing"
-      }
-    ],
-    adaptationTarget: "Aerobic base, fat oxidation, capillarization",
-    estimatedTSS: 50,
-    recoveryTime: 12
+  createWithInvalidProperties(base, invalidProps) {
+    return { ...base, ...invalidProps };
   },
-  LONG_RUN: {
-    type: "long_run",
-    primaryZone: TRAINING_ZONES.EASY,
-    segments: [
-      {
-        duration: 120,
-        intensity: 65,
-        zone: TRAINING_ZONES.EASY,
-        description: "Steady aerobic effort, maintain form"
-      }
-    ],
-    adaptationTarget: "Aerobic endurance, glycogen storage, mental resilience",
-    estimatedTSS: 120,
-    recoveryTime: 24
-  },
-  // Tempo Workouts
-  TEMPO_CONTINUOUS: {
-    type: "tempo",
-    primaryZone: TRAINING_ZONES.TEMPO,
-    segments: [
-      { duration: 10, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Warm-up" },
-      {
-        duration: 30,
-        intensity: 84,
-        zone: TRAINING_ZONES.TEMPO,
-        description: "Steady tempo effort"
-      },
-      { duration: 10, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Cool-down" }
-    ],
-    adaptationTarget: "Lactate clearance, aerobic power",
-    estimatedTSS: 65,
-    recoveryTime: 24
-  },
-  // Threshold Workouts
-  LACTATE_THRESHOLD_2X20: {
-    type: "threshold",
-    primaryZone: TRAINING_ZONES.THRESHOLD,
-    segments: [
-      { duration: 10, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Warm-up" },
-      {
-        duration: 20,
-        intensity: 88,
-        zone: TRAINING_ZONES.THRESHOLD,
-        description: "Threshold pace"
-      },
-      { duration: 5, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Recovery" },
-      {
-        duration: 20,
-        intensity: 88,
-        zone: TRAINING_ZONES.THRESHOLD,
-        description: "Threshold pace"
-      },
-      { duration: 10, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Cool-down" }
-    ],
-    adaptationTarget: "Lactate threshold improvement",
-    estimatedTSS: 90,
-    recoveryTime: 36
-  },
-  THRESHOLD_PROGRESSION: {
-    type: "threshold",
-    primaryZone: TRAINING_ZONES.THRESHOLD,
-    segments: [
-      { duration: 10, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Warm-up" },
-      { duration: 10, intensity: 80, zone: TRAINING_ZONES.STEADY, description: "Build" },
-      { duration: 10, intensity: 85, zone: TRAINING_ZONES.TEMPO, description: "Tempo" },
-      { duration: 10, intensity: 90, zone: TRAINING_ZONES.THRESHOLD, description: "Threshold" },
-      { duration: 10, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Cool-down" }
-    ],
-    adaptationTarget: "Progressive lactate tolerance",
-    estimatedTSS: 75,
-    recoveryTime: 24
-  },
-  // VO2max Workouts
-  VO2MAX_4X4: {
-    type: "vo2max",
-    primaryZone: TRAINING_ZONES.VO2_MAX,
-    segments: [
-      { duration: 15, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Warm-up" },
-      { duration: 4, intensity: 95, zone: TRAINING_ZONES.VO2_MAX, description: "VO2max interval" },
-      { duration: 3, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Recovery" },
-      { duration: 4, intensity: 95, zone: TRAINING_ZONES.VO2_MAX, description: "VO2max interval" },
-      { duration: 3, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Recovery" },
-      { duration: 4, intensity: 95, zone: TRAINING_ZONES.VO2_MAX, description: "VO2max interval" },
-      { duration: 3, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Recovery" },
-      { duration: 4, intensity: 95, zone: TRAINING_ZONES.VO2_MAX, description: "VO2max interval" },
-      { duration: 10, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Cool-down" }
-    ],
-    adaptationTarget: "VO2max improvement, aerobic power",
-    estimatedTSS: 100,
-    recoveryTime: 48
-  },
-  VO2MAX_5X3: {
-    type: "vo2max",
-    primaryZone: TRAINING_ZONES.VO2_MAX,
-    segments: [
-      { duration: 15, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Warm-up" },
-      { duration: 3, intensity: 96, zone: TRAINING_ZONES.VO2_MAX, description: "VO2max interval" },
-      { duration: 2, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Recovery" },
-      { duration: 3, intensity: 96, zone: TRAINING_ZONES.VO2_MAX, description: "VO2max interval" },
-      { duration: 2, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Recovery" },
-      { duration: 3, intensity: 96, zone: TRAINING_ZONES.VO2_MAX, description: "VO2max interval" },
-      { duration: 2, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Recovery" },
-      { duration: 3, intensity: 96, zone: TRAINING_ZONES.VO2_MAX, description: "VO2max interval" },
-      { duration: 2, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Recovery" },
-      { duration: 3, intensity: 96, zone: TRAINING_ZONES.VO2_MAX, description: "VO2max interval" },
-      { duration: 10, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Cool-down" }
-    ],
-    adaptationTarget: "VO2max and running economy",
-    estimatedTSS: 95,
-    recoveryTime: 48
-  },
-  // Speed Workouts
-  SPEED_200M_REPS: {
-    type: "speed",
-    primaryZone: TRAINING_ZONES.NEUROMUSCULAR,
-    segments: [
-      { duration: 15, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Warm-up" },
-      { duration: 0.5, intensity: 98, zone: TRAINING_ZONES.NEUROMUSCULAR, description: "200m rep" },
-      { duration: 2, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Walk recovery" },
-      { duration: 0.5, intensity: 98, zone: TRAINING_ZONES.NEUROMUSCULAR, description: "200m rep" },
-      { duration: 2, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Walk recovery" },
-      { duration: 0.5, intensity: 98, zone: TRAINING_ZONES.NEUROMUSCULAR, description: "200m rep" },
-      { duration: 2, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Walk recovery" },
-      { duration: 0.5, intensity: 98, zone: TRAINING_ZONES.NEUROMUSCULAR, description: "200m rep" },
-      { duration: 2, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Walk recovery" },
-      { duration: 0.5, intensity: 98, zone: TRAINING_ZONES.NEUROMUSCULAR, description: "200m rep" },
-      { duration: 2, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Walk recovery" },
-      { duration: 0.5, intensity: 98, zone: TRAINING_ZONES.NEUROMUSCULAR, description: "200m rep" },
-      { duration: 10, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Cool-down" }
-    ],
-    adaptationTarget: "Neuromuscular power, running economy",
-    estimatedTSS: 70,
-    recoveryTime: 36
-  },
-  // Hill Workouts
-  HILL_REPEATS_6X2: {
-    type: "hill_repeats",
-    primaryZone: TRAINING_ZONES.VO2_MAX,
-    segments: [
-      { duration: 15, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Warm-up to hills" },
-      { duration: 2, intensity: 92, zone: TRAINING_ZONES.VO2_MAX, description: "Hill repeat" },
-      { duration: 3, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Jog down" },
-      { duration: 2, intensity: 92, zone: TRAINING_ZONES.VO2_MAX, description: "Hill repeat" },
-      { duration: 3, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Jog down" },
-      { duration: 2, intensity: 92, zone: TRAINING_ZONES.VO2_MAX, description: "Hill repeat" },
-      { duration: 3, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Jog down" },
-      { duration: 2, intensity: 92, zone: TRAINING_ZONES.VO2_MAX, description: "Hill repeat" },
-      { duration: 3, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Jog down" },
-      { duration: 2, intensity: 92, zone: TRAINING_ZONES.VO2_MAX, description: "Hill repeat" },
-      { duration: 3, intensity: 50, zone: TRAINING_ZONES.RECOVERY, description: "Jog down" },
-      { duration: 2, intensity: 92, zone: TRAINING_ZONES.VO2_MAX, description: "Hill repeat" },
-      { duration: 10, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Cool-down" }
-    ],
-    adaptationTarget: "Power, strength, VO2max",
-    estimatedTSS: 85,
-    recoveryTime: 36
-  },
-  // Fartlek Workouts
-  FARTLEK_VARIED: {
-    type: "fartlek",
-    primaryZone: TRAINING_ZONES.TEMPO,
-    segments: [
-      { duration: 10, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Warm-up" },
-      { duration: 2, intensity: 90, zone: TRAINING_ZONES.THRESHOLD, description: "Hard surge" },
-      { duration: 3, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Easy recovery" },
-      { duration: 1, intensity: 95, zone: TRAINING_ZONES.VO2_MAX, description: "Sprint" },
-      { duration: 4, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Easy recovery" },
-      { duration: 3, intensity: 85, zone: TRAINING_ZONES.TEMPO, description: "Tempo surge" },
-      { duration: 2, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Easy recovery" },
-      { duration: 0.5, intensity: 98, zone: TRAINING_ZONES.NEUROMUSCULAR, description: "Sprint" },
-      { duration: 4.5, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Easy recovery" },
-      { duration: 10, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Cool-down" }
-    ],
-    adaptationTarget: "Speed variation, mental adaptation",
-    estimatedTSS: 65,
-    recoveryTime: 24
-  },
-  // Progression Runs
-  PROGRESSION_3_STAGE: {
-    type: "progression",
-    primaryZone: TRAINING_ZONES.TEMPO,
-    segments: [
-      { duration: 20, intensity: 65, zone: TRAINING_ZONES.EASY, description: "Easy start" },
-      { duration: 20, intensity: 78, zone: TRAINING_ZONES.STEADY, description: "Steady pace" },
-      { duration: 20, intensity: 85, zone: TRAINING_ZONES.TEMPO, description: "Tempo finish" },
-      { duration: 5, intensity: 60, zone: TRAINING_ZONES.RECOVERY, description: "Cool-down" }
-    ],
-    adaptationTarget: "Pacing, fatigue resistance",
-    estimatedTSS: 75,
-    recoveryTime: 24
+  createWithExtensions(base, extensions) {
+    return { ...base, ...extensions };
   }
 };
-function createCustomWorkout(type, duration, primaryIntensity, segments) {
-  const zone = getZoneForIntensity(primaryIntensity);
-  return {
-    type,
-    primaryZone: zone,
-    segments: segments || [
-      {
-        duration,
-        intensity: primaryIntensity,
-        zone,
-        description: `Custom ${type} workout`
-      }
-    ],
-    adaptationTarget: `Custom ${type} adaptations`,
-    estimatedTSS: calculateTSS2(duration, primaryIntensity),
-    recoveryTime: calculateRecoveryTime(type, duration, primaryIntensity)
-  };
-}
-function calculateTSS2(duration, intensity) {
-  const intensityFactor = intensity / 100;
-  return Math.round(duration * Math.pow(intensityFactor, 2) * 100 / 60);
-}
-function calculateRecoveryTime(type, duration, intensity) {
-  const baseRecovery = {
-    recovery: 8,
-    easy: 12,
-    steady: 18,
-    tempo: 24,
-    threshold: 36,
-    vo2max: 48,
-    speed: 36,
-    hill_repeats: 36,
-    fartlek: 24,
-    progression: 24,
-    long_run: 24,
-    race_pace: 36,
-    time_trial: 48,
-    cross_training: 12,
-    strength: 24
-  };
-  const base = baseRecovery[type] || 24;
-  const intensityMultiplier = intensity / 80;
-  const durationMultiplier = duration / 60;
-  return Math.round(base * intensityMultiplier * durationMultiplier);
-}
-function getZoneForIntensity(intensity) {
-  if (intensity < 60) return TRAINING_ZONES.RECOVERY;
-  if (intensity < 70) return TRAINING_ZONES.EASY;
-  if (intensity < 80) return TRAINING_ZONES.STEADY;
-  if (intensity < 87) return TRAINING_ZONES.TEMPO;
-  if (intensity < 92) return TRAINING_ZONES.THRESHOLD;
-  if (intensity < 97) return TRAINING_ZONES.VO2_MAX;
-  return TRAINING_ZONES.NEUROMUSCULAR;
-}
+var testOptionsFactory = {
+  createInvalidOptions(base, invalidFields) {
+    return { ...base, ...invalidFields };
+  }
+};
 
 // src/generator.ts
-import { addDays, addWeeks, differenceInWeeks as differenceInWeeks2 } from "date-fns";
+import {
+  addDays,
+  addWeeks,
+  differenceInWeeks
+} from "date-fns";
 var TrainingPlanGenerator = class _TrainingPlanGenerator {
   constructor(config) {
     this.config = config;
@@ -937,7 +2553,7 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
    * Create training blocks based on goal and timeline
    */
   createTrainingBlocks() {
-    const totalWeeks = differenceInWeeks2(
+    const totalWeeks = differenceInWeeks(
       this.config.endDate || this.config.targetDate || addWeeks(this.config.startDate, 16),
       this.config.startDate
     );
@@ -998,7 +2614,11 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
   getFocusAreas(phase) {
     const focusMap = {
       base: ["Aerobic capacity", "Running economy", "Injury prevention"],
-      build: ["Lactate threshold", "VO2max development", "Race pace familiarity"],
+      build: [
+        "Lactate threshold",
+        "VO2max development",
+        "Race pace familiarity"
+      ],
       peak: ["Race-specific fitness", "Speed endurance", "Mental preparation"],
       taper: ["Recovery", "Maintenance", "Race readiness"],
       recovery: ["Active recovery", "Reflection", "Planning"]
@@ -1014,7 +2634,11 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
     for (let week = 0; week < block.weeks; week++) {
       const isRecoveryWeek = (week + 1) % 4 === 0;
       const weekNumber = microcycles.length + 1;
-      const progressionFactor = this.calculateProgressionFactor(block.phase, week, block.weeks);
+      const progressionFactor = this.calculateProgressionFactor(
+        block.phase,
+        week,
+        block.weeks
+      );
       const weeklyVolume = isRecoveryWeek ? baseVolume * 0.7 * progressionFactor : baseVolume * progressionFactor;
       const pattern = this.generateWeeklyPattern(block.phase, isRecoveryWeek);
       const workouts = this.generateWeeklyWorkouts(
@@ -1024,7 +2648,10 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
         weeklyVolume,
         addWeeks(block.startDate, week)
       );
-      const totalLoad = workouts.reduce((sum, w) => sum + w.workout.estimatedTSS, 0);
+      const totalLoad = workouts.reduce(
+        (sum, w) => sum + w.workout.estimatedTSS,
+        0
+      );
       const totalDistance = workouts.reduce(
         (sum, w) => sum + (w.targetMetrics.distance || 0),
         0
@@ -1096,7 +2723,12 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
   generateWeeklyWorkouts(block, weekNumber, pattern, weeklyVolume, weekStart) {
     const workoutTypes = pattern.split("-");
     const workouts = [];
-    const availableDays = this.config.preferences?.availableDays || [0, 2, 4, 6];
+    const availableDays = this.config.preferences?.availableDays || [
+      0,
+      2,
+      4,
+      6
+    ];
     let volumeRemaining = weeklyVolume;
     let dayIndex = 0;
     workoutTypes.forEach((type, index) => {
@@ -1121,11 +2753,17 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
         description: this.generateWorkoutDescription(workout),
         workout,
         targetMetrics: {
-          duration: workout.segments.reduce((sum, s) => sum + s.duration, 0),
+          duration: workout.segments.reduce(
+            (sum, s) => sum + s.duration,
+            0
+          ),
           distance: targetDistance,
           tss: workout.estimatedTSS,
           load: workout.estimatedTSS,
-          intensity: workout.segments.reduce((sum, s) => sum + s.intensity, 0) / workout.segments.length
+          intensity: workout.segments.reduce(
+            (sum, s) => sum + s.intensity,
+            0
+          ) / workout.segments.length
         }
       });
       volumeRemaining -= targetDistance;
@@ -1147,11 +2785,17 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
       description: this.generateWorkoutDescription(workout),
       workout,
       targetMetrics: {
-        duration: workout.segments.reduce((sum, s) => sum + s.duration, 0),
+        duration: workout.segments.reduce(
+          (sum, s) => sum + s.duration,
+          0
+        ),
         distance: targetDistance,
         tss: workout.estimatedTSS,
         load: workout.estimatedTSS,
-        intensity: workout.segments.reduce((sum, s) => sum + s.intensity, 0) / workout.segments.length
+        intensity: workout.segments.reduce(
+          (sum, s) => sum + s.intensity,
+          0
+        ) / workout.segments.length
       }
     };
   }
@@ -1184,19 +2828,27 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
    * Calculate workout distance based on time and remaining volume
    */
   calculateWorkoutDistance(workout, volumeRemaining, workoutsLeft) {
-    const totalMinutes = workout.segments.reduce((sum, s) => sum + s.duration, 0);
+    const totalMinutes = workout.segments.reduce(
+      (sum, s) => sum + s.duration,
+      0
+    );
     const avgIntensity = workout.segments.reduce((sum, s) => sum + s.intensity, 0) / workout.segments.length;
     const thresholdPace = 5;
     const workoutPace = thresholdPace / (avgIntensity / 88);
     const estimatedDistance = totalMinutes / workoutPace;
-    const targetDistance = Math.min(estimatedDistance, volumeRemaining / workoutsLeft);
+    const targetDistance = Math.min(
+      estimatedDistance,
+      volumeRemaining / workoutsLeft
+    );
     return Math.round(targetDistance * 10) / 10;
   }
   /**
    * Generate all workouts from blocks
    */
   generateAllWorkouts(blocks) {
-    return blocks.flatMap((block) => block.microcycles.flatMap((cycle) => cycle.workouts));
+    return blocks.flatMap(
+      (block) => block.microcycles.flatMap((cycle) => cycle.workouts)
+    );
   }
   /**
    * Create plan summary
@@ -1211,15 +2863,22 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
         block.microcycles.flatMap((m) => m.workouts)
       )
     }));
-    const weeklyDistances = blocks.flatMap((b) => b.microcycles.map((m) => m.totalDistance));
+    const weeklyDistances = blocks.flatMap(
+      (b) => b.microcycles.map((m) => m.totalDistance)
+    );
     return {
       totalWeeks: blocks.reduce((sum, b) => sum + b.weeks, 0),
       totalWorkouts: workouts.length,
-      totalDistance: workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0),
+      totalDistance: workouts.reduce(
+        (sum, w) => sum + (w.targetMetrics.distance || 0),
+        0
+      ),
       totalTime: workouts.reduce((sum, w) => sum + w.targetMetrics.duration, 0),
       peakWeeklyDistance: Math.max(...weeklyDistances),
       averageWeeklyDistance: weeklyDistances.reduce((sum, d) => sum + d, 0) / weeklyDistances.length,
-      keyWorkouts: workouts.filter((w) => ["threshold", "vo2max", "race_pace"].includes(w.type)).length,
+      keyWorkouts: workouts.filter(
+        (w) => ["threshold", "vo2max", "race_pace"].includes(w.type)
+      ).length,
       recoveryDays: workouts.filter((w) => w.type === "recovery").length,
       phases
     };
@@ -1251,7 +2910,9 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
    * Calculate recovery ratio for a set of workouts
    */
   calculateRecoveryRatio(workouts) {
-    const recoveryWorkouts = workouts.filter((w) => w.type === "recovery" || w.type === "easy");
+    const recoveryWorkouts = workouts.filter(
+      (w) => w.type === "recovery" || w.type === "easy"
+    );
     return recoveryWorkouts.length / workouts.length;
   }
   /**
@@ -1287,8 +2948,14 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
    */
   calculateOverallScore(assessment) {
     const vdotScore = Math.min((assessment.vdot || 40) / 80 * 100, 100);
-    const volumeScore = Math.min((assessment.weeklyMileage || 30) / 100 * 100, 100);
-    const experienceScore = Math.min((assessment.trainingAge || 1) / 10 * 100, 100);
+    const volumeScore = Math.min(
+      (assessment.weeklyMileage || 30) / 100 * 100,
+      100
+    );
+    const experienceScore = Math.min(
+      (assessment.trainingAge || 1) / 10 * 100,
+      100
+    );
     const recoveryScore = assessment.recoveryRate || 75;
     return Math.round(
       vdotScore * 0.4 + volumeScore * 0.25 + experienceScore * 0.2 + recoveryScore * 0.15
@@ -1327,8 +2994,14 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
       recoveryRate: metrics.recoveryScore
     };
     const vdotScore = Math.min((assessment.vdot || 40) / 80 * 100, 100);
-    const volumeScore = Math.min((assessment.weeklyMileage || 30) / 100 * 100, 100);
-    const experienceScore = Math.min((assessment.trainingAge || 1) / 10 * 100, 100);
+    const volumeScore = Math.min(
+      (assessment.weeklyMileage || 30) / 100 * 100,
+      100
+    );
+    const experienceScore = Math.min(
+      (assessment.trainingAge || 1) / 10 * 100,
+      100
+    );
     const recoveryScore = assessment.recoveryRate || 75;
     const overallScore = Math.round(
       vdotScore * 0.4 + volumeScore * 0.25 + experienceScore * 0.2 + recoveryScore * 0.15
@@ -1340,4301 +3013,12 @@ var TrainingPlanGenerator = class _TrainingPlanGenerator {
   }
 };
 
-// src/calculation-cache.ts
-var LRUCache = class {
-  constructor(maxSize = 100, maxAgeMs = 5 * 60 * 1e3) {
-    this.cache = /* @__PURE__ */ new Map();
-    this.maxSize = maxSize;
-    this.maxAge = maxAgeMs;
-  }
-  get(key) {
-    const entry = this.cache.get(key);
-    if (!entry) return void 0;
-    if (Date.now() - entry.timestamp > this.maxAge) {
-      this.cache.delete(key);
-      return void 0;
-    }
-    this.cache.delete(key);
-    this.cache.set(key, entry);
-    return entry.value;
-  }
-  set(key, value, hash) {
-    if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== void 0) {
-        this.cache.delete(firstKey);
-      }
-    }
-    this.cache.set(key, {
-      value,
-      timestamp: Date.now(),
-      hash
-    });
-  }
-  clear() {
-    this.cache.clear();
-  }
-  size() {
-    return this.cache.size;
-  }
-};
-function hashRunData(runs) {
-  const runSignature = runs.map(
-    (run) => `${run.date.getTime()}-${run.distance}-${run.duration}-${run.avgPace || 0}`
-  ).join("|");
-  let hash = 0;
-  for (let i = 0; i < runSignature.length; i++) {
-    const char = runSignature.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-  return hash.toString(36);
-}
-function getVDOTCacheKey(runs) {
-  const hash = hashRunData(runs);
-  return `vdot-${hash}`;
-}
-function getCriticalSpeedCacheKey(runs) {
-  const hash = hashRunData(runs);
-  return `cs-${hash}`;
-}
-function getFitnessMetricsCacheKey(runs) {
-  const hash = hashRunData(runs);
-  return `fm-${hash}`;
-}
-function getTrainingPacesCacheKey(vdot, methodology) {
-  return `paces-${methodology}-${vdot}`;
-}
-var vdotCache = new LRUCache(50);
-var criticalSpeedCache = new LRUCache(50);
-var fitnessMetricsCache = new LRUCache(50);
-var trainingPacesCache = new LRUCache(100);
-function calculateVDOTCached(runs) {
-  const cacheKey = getVDOTCacheKey(runs);
-  const cached = vdotCache.get(cacheKey);
-  if (cached !== void 0) {
-    return cached;
-  }
-  const vdot = calculateVDOT(runs);
-  const hash = hashRunData(runs);
-  vdotCache.set(cacheKey, vdot, hash);
-  return vdot;
-}
-function calculateCriticalSpeedCached(runs) {
-  const cacheKey = getCriticalSpeedCacheKey(runs);
-  const cached = criticalSpeedCache.get(cacheKey);
-  if (cached !== void 0) {
-    return cached;
-  }
-  const criticalSpeed = calculateCriticalSpeed(runs);
-  const hash = hashRunData(runs);
-  criticalSpeedCache.set(cacheKey, criticalSpeed, hash);
-  return criticalSpeed;
-}
-function calculateFitnessMetricsCached(runs) {
-  const cacheKey = getFitnessMetricsCacheKey(runs);
-  const cached = fitnessMetricsCache.get(cacheKey);
-  if (cached !== void 0) {
-    return cached;
-  }
-  const metrics = calculateFitnessMetrics(runs);
-  const hash = hashRunData(runs);
-  fitnessMetricsCache.set(cacheKey, metrics, hash);
-  return metrics;
-}
-function calculateTrainingPacesCached(vdot, methodology, calculator) {
-  const cacheKey = getTrainingPacesCacheKey(vdot, methodology);
-  const cached = trainingPacesCache.get(cacheKey);
-  if (cached !== void 0) {
-    return cached;
-  }
-  const paces = calculator(vdot);
-  trainingPacesCache.set(cacheKey, paces, `${methodology}-${vdot}`);
-  return paces;
-}
-function batchCalculateVDOT(runDataSets) {
-  const results = [];
-  const uncachedIndices = [];
-  const uncachedRunData = [];
-  runDataSets.forEach((runs, index) => {
-    const cacheKey = getVDOTCacheKey(runs);
-    const cached = vdotCache.get(cacheKey);
-    if (cached !== void 0) {
-      results[index] = cached;
-    } else {
-      uncachedIndices.push(index);
-      uncachedRunData.push(runs);
-    }
-  });
-  uncachedRunData.forEach((runs, batchIndex) => {
-    const actualIndex = uncachedIndices[batchIndex];
-    const vdot = calculateVDOT(runs);
-    results[actualIndex] = vdot;
-    const cacheKey = getVDOTCacheKey(runs);
-    const hash = hashRunData(runs);
-    vdotCache.set(cacheKey, vdot, hash);
-  });
-  return results;
-}
-var CalculationProfiler = class {
-  static profile(operation, fn) {
-    const start = performance.now();
-    const result = fn();
-    const end = performance.now();
-    const duration = end - start;
-    if (!this.metrics[operation]) {
-      this.metrics[operation] = { calls: 0, totalTime: 0, avgTime: 0 };
-    }
-    this.metrics[operation].calls++;
-    this.metrics[operation].totalTime += duration;
-    this.metrics[operation].avgTime = this.metrics[operation].totalTime / this.metrics[operation].calls;
-    return result;
-  }
-  static async profileAsync(operation, fn) {
-    const start = performance.now();
-    const result = await fn();
-    const end = performance.now();
-    const duration = end - start;
-    if (!this.metrics[operation]) {
-      this.metrics[operation] = { calls: 0, totalTime: 0, avgTime: 0 };
-    }
-    this.metrics[operation].calls++;
-    this.metrics[operation].totalTime += duration;
-    this.metrics[operation].avgTime = this.metrics[operation].totalTime / this.metrics[operation].calls;
-    return result;
-  }
-  static getMetrics() {
-    return { ...this.metrics };
-  }
-  static reset() {
-    this.metrics = {};
-  }
-  static getSlowOperations(threshold = 100) {
-    return Object.entries(this.metrics).filter(([_, metrics]) => metrics.avgTime > threshold).map(([operation, metrics]) => ({ operation, avgTime: metrics.avgTime })).sort((a, b) => b.avgTime - a.avgTime);
-  }
-};
-CalculationProfiler.metrics = {};
-var MemoryMonitor = class {
-  static snapshot(operation) {
-    this.snapshots.push({
-      operation,
-      memory: process.memoryUsage(),
-      timestamp: Date.now()
-    });
-  }
-  static getMemoryIncrease(fromOperation, toOperation) {
-    const fromSnapshot = this.snapshots.find((s) => s.operation === fromOperation);
-    const toSnapshot = this.snapshots.find((s) => s.operation === toOperation);
-    if (!fromSnapshot || !toSnapshot) return 0;
-    return (toSnapshot.memory.heapUsed - fromSnapshot.memory.heapUsed) / (1024 * 1024);
-  }
-  static getCurrentMemoryUsage() {
-    const memory = process.memoryUsage();
-    return {
-      heapUsed: memory.heapUsed / (1024 * 1024),
-      // MB
-      heapTotal: memory.heapTotal / (1024 * 1024),
-      // MB
-      external: memory.external / (1024 * 1024)
-      // MB
-    };
-  }
-  static clearSnapshots() {
-    this.snapshots = [];
-  }
-};
-MemoryMonitor.snapshots = [];
-var CacheManager = class {
-  static clearAllCaches() {
-    vdotCache.clear();
-    criticalSpeedCache.clear();
-    fitnessMetricsCache.clear();
-    trainingPacesCache.clear();
-  }
-  static getCacheStats() {
-    return {
-      vdot: vdotCache.size(),
-      criticalSpeed: criticalSpeedCache.size(),
-      fitnessMetrics: fitnessMetricsCache.size(),
-      trainingPaces: trainingPacesCache.size()
-    };
-  }
-  static getCacheHitRatio() {
-    return {
-      overall: 0.85
-      // Example - would be calculated from actual hit/miss data
-    };
-  }
-};
-var OptimizationAnalyzer = class {
-  static analyzePerformance() {
-    const slowOps = CalculationProfiler.getSlowOperations(50);
-    const memoryUsage = MemoryMonitor.getCurrentMemoryUsage();
-    const recommendations = [];
-    if (slowOps.length > 0) {
-      recommendations.push(`Consider optimizing: ${slowOps[0].operation} (avg: ${slowOps[0].avgTime.toFixed(2)}ms)`);
-    }
-    if (memoryUsage.heapUsed > 80) {
-      recommendations.push("High memory usage detected - consider clearing caches or reducing batch sizes");
-    }
-    const cacheStats = CacheManager.getCacheStats();
-    const totalCacheSize = Object.values(cacheStats).reduce((sum, size) => sum + size, 0);
-    if (totalCacheSize < 10) {
-      recommendations.push("Low cache utilization - consider increasing cache sizes for better performance");
-    }
-    if (recommendations.length === 0) {
-      recommendations.push("Performance appears optimal");
-    }
-    return {
-      recommendations,
-      slowOperations: slowOps,
-      memoryUsage: {
-        current: memoryUsage.heapUsed,
-        recommended: Math.min(100, memoryUsage.heapUsed * 1.2)
-      }
-    };
-  }
-};
-var cacheInstances = {
-  vdotCache,
-  criticalSpeedCache,
-  fitnessMetricsCache,
-  trainingPacesCache
-};
-
-// src/philosophies.ts
-import { differenceInWeeks as differenceInWeeks3 } from "date-fns";
-var BaseTrainingPhilosophy = class {
-  constructor(methodology, name) {
-    this.methodology = methodology;
-    this.name = name;
-    this.config = TRAINING_METHODOLOGIES[methodology];
-  }
-  get intensityDistribution() {
-    return this.config.intensityDistribution;
-  }
-  get workoutPriorities() {
-    return [...this.config.workoutPriorities];
-  }
-  get recoveryEmphasis() {
-    return this.config.recoveryEmphasis;
-  }
-  /**
-   * Default plan enhancement - can be overridden by specific philosophies
-   */
-  enhancePlan(basePlan) {
-    const enhancedBlocks = basePlan.blocks.map((block) => this.enhanceBlock(block));
-    return {
-      ...basePlan,
-      blocks: enhancedBlocks,
-      summary: {
-        ...basePlan.summary,
-        phases: basePlan.summary.phases.map((phase) => ({
-          ...phase,
-          intensityDistribution: this.getPhaseIntensityDistribution(phase.phase)
-        }))
-      }
-    };
-  }
-  /**
-   * Enhance a training block with philosophy-specific customizations
-   */
-  enhanceBlock(block) {
-    const enhancedMicrocycles = block.microcycles.map((microcycle) => ({
-      ...microcycle,
-      workouts: microcycle.workouts.map((plannedWorkout) => ({
-        ...plannedWorkout,
-        workout: this.customizeWorkout(
-          plannedWorkout.workout,
-          block.phase,
-          microcycle.weekNumber
-        )
-      }))
-    }));
-    return {
-      ...block,
-      microcycles: enhancedMicrocycles
-    };
-  }
-  /**
-   * Default workout customization - adjusts intensity based on phase and philosophy
-   */
-  customizeWorkout(template, phase, weekNumber) {
-    const phaseIntensity = this.getPhaseIntensityDistribution(phase);
-    const emphasis = this.getWorkoutEmphasis(template.type);
-    const customizedSegments = template.segments.map((segment) => ({
-      ...segment,
-      intensity: this.adjustIntensity(segment.intensity, phase, emphasis)
-    }));
-    return {
-      ...template,
-      segments: customizedSegments,
-      estimatedTSS: Math.round(template.estimatedTSS * emphasis),
-      recoveryTime: Math.round(template.recoveryTime * this.recoveryEmphasis)
-    };
-  }
-  /**
-   * Select workout template based on philosophy priorities
-   */
-  selectWorkout(type, phase, weekInPhase) {
-    const availableTemplates = Object.keys(WORKOUT_TEMPLATES).filter((key) => WORKOUT_TEMPLATES[key].type === type);
-    if (availableTemplates.length === 0) {
-      throw new Error(`No templates available for workout type: ${type}`);
-    }
-    return this.selectPreferredTemplate(availableTemplates, phase, weekInPhase);
-  }
-  /**
-   * Get phase-specific intensity distribution
-   */
-  getPhaseIntensityDistribution(phase) {
-    const methodologyDistributions = METHODOLOGY_INTENSITY_DISTRIBUTIONS[this.methodology];
-    return methodologyDistributions?.[phase] || this.intensityDistribution;
-  }
-  /**
-   * Get workout emphasis multiplier
-   */
-  getWorkoutEmphasis(type) {
-    const emphasis = WORKOUT_EMPHASIS[this.methodology];
-    return emphasis?.[type] || 1;
-  }
-  /**
-   * Adjust intensity based on philosophy and phase
-   */
-  adjustIntensity(baseIntensity, phase, emphasis) {
-    let adjustment = 1;
-    switch (phase) {
-      case "base":
-        adjustment = 0.95;
-        break;
-      case "build":
-        adjustment = 1;
-        break;
-      case "peak":
-        adjustment = 1.05;
-        break;
-      case "taper":
-        adjustment = 0.9;
-        break;
-      case "recovery":
-        adjustment = 0.85;
-        break;
-    }
-    adjustment *= emphasis;
-    const adjustedIntensity = baseIntensity * adjustment;
-    return Math.max(40, Math.min(100, Math.round(adjustedIntensity)));
-  }
-  /**
-   * Select preferred template based on philosophy
-   */
-  selectPreferredTemplate(templates, phase, weekInPhase) {
-    return templates[0];
-  }
-};
-var PhilosophyFactory = class {
-  /**
-   * Create a training philosophy instance
-   */
-  static create(methodology) {
-    if (this.philosophyCache.has(methodology)) {
-      return this.philosophyCache.get(methodology);
-    }
-    let philosophy;
-    switch (methodology) {
-      case "daniels":
-        philosophy = new DanielsPhilosophy();
-        break;
-      case "lydiard":
-        philosophy = new LydiardPhilosophy();
-        break;
-      case "pfitzinger":
-        philosophy = new PfitsingerPhilosophy();
-        break;
-      case "hudson":
-        philosophy = new HudsonPhilosophy();
-        break;
-      case "custom":
-        philosophy = new CustomPhilosophy();
-        break;
-      default:
-        throw new Error(`Unknown training methodology: ${methodology}`);
-    }
-    this.philosophyCache.set(methodology, philosophy);
-    return philosophy;
-  }
-  /**
-   * Get list of available methodologies
-   */
-  static getAvailableMethodologies() {
-    return ["daniels", "lydiard", "pfitzinger", "hudson", "custom"];
-  }
-  /**
-   * Clear the philosophy cache (useful for testing)
-   */
-  static clearCache() {
-    this.philosophyCache.clear();
-  }
-};
-PhilosophyFactory.philosophyCache = /* @__PURE__ */ new Map();
-var DanielsPhilosophy = class extends BaseTrainingPhilosophy {
-  constructor() {
-    super("daniels", "Jack Daniels");
-    this.cachedVDOTPaces = /* @__PURE__ */ new Map();
-  }
-  /**
-   * Enhanced plan generation with VDOT-based pacing and 80/20 enforcement
-   */
-  enhancePlan(basePlan) {
-    const enhancedPlan = super.enhancePlan(basePlan);
-    const currentVDOT = basePlan.config.currentFitness?.vdot || this.estimateVDOTFromPlan(basePlan);
-    const pacedPlan = {
-      ...enhancedPlan,
-      workouts: enhancedPlan.workouts.map(
-        (workout) => this.applyVDOTBasedPacing(workout, currentVDOT)
-      )
-    };
-    const danielsCompliantPlan = this.validateAndEnforceIntensityDistribution(pacedPlan);
-    const intensityReport = this.generateIntensityReport(danielsCompliantPlan);
-    return {
-      ...danielsCompliantPlan,
-      metadata: {
-        ...danielsCompliantPlan.metadata,
-        danielsVDOT: currentVDOT,
-        trainingPaces: this.getVDOTPaces(currentVDOT),
-        intensityDistribution: intensityReport.overall,
-        intensityReport,
-        methodology: "daniels",
-        complianceScore: intensityReport.compliance
-      }
-    };
-  }
-  /**
-   * Daniels-specific workout customization with VDOT integration
-   */
-  customizeWorkout(template, phase, weekNumber, vdot) {
-    const baseCustomization = super.customizeWorkout(template, phase, weekNumber);
-    const currentVDOT = vdot || this.estimateVDOTFromTemplate(template);
-    const trainingPaces = this.getVDOTPaces(currentVDOT);
-    const danielsSegments = baseCustomization.segments.map(
-      (segment) => this.customizeSegmentWithVDOTPaces(segment, template.type, phase, trainingPaces)
-    );
-    return {
-      ...baseCustomization,
-      segments: danielsSegments,
-      adaptationTarget: this.getDanielsAdaptationTarget(template.type, phase),
-      metadata: {
-        ...baseCustomization.metadata,
-        vdot: currentVDOT,
-        trainingPaces,
-        methodology: "daniels"
-      }
-    };
-  }
-  /**
-   * Customize workout segment with VDOT-based paces
-   */
-  customizeSegmentWithVDOTPaces(segment, workoutType, phase, trainingPaces) {
-    const paceMapping = {
-      easy: "easy",
-      recovery: "easy",
-      long_run: "easy",
-      tempo: "threshold",
-      threshold: "threshold",
-      steady: "marathon",
-      vo2max: "interval",
-      speed: "repetition",
-      fartlek: "threshold",
-      progression: "easy",
-      race_pace: "marathon"
-    };
-    const paceZone = paceMapping[workoutType] || "easy";
-    const targetPace = trainingPaces[paceZone];
-    const customizedSegment = {
-      ...segment,
-      intensity: this.calculateVDOTBasedIntensity(segment.intensity, paceZone, phase),
-      paceTarget: {
-        min: targetPace.min,
-        max: targetPace.max
-      },
-      description: this.enhanceSegmentDescriptionWithPace(
-        segment.description,
-        workoutType,
-        targetPace,
-        paceZone
-      )
-    };
-    return this.applyPhaseSpecificAdjustments(customizedSegment, phase, workoutType);
-  }
-  /**
-   * Calculate VDOT-based intensity for a given pace zone
-   */
-  calculateVDOTBasedIntensity(baseIntensity, paceZone, phase) {
-    const danielsIntensityMap = {
-      easy: 70,
-      // E pace: 59-74% VO2max
-      marathon: 84,
-      // M pace: 84% VO2max
-      threshold: 88,
-      // T pace: 88% VO2max
-      interval: 98,
-      // I pace: 98-100% VO2max
-      repetition: 105
-      // R pace: 105-110% VO2max
-    };
-    const targetIntensity = danielsIntensityMap[paceZone];
-    const phaseAdjustment = this.getPhaseIntensityAdjustment(phase, paceZone);
-    return Math.min(100, Math.max(50, targetIntensity + phaseAdjustment));
-  }
-  /**
-   * Get phase-specific intensity adjustments
-   */
-  getPhaseIntensityAdjustment(phase, paceZone) {
-    const adjustments = {
-      base: {
-        easy: -2,
-        // Slightly easier in base phase
-        marathon: -3,
-        // Conservative marathon pace
-        threshold: -5,
-        // Reduced threshold intensity
-        interval: -10,
-        // Minimal interval work
-        repetition: -15
-        // Very limited speed work
-      },
-      build: {
-        easy: 0,
-        // Standard easy pace
-        marathon: 0,
-        // Standard marathon pace
-        threshold: 0,
-        // Full threshold work
-        interval: -2,
-        // Slightly reduced interval
-        repetition: -5
-        // Conservative speed work
-      },
-      peak: {
-        easy: 0,
-        // Standard easy for recovery
-        marathon: 2,
-        // Slightly faster marathon pace
-        threshold: 2,
-        // Enhanced threshold work
-        interval: 0,
-        // Full interval intensity
-        repetition: 0
-        // Full speed work
-      },
-      taper: {
-        easy: -2,
-        // Very easy for recovery
-        marathon: 0,
-        // Race-specific marathon pace
-        threshold: -3,
-        // Reduced threshold volume
-        interval: -2,
-        // Maintain interval sharpness
-        repetition: -5
-        // Light speed maintenance
-      },
-      recovery: {
-        easy: -5,
-        // Very easy recovery
-        marathon: -10,
-        // Minimal marathon pace work
-        threshold: -15,
-        // Minimal threshold work
-        interval: -20,
-        // Minimal interval work
-        repetition: -25
-        // Minimal speed work
-      }
-    };
-    return adjustments[phase]?.[paceZone] || 0;
-  }
-  /**
-   * Enhance segment description with VDOT-based pace information
-   */
-  enhanceSegmentDescriptionWithPace(baseDescription, workoutType, targetPace, paceZone) {
-    const paceDescription = this.formatPaceDescription(targetPace, paceZone);
-    const zoneDescription = this.getZoneDescription(paceZone);
-    return `${baseDescription} ${paceDescription} (${zoneDescription})`;
-  }
-  /**
-   * Format pace description for display
-   */
-  formatPaceDescription(pace, zone) {
-    const formatPace = (p) => {
-      const minutes = Math.floor(p);
-      const seconds = Math.round((p - minutes) * 60);
-      return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-    };
-    const target = formatPace(pace.target);
-    const range = `${formatPace(pace.min)}-${formatPace(pace.max)}`;
-    return `at ${target}/km (${range}/km ${zone.toUpperCase()} pace)`;
-  }
-  /**
-   * Get description for pace zone
-   */
-  getZoneDescription(zone) {
-    const descriptions = {
-      easy: "E - Easy/Aerobic",
-      marathon: "M - Marathon",
-      threshold: "T - Threshold/Tempo",
-      interval: "I - Interval/VO2max",
-      repetition: "R - Repetition/Speed"
-    };
-    return descriptions[zone];
-  }
-  /**
-   * Apply phase-specific adjustments to customized segments
-   */
-  applyPhaseSpecificAdjustments(segment, phase, workoutType) {
-    if (phase === "base") {
-      if (workoutType === "threshold" || workoutType === "vo2max") {
-        return {
-          ...segment,
-          duration: Math.max(segment.duration * 0.8, 15),
-          // Reduce duration in base
-          intensity: Math.max(segment.intensity - 5, 70)
-          // Reduce intensity
-        };
-      }
-    }
-    if (phase === "peak") {
-      if (workoutType === "vo2max" || workoutType === "speed") {
-        return {
-          ...segment,
-          intensity: Math.min(segment.intensity + 2, 100)
-          // Increase intensity slightly
-        };
-      }
-    }
-    if (phase === "taper") {
-      return {
-        ...segment,
-        duration: Math.max(segment.duration * 0.7, 10)
-        // Reduce duration significantly
-      };
-    }
-    return segment;
-  }
-  /**
-   * Estimate VDOT from workout template characteristics
-   */
-  estimateVDOTFromTemplate(template) {
-    const baseVDOT = 45;
-    const avgIntensity = template.segments.reduce((sum, seg) => sum + (seg.intensity || 75), 0) / template.segments.length;
-    if (avgIntensity > 90) return baseVDOT + 5;
-    if (avgIntensity > 80) return baseVDOT;
-    return baseVDOT - 5;
-  }
-  /**
-   * Daniels workout selection prioritizing key workout types
-   */
-  selectWorkout(type, phase, weekInPhase) {
-    const availableTemplates = Object.keys(WORKOUT_TEMPLATES).filter((key) => WORKOUT_TEMPLATES[key].type === type);
-    if (availableTemplates.length === 0) {
-      throw new Error(`No templates available for workout type: ${type}`);
-    }
-    return this.selectDanielsSpecificWorkout(type, phase, weekInPhase, availableTemplates);
-  }
-  /**
-   * Daniels-specific workout selection algorithm
-   * Prioritizes tempo runs, intervals, and repetitions based on phase
-   */
-  selectDanielsSpecificWorkout(type, phase, weekInPhase, availableTemplates) {
-    switch (phase) {
-      case "base":
-        return this.selectBasePhaseWorkout(type, weekInPhase, availableTemplates);
-      case "build":
-        return this.selectBuildPhaseWorkout(type, weekInPhase, availableTemplates);
-      case "peak":
-        return this.selectPeakPhaseWorkout(type, weekInPhase, availableTemplates);
-      case "taper":
-        return this.selectTaperPhaseWorkout(type, weekInPhase, availableTemplates);
-      case "recovery":
-        return this.selectRecoveryPhaseWorkout(type, availableTemplates);
-      default:
-        return availableTemplates[0];
-    }
-  }
-  /**
-   * Base phase: Focus on easy running with gradual introduction of quality
-   * Week 1-2: Easy only
-   * Week 3-4: Add strides and light tempo
-   * Week 5+: Introduce threshold work
-   */
-  selectBasePhaseWorkout(type, weekInPhase, templates) {
-    switch (type) {
-      case "easy":
-        return "EASY_AEROBIC";
-      case "tempo":
-        if (weekInPhase <= 2) {
-          return "EASY_AEROBIC";
-        }
-        return "TEMPO_CONTINUOUS";
-      case "threshold":
-        if (weekInPhase <= 4) {
-          return templates.includes("TEMPO_CONTINUOUS") ? "TEMPO_CONTINUOUS" : templates[0];
-        }
-        return this.selectThresholdWorkout(weekInPhase, templates);
-      case "speed":
-        return "SPEED_200M_REPS";
-      case "vo2max":
-        return templates.includes("TEMPO_CONTINUOUS") ? "TEMPO_CONTINUOUS" : templates[0];
-      case "long_run":
-        return "LONG_RUN";
-      default:
-        return templates[0];
-    }
-  }
-  /**
-   * Build phase: Balance aerobic maintenance with quality work
-   * Emphasis on threshold and tempo development
-   * Introduction of VO2max work
-   */
-  selectBuildPhaseWorkout(type, weekInPhase, templates) {
-    switch (type) {
-      case "tempo":
-        return "TEMPO_CONTINUOUS";
-      case "threshold":
-        return this.selectThresholdWorkout(weekInPhase, templates);
-      case "vo2max":
-        if (weekInPhase <= 2) {
-          return templates.includes("VO2MAX_5X3") ? "VO2MAX_5X3" : templates[0];
-        }
-        return this.selectVO2MaxWorkout(weekInPhase, templates);
-      case "speed":
-        return "SPEED_200M_REPS";
-      case "fartlek":
-        return "FARTLEK_VARIED";
-      case "progression":
-        return "PROGRESSION_3_STAGE";
-      case "easy":
-        return "EASY_AEROBIC";
-      case "long_run":
-        return "LONG_RUN";
-      default:
-        return templates[0];
-    }
-  }
-  /**
-   * Peak phase: Focus on race pace and VO2max
-   * Maintain threshold, reduce volume
-   * Sharpen with speed work
-   */
-  selectPeakPhaseWorkout(type, weekInPhase, templates) {
-    switch (type) {
-      case "tempo":
-        return "TEMPO_CONTINUOUS";
-      case "threshold":
-        return templates.includes("THRESHOLD_PROGRESSION") ? "THRESHOLD_PROGRESSION" : this.selectThresholdWorkout(weekInPhase, templates);
-      case "vo2max":
-        return this.selectVO2MaxWorkout(weekInPhase, templates);
-      case "speed":
-        return "SPEED_200M_REPS";
-      case "race_pace":
-        return "TEMPO_CONTINUOUS";
-      // At race pace
-      case "fartlek":
-        return "FARTLEK_VARIED";
-      case "easy":
-        return "EASY_AEROBIC";
-      case "long_run":
-        return "LONG_RUN";
-      default:
-        return templates[0];
-    }
-  }
-  /**
-   * Taper phase: Maintain fitness, reduce volume
-   * Focus on race pace feel
-   */
-  selectTaperPhaseWorkout(type, weekInPhase, templates) {
-    switch (type) {
-      case "tempo":
-        return "TEMPO_CONTINUOUS";
-      case "threshold":
-        return "THRESHOLD_PROGRESSION";
-      case "vo2max":
-        return templates.includes("VO2MAX_5X3") ? "VO2MAX_5X3" : templates[0];
-      case "speed":
-        return "SPEED_200M_REPS";
-      case "easy":
-        return "EASY_AEROBIC";
-      case "long_run":
-        return "LONG_RUN";
-      default:
-        return templates[0];
-    }
-  }
-  /**
-   * Recovery phase: Easy running only
-   */
-  selectRecoveryPhaseWorkout(type, templates) {
-    switch (type) {
-      case "recovery":
-        return "RECOVERY_JOG";
-      case "easy":
-        return "EASY_AEROBIC";
-      default:
-        return "EASY_AEROBIC";
-    }
-  }
-  /**
-   * Select appropriate threshold workout based on progression
-   */
-  selectThresholdWorkout(weekInPhase, templates) {
-    if (templates.includes("LACTATE_THRESHOLD_2X20")) {
-      return "LACTATE_THRESHOLD_2X20";
-    }
-    if (templates.includes("THRESHOLD_PROGRESSION")) {
-      return "THRESHOLD_PROGRESSION";
-    }
-    return templates[0];
-  }
-  /**
-   * Select appropriate VO2max workout with progression
-   */
-  selectVO2MaxWorkout(weekInPhase, templates) {
-    if (templates.includes("VO2MAX_4X4") && templates.includes("VO2MAX_5X3")) {
-      return weekInPhase % 2 === 0 ? "VO2MAX_4X4" : "VO2MAX_5X3";
-    }
-    return templates.find((t) => t.includes("VO2MAX")) || templates[0];
-  }
-  /**
-   * Get cached or calculate VDOT-based training paces
-   */
-  getVDOTPaces(vdot) {
-    if (!this.cachedVDOTPaces.has(vdot)) {
-      this.cachedVDOTPaces.set(vdot, calculateTrainingPaces(vdot));
-    }
-    return this.cachedVDOTPaces.get(vdot);
-  }
-  /**
-   * Calculate VDOT from run data with caching
-   */
-  calculateVDOTFromRuns(runs) {
-    return calculateVDOTCached(runs);
-  }
-  /**
-   * Apply VDOT-based pace calculations to workout segments
-   */
-  applyVDOTBasedPacing(plannedWorkout, vdot) {
-    const workout = plannedWorkout.workout;
-    if (!workout || !workout.segments || vdot < 30 || vdot > 85) {
-      return plannedWorkout;
-    }
-    const danielsPaces = this.getVDOTPaces(vdot);
-    const enhancedSegments = workout.segments.map((segment) => ({
-      ...segment,
-      paceTarget: this.getDanielsSpecificPace(segment.zone.name, danielsPaces),
-      heartRateTarget: this.calculateVDOTHeartRates(segment.zone.name, vdot),
-      description: this.enhanceSegmentWithVDOTInfo(segment.description, segment.zone.name, danielsPaces)
-    }));
-    return {
-      ...plannedWorkout,
-      workout: {
-        ...workout,
-        segments: enhancedSegments,
-        vdotUsed: vdot,
-        paceRecommendations: this.generatePaceRecommendations(danielsPaces)
-      }
-    };
-  }
-  /**
-   * Get Daniels-specific pace for a training zone
-   */
-  getDanielsSpecificPace(zoneName, paces) {
-    switch (zoneName.toLowerCase()) {
-      case "recovery":
-        return {
-          min: paces.easy.max * 1.1,
-          max: paces.easy.max * 1.25,
-          target: paces.easy.max * 1.15
-        };
-      case "easy":
-        return paces.easy;
-      case "steady":
-        return {
-          min: paces.easy.min,
-          max: paces.marathon.max,
-          target: (paces.easy.target + paces.marathon.target) / 2
-        };
-      case "tempo":
-        return {
-          min: paces.marathon.max,
-          max: paces.marathon.max * 1.05,
-          target: paces.marathon.max * 1.02
-        };
-      case "threshold":
-        return paces.threshold;
-      case "vo2 max":
-      case "vo2max":
-        return paces.interval;
-      case "neuromuscular":
-        return paces.repetition;
-      default:
-        return paces.marathon;
-    }
-  }
-  /**
-   * Calculate VDOT-based heart rate ranges
-   */
-  calculateVDOTHeartRates(zoneName, vdot) {
-    const estimatedMaxHR = 220 - (vdot < 45 ? 35 : vdot < 55 ? 30 : 25);
-    switch (zoneName) {
-      case "Recovery":
-        return { min: Math.round(estimatedMaxHR * 0.5), max: Math.round(estimatedMaxHR * 0.6) };
-      case "Easy":
-        return { min: Math.round(estimatedMaxHR * 0.65), max: Math.round(estimatedMaxHR * 0.75) };
-      case "Steady":
-        return { min: Math.round(estimatedMaxHR * 0.75), max: Math.round(estimatedMaxHR * 0.82) };
-      case "Tempo":
-        return { min: Math.round(estimatedMaxHR * 0.82), max: Math.round(estimatedMaxHR * 0.87) };
-      case "Threshold":
-        return { min: Math.round(estimatedMaxHR * 0.87), max: Math.round(estimatedMaxHR * 0.92) };
-      case "VO2max":
-        return { min: Math.round(estimatedMaxHR * 0.92), max: Math.round(estimatedMaxHR * 0.97) };
-      case "Neuromuscular":
-        return { min: Math.round(estimatedMaxHR * 0.95), max: Math.round(estimatedMaxHR * 1) };
-      default:
-        return { min: Math.round(estimatedMaxHR * 0.7), max: Math.round(estimatedMaxHR * 0.8) };
-    }
-  }
-  /**
-   * Enhance segment description with VDOT-specific pace information
-   */
-  enhanceSegmentWithVDOTInfo(description, zoneName, paces) {
-    const pace = this.getDanielsSpecificPace(zoneName, paces);
-    const paceStr = this.formatPaceRange(pace);
-    const zoneDescriptions = {
-      "easy": `E pace (${paceStr}) - Build aerobic base`,
-      "marathon": `M pace (${paceStr}) - Race pace endurance`,
-      "threshold": `T pace (${paceStr}) - Lactate threshold`,
-      "interval": `I pace (${paceStr}) - VO2max development`,
-      "repetition": `R pace (${paceStr}) - Speed and power`
-    };
-    const enhancement = zoneDescriptions[zoneName.toLowerCase()];
-    return enhancement ? `${enhancement} - ${description}` : description;
-  }
-  /**
-   * Format pace range for display
-   */
-  formatPaceRange(pace) {
-    const formatTime = (minutes) => {
-      const mins = Math.floor(minutes);
-      const secs = Math.round((minutes - mins) * 60);
-      return `${mins}:${secs.toString().padStart(2, "0")}`;
-    };
-    if (Math.abs(pace.min - pace.max) < 0.1) {
-      return formatTime(pace.target);
-    }
-    return `${formatTime(pace.min)}-${formatTime(pace.max)}`;
-  }
-  /**
-   * Generate pace recommendations for the workout
-   */
-  generatePaceRecommendations(paces) {
-    return {
-      easy: `E: ${this.formatPaceRange(paces.easy)} - Conversational pace, aerobic base`,
-      marathon: `M: ${this.formatPaceRange(paces.marathon)} - Goal marathon pace`,
-      threshold: `T: ${this.formatPaceRange(paces.threshold)} - Comfortably hard, 1-hour effort`,
-      interval: `I: ${this.formatPaceRange(paces.interval)} - Hard intervals, VO2max`,
-      repetition: `R: ${this.formatPaceRange(paces.repetition)} - Short, fast repeats`
-    };
-  }
-  /**
-   * Estimate VDOT from training plan characteristics
-   */
-  estimateVDOTFromPlan(plan) {
-    const weeklyDistance = plan.summary.totalDistance / plan.summary.totalWeeks;
-    const workoutIntensity = plan.summary.phases.reduce((avg, phase) => avg + phase.intensityDistribution.hard, 0) / plan.summary.phases.length;
-    let estimatedVDOT = 35;
-    if (weeklyDistance > 80) estimatedVDOT += 15;
-    else if (weeklyDistance > 60) estimatedVDOT += 10;
-    else if (weeklyDistance > 40) estimatedVDOT += 5;
-    if (workoutIntensity > 20) estimatedVDOT += 10;
-    else if (workoutIntensity > 15) estimatedVDOT += 5;
-    return Math.min(65, estimatedVDOT);
-  }
-  /**
-   * Calculate actual intensity distribution from plan
-   */
-  calculateActualIntensityDistribution(plan) {
-    let easyMinutes = 0;
-    let moderateMinutes = 0;
-    let hardMinutes = 0;
-    const workouts = plan.workouts || [];
-    workouts.forEach((workout) => {
-      if (workout?.workout?.segments) {
-        workout.workout.segments.forEach((segment) => {
-          if (segment.intensity <= 75) {
-            easyMinutes += segment.duration;
-          } else if (segment.intensity <= 85) {
-            moderateMinutes += segment.duration;
-          } else {
-            hardMinutes += segment.duration;
-          }
-        });
-      }
-    });
-    const totalMinutes = easyMinutes + moderateMinutes + hardMinutes;
-    if (totalMinutes === 0) return { easy: 80, moderate: 15, hard: 5 };
-    return {
-      easy: Math.round(easyMinutes / totalMinutes * 100),
-      moderate: Math.round(moderateMinutes / totalMinutes * 100),
-      hard: Math.round(hardMinutes / totalMinutes * 100)
-    };
-  }
-  /**
-   * Update training paces when fitness changes
-   */
-  updateVDOT(newVDOT) {
-    if (newVDOT < 30 || newVDOT > 85) {
-      throw new Error(`Invalid VDOT: ${newVDOT}. Must be between 30 and 85.`);
-    }
-    this.cachedVDOTPaces.delete(newVDOT);
-    const newPaces = this.getVDOTPaces(newVDOT);
-    return newPaces;
-  }
-  /**
-   * Enforce 80/20 intensity distribution across plan
-   */
-  enforce8020Distribution(plan) {
-    const actualDistribution = this.calculateActualIntensityDistribution(plan);
-    if (actualDistribution.easy >= 78 && actualDistribution.easy <= 82) {
-      return plan;
-    }
-    const adjustedWorkouts = plan.workouts.map((workout) => {
-      if (actualDistribution.easy < 78) {
-        return this.convertToEasierIntensity(workout);
-      } else if (actualDistribution.easy > 82) {
-        return this.addQualityToWorkout(workout);
-      }
-      return workout;
-    });
-    return {
-      ...plan,
-      workouts: adjustedWorkouts
-    };
-  }
-  /**
-   * Convert workout to easier intensity for 80/20 compliance
-   */
-  convertToEasierIntensity(workout) {
-    const modifiedSegments = workout.workout.segments.map((segment) => {
-      if (segment.intensity > 75 && segment.intensity < 90) {
-        return {
-          ...segment,
-          intensity: 70,
-          zone: TRAINING_ZONES.EASY,
-          description: `Easy ${segment.description.toLowerCase()}`
-        };
-      }
-      return segment;
-    });
-    return {
-      ...workout,
-      workout: {
-        ...workout.workout,
-        segments: modifiedSegments
-      }
-    };
-  }
-  /**
-   * Add quality to workout for better distribution
-   */
-  addQualityToWorkout(workout) {
-    if (workout.workout.type === "easy" && Math.random() > 0.7) {
-      const totalDuration = workout.workout.segments.reduce((sum, seg) => sum + seg.duration, 0);
-      if (totalDuration > 45) {
-        const segments = [
-          {
-            ...workout.workout.segments[0],
-            duration: totalDuration * 0.4,
-            description: "Easy warm-up"
-          },
-          {
-            duration: totalDuration * 0.2,
-            intensity: 85,
-            zone: TRAINING_ZONES.TEMPO,
-            description: "Tempo segment"
-          },
-          {
-            ...workout.workout.segments[0],
-            duration: totalDuration * 0.4,
-            description: "Easy cool-down"
-          }
-        ];
-        return {
-          ...workout,
-          workout: {
-            ...workout.workout,
-            type: "tempo",
-            segments
-          }
-        };
-      }
-    }
-    return workout;
-  }
-  /**
-   * Comprehensive intensity distribution validation and enforcement system
-   */
-  /**
-   * Validate and enforce 80/20 intensity distribution with phase-specific targets
-   */
-  validateAndEnforceIntensityDistribution(plan) {
-    const phaseSpecificPlan = this.applyPhaseSpecificTargets(plan);
-    const validatedPlan = this.validateIntensityDistribution(phaseSpecificPlan);
-    if (!validatedPlan.isValid) {
-      return this.autoAdjustIntensityDistribution(phaseSpecificPlan, validatedPlan.violations);
-    }
-    return phaseSpecificPlan;
-  }
-  /**
-   * Apply phase-specific intensity targets for Daniels methodology
-   */
-  applyPhaseSpecificTargets(plan) {
-    const adjustedBlocks = plan.blocks.map((block) => {
-      const targetDistribution = this.getPhaseIntensityTarget(block.phase);
-      const adjustedMicrocycles = block.microcycles.map((microcycle) => ({
-        ...microcycle,
-        workouts: this.adjustWorkoutsToTargetDistribution(microcycle.workouts, targetDistribution, block.phase)
-      }));
-      return {
-        ...block,
-        microcycles: adjustedMicrocycles,
-        targetIntensityDistribution: targetDistribution
-      };
-    });
-    return {
-      ...plan,
-      blocks: adjustedBlocks
-    };
-  }
-  /**
-   * Get phase-specific intensity targets for Daniels methodology
-   */
-  getPhaseIntensityTarget(phase) {
-    const targets = METHODOLOGY_PHASE_TARGETS.daniels;
-    return targets[phase] || { easy: 80, moderate: 5, hard: 15 };
-  }
-  /**
-   * Adjust workouts to meet target intensity distribution
-   */
-  adjustWorkoutsToTargetDistribution(workouts, target, phase) {
-    const currentDistribution = this.calculateWorkoutGroupDistribution(workouts);
-    const adjustmentNeeded = this.calculateDistributionAdjustment(currentDistribution, target);
-    if (Math.abs(adjustmentNeeded.easy) <= 2) {
-      return workouts;
-    }
-    return this.applyDistributionAdjustments(workouts, adjustmentNeeded, phase);
-  }
-  /**
-   * Calculate current intensity distribution from workout group
-   */
-  calculateWorkoutGroupDistribution(workouts) {
-    let easyMinutes = 0;
-    let moderateMinutes = 0;
-    let hardMinutes = 0;
-    workouts.forEach((workout) => {
-      if (workout?.workout?.segments) {
-        workout.workout.segments.forEach((segment) => {
-          const intensity = segment.intensity;
-          if (intensity <= 75) {
-            easyMinutes += segment.duration;
-          } else if (intensity <= 85) {
-            moderateMinutes += segment.duration;
-          } else {
-            hardMinutes += segment.duration;
-          }
-        });
-      }
-    });
-    const totalMinutes = easyMinutes + moderateMinutes + hardMinutes;
-    if (totalMinutes === 0) return { easy: 80, moderate: 5, hard: 15 };
-    return {
-      easy: Math.round(easyMinutes / totalMinutes * 100),
-      moderate: Math.round(moderateMinutes / totalMinutes * 100),
-      hard: Math.round(hardMinutes / totalMinutes * 100)
-    };
-  }
-  /**
-   * Calculate what adjustments are needed to meet target distribution
-   */
-  calculateDistributionAdjustment(current, target) {
-    return {
-      easy: target.easy - current.easy,
-      moderate: target.moderate - current.moderate,
-      hard: target.hard - current.hard
-    };
-  }
-  /**
-   * Apply distribution adjustments to workouts
-   */
-  applyDistributionAdjustments(workouts, adjustment, phase) {
-    const adjustedWorkouts = [...workouts];
-    if (adjustment.easy > 0) {
-      adjustedWorkouts.forEach((workout, index) => {
-        if (this.canConvertToEasier(workout)) {
-          adjustedWorkouts[index] = this.convertToEasierIntensity(workout);
-        }
-      });
-    }
-    if (adjustment.hard > 0 && phase !== "base") {
-      const eligibleWorkouts = adjustedWorkouts.filter((w) => this.canAddQuality(w));
-      const workoutsToModify = Math.min(2, eligibleWorkouts.length);
-      for (let i = 0; i < workoutsToModify; i++) {
-        const workoutIndex = adjustedWorkouts.indexOf(eligibleWorkouts[i]);
-        adjustedWorkouts[workoutIndex] = this.addQualityToWorkout(eligibleWorkouts[i]);
-      }
-    }
-    return adjustedWorkouts;
-  }
-  /**
-   * Check if workout can be converted to easier intensity
-   */
-  canConvertToEasier(workout) {
-    if (!workout?.workout?.segments) return false;
-    const hasModerateIntensity = workout.workout.segments.some(
-      (segment) => segment.intensity > 75 && segment.intensity < 90
-    );
-    return hasModerateIntensity && workout.workout.type !== "threshold" && workout.workout.type !== "vo2max";
-  }
-  /**
-   * Check if workout can have quality added
-   */
-  canAddQuality(workout) {
-    if (!workout?.workout?.segments) return false;
-    const totalDuration = workout.workout.segments.reduce((sum, seg) => sum + seg.duration, 0);
-    const isEasyRun = workout.workout.type === "easy";
-    const isLongEnough = totalDuration >= 45;
-    return isEasyRun && isLongEnough;
-  }
-  /**
-   * Comprehensive intensity distribution validation
-   */
-  validateIntensityDistribution(plan) {
-    const violations = [];
-    const phaseDistributions = {};
-    plan.blocks.forEach((block) => {
-      const phaseDistribution = this.calculateActualIntensityDistribution({
-        ...plan,
-        workouts: plan.workouts.filter(
-          (w) => w.date >= block.startDate && w.date <= block.endDate
-        )
-      });
-      phaseDistributions[`${block.phase}-${block.startDate}`] = phaseDistribution;
-      const target = this.getPhaseIntensityTarget(block.phase);
-      const phaseViolations = this.checkDistributionViolations(
-        phaseDistribution,
-        target,
-        block.phase
-      );
-      violations.push(...phaseViolations);
-    });
-    const overallDistribution = this.calculateActualIntensityDistribution(plan);
-    const overallTarget = INTENSITY_MODELS.polarized;
-    const overallViolations = this.checkDistributionViolations(
-      overallDistribution,
-      overallTarget,
-      "overall"
-    );
-    violations.push(...overallViolations);
-    return {
-      isValid: violations.length === 0,
-      violations,
-      overall: overallDistribution,
-      phases: phaseDistributions
-    };
-  }
-  /**
-   * Check for distribution violations
-   */
-  checkDistributionViolations(actual, target, phase) {
-    const violations = [];
-    const tolerance = 5;
-    if (actual.easy < target.easy - tolerance) {
-      violations.push({
-        type: "insufficient_easy",
-        phase,
-        actual: actual.easy,
-        target: target.easy,
-        difference: target.easy - actual.easy,
-        severity: this.calculateViolationSeverity(target.easy - actual.easy)
-      });
-    }
-    if (actual.hard > target.hard + tolerance) {
-      violations.push({
-        type: "excessive_hard",
-        phase,
-        actual: actual.hard,
-        target: target.hard,
-        difference: actual.hard - target.hard,
-        severity: this.calculateViolationSeverity(actual.hard - target.hard)
-      });
-    }
-    return violations;
-  }
-  /**
-   * Calculate violation severity
-   */
-  calculateViolationSeverity(difference) {
-    const absDiff = Math.abs(difference);
-    if (absDiff <= 5) return "low";
-    if (absDiff <= 10) return "medium";
-    if (absDiff <= 15) return "high";
-    return "critical";
-  }
-  /**
-   * Auto-adjust intensity distribution to fix violations
-   */
-  autoAdjustIntensityDistribution(plan, violations) {
-    let adjustedPlan = { ...plan };
-    const sortedViolations = violations.sort((a, b) => {
-      const severityOrder = { low: 1, medium: 2, high: 3, critical: 4 };
-      return severityOrder[b.severity] - severityOrder[a.severity];
-    });
-    sortedViolations.forEach((violation) => {
-      adjustedPlan = this.fixIntensityViolation(adjustedPlan, violation);
-    });
-    const revalidation = this.validateIntensityDistribution(adjustedPlan);
-    if (!revalidation.isValid && revalidation.violations.length < violations.length) {
-      return this.autoAdjustIntensityDistribution(adjustedPlan, revalidation.violations);
-    }
-    return adjustedPlan;
-  }
-  /**
-   * Fix specific intensity distribution violation
-   */
-  fixIntensityViolation(plan, violation) {
-    const adjustedWorkouts = plan.workouts.map((workout) => {
-      switch (violation.type) {
-        case "insufficient_easy":
-          return this.convertWorkoutToEasier(workout, violation);
-        case "excessive_hard":
-          return this.reduceWorkoutIntensity(workout, violation);
-        default:
-          return workout;
-      }
-    });
-    return {
-      ...plan,
-      workouts: adjustedWorkouts
-    };
-  }
-  /**
-   * Convert workout to easier intensity to increase easy percentage
-   */
-  convertWorkoutToEasier(workout, violation) {
-    if (!this.shouldAdjustWorkout(workout, violation)) {
-      return workout;
-    }
-    const modifiedSegments = workout.workout.segments.map((segment) => {
-      if (segment.intensity > 75 && segment.intensity <= 85) {
-        return {
-          ...segment,
-          intensity: 70,
-          zone: TRAINING_ZONES.EASY,
-          description: this.updateSegmentDescription(segment.description, "easier")
-        };
-      }
-      return segment;
-    });
-    return {
-      ...workout,
-      workout: {
-        ...workout.workout,
-        segments: modifiedSegments,
-        type: "easy",
-        adaptationTarget: "Aerobic base building, 80/20 compliance"
-      }
-    };
-  }
-  /**
-   * Reduce workout intensity to decrease hard percentage
-   */
-  reduceWorkoutIntensity(workout, violation) {
-    if (!this.shouldAdjustWorkout(workout, violation) || violation.severity === "low") {
-      return workout;
-    }
-    const modifiedSegments = workout.workout.segments.map((segment) => {
-      if (segment.intensity > 85) {
-        const newIntensity = violation.severity === "critical" ? 70 : 80;
-        return {
-          ...segment,
-          intensity: newIntensity,
-          zone: newIntensity <= 75 ? TRAINING_ZONES.EASY : TRAINING_ZONES.STEADY,
-          description: this.updateSegmentDescription(segment.description, "reduced")
-        };
-      }
-      return segment;
-    });
-    return {
-      ...workout,
-      workout: {
-        ...workout.workout,
-        segments: modifiedSegments,
-        adaptationTarget: `${workout.workout.adaptationTarget} (intensity reduced for 80/20 compliance)`
-      }
-    };
-  }
-  /**
-   * Check if workout should be adjusted for violation
-   */
-  shouldAdjustWorkout(workout, violation) {
-    if (workout.workout.type === "race_pace" || workout.workout.type === "time_trial") {
-      return violation.severity === "critical";
-    }
-    if (violation.severity === "high" || violation.severity === "critical") {
-      return true;
-    }
-    return ["easy", "steady", "recovery"].includes(workout.workout.type);
-  }
-  /**
-   * Update segment description for intensity changes
-   */
-  updateSegmentDescription(description, adjustment) {
-    const prefix = adjustment === "easier" ? "Easy " : "Reduced intensity ";
-    return `${prefix}${description.toLowerCase()} (80/20 compliance)`;
-  }
-  /**
-   * Generate intensity distribution report
-   */
-  generateIntensityReport(plan) {
-    const validation = this.validateIntensityDistribution(plan);
-    const recommendations = this.generateIntensityRecommendations(validation);
-    return {
-      overall: validation.overall,
-      target: INTENSITY_MODELS.polarized,
-      phases: validation.phases,
-      violations: validation.violations,
-      recommendations,
-      compliance: this.calculateComplianceScore(validation),
-      methodology: "daniels"
-    };
-  }
-  /**
-   * Generate intensity distribution recommendations
-   */
-  generateIntensityRecommendations(validation) {
-    const recommendations = [];
-    if (validation.overall.easy < 75) {
-      recommendations.push("Increase easy running volume to build aerobic base");
-      recommendations.push("Convert some moderate workouts to easy runs");
-    }
-    if (validation.overall.hard > 20) {
-      recommendations.push("Reduce high-intensity work to prevent overtraining");
-      recommendations.push("Focus on quality over quantity for hard workouts");
-    }
-    validation.violations.forEach((violation) => {
-      if (violation.severity === "high" || violation.severity === "critical") {
-        recommendations.push(
-          `Critical: ${violation.type} in ${violation.phase} phase - adjust immediately`
-        );
-      }
-    });
-    if (recommendations.length === 0) {
-      recommendations.push("Intensity distribution looks good - maintain current balance");
-    }
-    return recommendations;
-  }
-  /**
-   * Calculate compliance score (0-100)
-   */
-  calculateComplianceScore(validation) {
-    const target = INTENSITY_MODELS.polarized;
-    const actual = validation.overall;
-    const easyDeviation = Math.abs(actual.easy - target.easy);
-    const hardDeviation = Math.abs(actual.hard - target.hard);
-    const easyScore = Math.max(0, 100 - easyDeviation * 2);
-    const hardScore = Math.max(0, 100 - hardDeviation * 3);
-    const violationPenalty = validation.violations.reduce((penalty, violation) => {
-      const severityPenalty = { low: 2, medium: 5, high: 10, critical: 20 };
-      return penalty + severityPenalty[violation.severity];
-    }, 0);
-    const baseScore = (easyScore + hardScore) / 2;
-    return Math.max(0, Math.round(baseScore - violationPenalty));
-  }
-  /**
-   * Adjust intensity specifically for Daniels methodology
-   */
-  adjustIntensityForDaniels(baseIntensity, workoutType, phase) {
-    let adjustment = 1;
-    switch (workoutType) {
-      case "easy":
-        adjustment = phase === "base" ? 0.9 : 0.95;
-        break;
-      case "tempo":
-        adjustment = 1;
-        break;
-      case "threshold":
-        adjustment = 1.05;
-        break;
-      case "vo2max":
-        adjustment = phase === "peak" ? 1.1 : 1.05;
-        break;
-      case "speed":
-        adjustment = 1;
-        break;
-      default:
-        adjustment = 1;
-    }
-    const adjustedIntensity = baseIntensity * adjustment;
-    return Math.max(40, Math.min(100, Math.round(adjustedIntensity)));
-  }
-  /**
-   * Enhance segment descriptions with Daniels terminology
-   */
-  enhanceSegmentDescription(baseDescription, workoutType) {
-    const danielsTerms = {
-      "recovery": "Easy jog, focus on form and relaxation",
-      "easy": "Conversational pace, build aerobic base",
-      "steady": "Steady aerobic effort, controlled breathing",
-      "tempo": "Comfortably hard, controlled tempo effort",
-      "threshold": "Threshold pace, sustainable hard effort",
-      "vo2max": "VO2max intensity, hard but controlled",
-      "speed": "Neuromuscular power, focus on form",
-      "hill_repeats": "Hill power, strong uphill drive",
-      "fartlek": "Speed play, varied intensity surges",
-      "progression": "Progressive buildup, finish strong",
-      "long_run": "Aerobic base building, steady effort",
-      "race_pace": "Goal race pace, rhythm practice",
-      "time_trial": "All-out effort, race simulation",
-      "cross_training": "Non-impact aerobic exercise",
-      "strength": "Strength training for runners"
-    };
-    const enhancement = danielsTerms[workoutType];
-    return enhancement ? `${enhancement} - ${baseDescription}` : baseDescription;
-  }
-  /**
-   * Get Daniels-specific adaptation targets
-   */
-  getDanielsAdaptationTarget(workoutType, phase) {
-    const adaptationTargets = {
-      "easy": {
-        "base": "Build aerobic base, improve fat oxidation",
-        "build": "Maintain aerobic fitness, aid recovery",
-        "peak": "Active recovery between hard sessions",
-        "taper": "Maintain fitness, promote recovery",
-        "recovery": "Full recovery, blood flow maintenance"
-      },
-      "tempo": {
-        "base": "Develop aerobic power, lactate clearance",
-        "build": "Improve tempo pace, aerobic strength",
-        "peak": "Race pace practice, lactate management",
-        "taper": "Maintain tempo fitness, race prep",
-        "recovery": "Light tempo work for fitness maintenance"
-      },
-      "threshold": {
-        "base": "Develop lactate threshold, aerobic power",
-        "build": "Improve threshold pace, lactate tolerance",
-        "peak": "Race-specific threshold work",
-        "taper": "Maintain threshold fitness",
-        "recovery": "Easy threshold maintenance"
-      },
-      "vo2max": {
-        "base": "Develop VO2max, running economy",
-        "build": "Improve VO2max, neuromuscular power",
-        "peak": "Peak VO2max fitness, race sharpening",
-        "taper": "Maintain VO2max, race readiness",
-        "recovery": "Light VO2max maintenance"
-      }
-    };
-    return adaptationTargets[workoutType]?.[phase] || `${workoutType} training adaptation for ${phase} phase`;
-  }
-};
-var AerobicBaseCalculator = class {
-  constructor() {
-    this.LYDIARD_EASY_TARGET = 85;
-    // 85% minimum easy running
-    this.MAX_HARD_PERCENTAGE = 15;
-  }
-  // Maximum hard running allowed
-  /**
-   * Enforce 85%+ easy running distribution in plan
-   */
-  enforceAerobicBase(workouts) {
-    if (workouts.length === 0) return workouts;
-    const currentDistribution = this.calculateIntensityDistribution(workouts);
-    if (currentDistribution.easy >= this.LYDIARD_EASY_TARGET) {
-      return workouts;
-    }
-    return this.convertToAerobicBase(workouts, currentDistribution);
-  }
-  /**
-   * Calculate current intensity distribution
-   */
-  calculateIntensityDistribution(workouts) {
-    if (workouts.length === 0) return { easy: 100, moderate: 0, hard: 0 };
-    const totalDuration = workouts.reduce((sum, w) => sum + (w.targetMetrics.duration || 60), 0);
-    let easyDuration = 0;
-    let moderateDuration = 0;
-    let hardDuration = 0;
-    workouts.forEach((workout) => {
-      const duration = workout.targetMetrics.duration || 60;
-      const intensity = workout.targetMetrics.intensity || 70;
-      if (intensity <= 75) {
-        easyDuration += duration;
-      } else if (intensity <= 85) {
-        moderateDuration += duration;
-      } else {
-        hardDuration += duration;
-      }
-    });
-    return {
-      easy: Math.round(easyDuration / totalDuration * 100),
-      moderate: Math.round(moderateDuration / totalDuration * 100),
-      hard: Math.round(hardDuration / totalDuration * 100)
-    };
-  }
-  /**
-   * Convert workouts to achieve aerobic base targets
-   */
-  convertToAerobicBase(workouts, currentDistribution) {
-    const targetEasyPercentage = this.LYDIARD_EASY_TARGET;
-    const currentEasyPercentage = currentDistribution.easy;
-    if (currentEasyPercentage >= targetEasyPercentage) {
-      return workouts;
-    }
-    const deficitPercentage = targetEasyPercentage - currentEasyPercentage;
-    const totalDuration = workouts.reduce((sum, w) => sum + (w.targetMetrics.duration || 60), 0);
-    const durationToConvert = deficitPercentage / 100 * totalDuration;
-    const sortedWorkouts = [...workouts].sort(
-      (a, b) => (b.targetMetrics.intensity || 70) - (a.targetMetrics.intensity || 70)
-    );
-    let remainingToConvert = durationToConvert;
-    const convertedWorkouts = [...workouts];
-    for (let i = 0; i < sortedWorkouts.length && remainingToConvert > 0; i++) {
-      const workout = sortedWorkouts[i];
-      const workoutIndex = workouts.findIndex((w) => w === workout);
-      const workoutDuration = workout.targetMetrics.duration || 60;
-      const currentIntensity = workout.targetMetrics.intensity || 70;
-      if (currentIntensity > 75) {
-        convertedWorkouts[workoutIndex] = {
-          ...workout,
-          workout: this.convertToEasyWorkout(workout.workout),
-          targetMetrics: {
-            ...workout.targetMetrics,
-            intensity: 70,
-            // Easy intensity
-            tss: Math.round((workout.targetMetrics.tss || 50) * 0.7)
-            // Reduce TSS accordingly
-          }
-        };
-        remainingToConvert = Math.max(0, remainingToConvert - workoutDuration);
-      }
-    }
-    return convertedWorkouts;
-  }
-  /**
-   * Convert a workout to easy aerobic equivalent
-   */
-  convertToEasyWorkout(workout) {
-    return {
-      ...workout,
-      type: "easy",
-      segments: workout.segments.map((segment) => ({
-        ...segment,
-        intensity: 70,
-        // Easy intensity
-        description: `Easy aerobic - ${segment.description} (converted for aerobic base)`
-      })),
-      adaptationTarget: "Aerobic base development, mitochondrial adaptation",
-      estimatedTSS: Math.round(workout.estimatedTSS * 0.7)
-    };
-  }
-  /**
-   * Convert pace-based training to time/effort-based training
-   */
-  convertToTimeBased(workout) {
-    const timeBased = {
-      ...workout,
-      segments: workout.segments.map((segment) => ({
-        ...segment,
-        description: this.convertToEffortDescription(segment.description, segment.intensity)
-      })),
-      adaptationTarget: "Aerobic development through effort-based training"
-    };
-    return timeBased;
-  }
-  /**
-   * Convert segment description to effort-based terminology
-   */
-  convertToEffortDescription(description, intensity) {
-    let effortLevel;
-    if (intensity <= 70) {
-      effortLevel = "Very easy effort - conversational, nose breathing only";
-    } else if (intensity <= 75) {
-      effortLevel = "Easy effort - comfortable, can talk in full sentences";
-    } else if (intensity <= 80) {
-      effortLevel = "Steady effort - comfortably hard, some breathing effort";
-    } else if (intensity <= 87) {
-      effortLevel = "Moderate effort - controlled discomfort, rhythmic breathing";
-    } else {
-      effortLevel = "Hard effort - significant breathing, focused effort";
-    }
-    return `${description} at ${effortLevel}`;
-  }
-  /**
-   * Calculate long run progression up to 22+ miles
-   */
-  calculateLongRunProgression(currentWeek, totalWeeks, baseDistance = 10) {
-    const targetDistance = 22;
-    const progressionRate = (targetDistance - baseDistance) / (totalWeeks * 0.7);
-    let progressedDistance = baseDistance + currentWeek * progressionRate;
-    if (currentWeek % 3 === 0 && currentWeek > 3) {
-      progressedDistance = Math.max(baseDistance, progressedDistance - progressionRate);
-    }
-    return Math.min(progressedDistance, targetDistance);
-  }
-  /**
-   * Validate aerobic base compliance
-   */
-  validateAerobicBase(workouts) {
-    const distribution = this.calculateIntensityDistribution(workouts);
-    const isCompliant = distribution.easy >= this.LYDIARD_EASY_TARGET;
-    const violations = [];
-    const recommendations = [];
-    if (!isCompliant) {
-      violations.push(`Easy running: ${distribution.easy}% (target: ${this.LYDIARD_EASY_TARGET}%+)`);
-      recommendations.push(`Increase easy running by ${this.LYDIARD_EASY_TARGET - distribution.easy}%`);
-      recommendations.push("Convert some tempo/threshold workouts to easy aerobic runs");
-      recommendations.push("Focus on time on feet rather than pace");
-    }
-    if (distribution.hard > this.MAX_HARD_PERCENTAGE) {
-      violations.push(`Hard running: ${distribution.hard}% (maximum: ${this.MAX_HARD_PERCENTAGE}%)`);
-      recommendations.push("Reduce intensity of hard workouts");
-      recommendations.push("Replace some intervals with steady state runs");
-    }
-    return {
-      distribution,
-      isCompliant,
-      violations,
-      recommendations,
-      methodology: "lydiard"
-    };
-  }
-};
-var LydiardHillGenerator = class {
-  /**
-   * Generate Lydiard-specific hill workout based on phase and progression
-   */
-  generateHillWorkout(phase, weekInPhase, duration = 45) {
-    const hillProfile = this.getHillProfileForPhase(phase, weekInPhase);
-    const segments = this.createHillSegments(hillProfile, duration);
-    return {
-      id: `lydiard-hill-${phase}-week${weekInPhase}`,
-      name: `Lydiard ${hillProfile.name}`,
-      type: "hill_repeats",
-      primaryZone: hillProfile.primaryZone,
-      segments,
-      adaptationTarget: hillProfile.adaptationTarget,
-      estimatedTSS: this.calculateHillTSS(segments),
-      recoveryTime: this.calculateHillRecovery(phase, segments.length),
-      metadata: {
-        methodology: "lydiard",
-        hillType: hillProfile.type,
-        phase,
-        weekInPhase,
-        lydiardPrinciples: hillProfile.principles
-      }
-    };
-  }
-  /**
-   * Get hill profile specific to Lydiard methodology and training phase
-   */
-  getHillProfileForPhase(phase, weekInPhase) {
-    switch (phase) {
-      case "base":
-        return {
-          type: "aerobic_strength",
-          name: "Aerobic Hill Strengthening",
-          primaryZone: TRAINING_ZONES.STEADY,
-          intensity: 75 + weekInPhase * 2,
-          // Progressive intensity 75-85%
-          duration: 3 + Math.floor(weekInPhase / 2),
-          // 3-6 minute efforts
-          recovery: 90,
-          // 1.5 minute recoveries
-          repeats: Math.min(4 + weekInPhase, 8),
-          // 4-8 repeats
-          gradient: "6-8%",
-          effort: "Strong but controlled aerobic effort",
-          adaptationTarget: "Leg strength, running economy, aerobic power development",
-          principles: [
-            "Build strength through sustained hill efforts",
-            "Focus on form and biomechanical efficiency",
-            "Aerobic emphasis - not anaerobic stress",
-            "Progressive volume and intensity over weeks"
-          ]
-        };
-      case "build":
-        return {
-          type: "anaerobic_power",
-          name: "Hill Power Development",
-          primaryZone: TRAINING_ZONES.VO2_MAX,
-          intensity: 88 + weekInPhase,
-          // Higher intensity 88-92%
-          duration: 2 + Math.floor(weekInPhase / 3),
-          // 2-4 minute efforts
-          recovery: 120,
-          // 2 minute full recoveries
-          repeats: Math.min(6 + weekInPhase, 10),
-          // 6-10 repeats
-          gradient: "8-12%",
-          effort: "Hard uphill drive with controlled form",
-          adaptationTarget: "Anaerobic power, lactate tolerance, neuromuscular coordination",
-          principles: [
-            "Develop anaerobic power through hill efforts",
-            "Maintain strong uphill drive technique",
-            "Build lactate tolerance progressively",
-            "Prepare for speed development phase"
-          ]
-        };
-      case "peak":
-        return {
-          type: "speed_hills",
-          name: "Hill Speed Coordination",
-          primaryZone: TRAINING_ZONES.VO2_MAX,
-          intensity: 92 + weekInPhase,
-          // Very high intensity 92-95%
-          duration: 1 + weekInPhase * 0.5,
-          // 1-2.5 minute efforts
-          recovery: 180,
-          // 3 minute full recoveries
-          repeats: Math.min(8 + weekInPhase, 12),
-          // 8-12 shorter efforts
-          gradient: "10-15%",
-          effort: "Fast uphill running with coordination focus",
-          adaptationTarget: "Speed coordination, neuromuscular power, race preparation",
-          principles: [
-            "Fast hill running for speed development",
-            "Coordination and economy at speed",
-            "Race-specific power development",
-            "Final sharpening of leg speed"
-          ]
-        };
-      case "taper":
-        return {
-          type: "maintenance",
-          name: "Hill Maintenance",
-          primaryZone: TRAINING_ZONES.TEMPO,
-          intensity: 80,
-          // Moderate intensity
-          duration: 2,
-          // Short 2-minute efforts
-          recovery: 120,
-          // 2 minute recoveries
-          repeats: 4,
-          // Just 4 repeats
-          gradient: "6-8%",
-          effort: "Moderate hill effort to maintain feel",
-          adaptationTarget: "Maintain hill strength and coordination",
-          principles: [
-            "Maintain hill strength without fatigue",
-            "Keep neuromuscular patterns sharp",
-            "Minimal stress with maximum maintenance",
-            "Focus on race readiness"
-          ]
-        };
-      case "recovery":
-        return {
-          type: "gentle_hills",
-          name: "Gentle Hill Walking/Jogging",
-          primaryZone: TRAINING_ZONES.EASY,
-          intensity: 60,
-          // Very easy
-          duration: 1,
-          // 1 minute gentle efforts
-          recovery: 180,
-          // 3 minute recoveries
-          repeats: 3,
-          // Just 3 gentle efforts
-          gradient: "4-6%",
-          effort: "Very easy hill walking or gentle jogging",
-          adaptationTarget: "Active recovery with gentle strength maintenance",
-          principles: [
-            "Gentle movement for recovery",
-            "Maintain basic hill mechanics",
-            "No stress on anaerobic systems",
-            "Promote blood flow and healing"
-          ]
-        };
-      default:
-        return this.getHillProfileForPhase("base", weekInPhase);
-    }
-  }
-  /**
-   * Create workout segments based on hill profile
-   */
-  createHillSegments(profile, totalDuration) {
-    const segments = [];
-    const warmupDuration = Math.min(20, totalDuration * 0.3);
-    segments.push({
-      duration: warmupDuration,
-      intensity: 65,
-      zone: TRAINING_ZONES.EASY,
-      description: `Warm-up jog to hills - easy pace, prepare for ${profile.effort.toLowerCase()}`
-    });
-    for (let i = 1; i <= profile.repeats; i++) {
-      segments.push({
-        duration: profile.duration,
-        intensity: profile.intensity,
-        zone: profile.primaryZone,
-        description: `Hill repeat ${i}/${profile.repeats} - ${profile.effort} on ${profile.gradient} gradient`,
-        effort: profile.effort,
-        terrain: `${profile.gradient} uphill`,
-        focus: i === 1 ? "Establish rhythm and form" : i === profile.repeats ? "Strong finish maintaining form" : "Maintain consistent effort and technique"
-      });
-      if (i < profile.repeats) {
-        segments.push({
-          duration: profile.recovery / 60,
-          // Convert seconds to minutes
-          intensity: 50,
-          zone: TRAINING_ZONES.RECOVERY,
-          description: `Recovery jog/walk down hill - full recovery before next effort`,
-          effort: "Very easy recovery",
-          terrain: "downhill jog or walk",
-          focus: "Complete recovery, relax and prepare for next effort"
-        });
-      }
-    }
-    const cooldownDuration = Math.max(10, totalDuration * 0.2);
-    segments.push({
-      duration: cooldownDuration,
-      intensity: 60,
-      zone: TRAINING_ZONES.RECOVERY,
-      description: "Cool-down jog on flat terrain - easy pace to finish",
-      effort: "Easy relaxed jogging",
-      focus: "Gradual return to easy pace, form and relaxation"
-    });
-    return segments;
-  }
-  /**
-   * Calculate TSS for hill workout
-   */
-  calculateHillTSS(segments) {
-    let totalTSS = 0;
-    segments.forEach((segment) => {
-      const intensityFactor = segment.intensity / 100;
-      const segmentTSS = segment.duration * Math.pow(intensityFactor, 2) * 100 / 60;
-      const hillMultiplier = segment.intensity > 80 ? 1.2 : 1;
-      totalTSS += segmentTSS * hillMultiplier;
-    });
-    return Math.round(totalTSS);
-  }
-  /**
-   * Calculate recovery time for hill workout
-   */
-  calculateHillRecovery(phase, numRepeats) {
-    const baseRecovery = {
-      "base": 24,
-      // Hills in base are moderate stress
-      "build": 36,
-      // Higher intensity needs more recovery
-      "peak": 48,
-      // Very high intensity
-      "taper": 18,
-      // Light maintenance work
-      "recovery": 12
-      // Gentle work
-    };
-    const phaseRecovery = baseRecovery[phase] || 24;
-    const repeatMultiplier = 1 + (numRepeats - 4) * 0.1;
-    return Math.round(phaseRecovery * repeatMultiplier);
-  }
-  /**
-   * Create phase-specific hill training templates
-   */
-  createLydiardHillTemplates() {
-    const templates = {};
-    templates["LYDIARD_HILL_BASE"] = this.generateHillWorkout("base", 4);
-    templates["LYDIARD_HILL_BUILD"] = this.generateHillWorkout("build", 3);
-    templates["LYDIARD_HILL_PEAK"] = this.generateHillWorkout("peak", 2);
-    templates["LYDIARD_HILL_TAPER"] = this.generateHillWorkout("taper", 1);
-    templates["LYDIARD_HILL_RECOVERY"] = this.generateHillWorkout("recovery", 1);
-    return templates;
-  }
-  /**
-   * Get hill training progression recommendations
-   */
-  getHillProgressionGuidance(phase) {
-    switch (phase) {
-      case "base":
-        return {
-          frequency: "2-3 times per week",
-          duration: "4-8 weeks continuous",
-          focus: "Leg strength and running economy",
-          effort: "Strong but comfortable aerobic effort",
-          progression: "Increase duration and repeats gradually",
-          cautions: [
-            "Never run hills at anaerobic intensity",
-            "Focus on form and rhythm over speed",
-            "Build volume before intensity",
-            "Allow adequate recovery between sessions"
-          ],
-          benefits: [
-            "Increased leg strength and power",
-            "Improved running economy",
-            "Enhanced biomechanical efficiency",
-            "Foundation for later speed development"
-          ]
-        };
-      case "build":
-        return {
-          frequency: "2 times per week",
-          duration: "3-4 weeks",
-          focus: "Anaerobic power development",
-          effort: "Hard uphill drive with control",
-          progression: "Increase intensity while maintaining form",
-          cautions: [
-            "Maintain strong uphill drive technique",
-            "Do not overstride or lose form",
-            "Monitor recovery between sessions",
-            "Reduce if signs of overreaching appear"
-          ],
-          benefits: [
-            "Anaerobic power development",
-            "Lactate tolerance improvement",
-            "Neuromuscular coordination",
-            "Preparation for speed phase"
-          ]
-        };
-      case "peak":
-        return {
-          frequency: "1-2 times per week",
-          duration: "2-3 weeks",
-          focus: "Speed coordination and final sharpening",
-          effort: "Fast controlled hill running",
-          progression: "Emphasize speed and coordination",
-          cautions: [
-            "Focus on coordination over raw speed",
-            "Maintain excellent form at all times",
-            "Use sparingly - quality over quantity",
-            "Ensure full recovery between efforts"
-          ],
-          benefits: [
-            "Speed coordination development",
-            "Neuromuscular power enhancement",
-            "Race-specific preparation",
-            "Final leg speed sharpening"
-          ]
-        };
-      default:
-        return {
-          frequency: "1 time per week",
-          duration: "1-2 weeks",
-          focus: "Maintenance or recovery",
-          effort: "Easy to moderate",
-          progression: "Maintain without stress",
-          cautions: ["Keep efforts easy", "Focus on recovery"],
-          benefits: ["Strength maintenance", "Active recovery"]
-        };
-    }
-  }
-};
-var LydiardPeriodizationSystem = class {
-  constructor() {
-    // Lydiard-specific phase names mapping to standard phases
-    this.lydiardPhases = {
-      "aerobic_base": "base",
-      "hill_phase": "base",
-      // Hills are part of extended base in Lydiard
-      "anaerobic": "build",
-      "coordination": "peak",
-      "taper": "taper",
-      "recovery": "recovery"
-    };
-  }
-  /**
-   * Calculate Lydiard phase durations based on total plan length
-   */
-  calculatePhaseDurations(totalWeeks, targetRace) {
-    const basePercentage = 0.55;
-    const anaerobicPercentage = 0.2;
-    const coordinationPercentage = 0.15;
-    const taperPercentage = 0.1;
-    let baseDuration = Math.round(totalWeeks * basePercentage);
-    let anaerobicDuration = Math.round(totalWeeks * anaerobicPercentage);
-    let coordinationDuration = Math.round(totalWeeks * coordinationPercentage);
-    let taperDuration = Math.round(totalWeeks * taperPercentage);
-    baseDuration = Math.max(8, baseDuration);
-    anaerobicDuration = Math.max(3, anaerobicDuration);
-    coordinationDuration = Math.max(2, coordinationDuration);
-    taperDuration = Math.max(2, Math.min(3, taperDuration));
-    if (targetRace === "marathon") {
-      baseDuration += 2;
-      coordinationDuration = Math.max(2, coordinationDuration - 1);
-    } else if (targetRace === "5k" || targetRace === "10k") {
-      anaerobicDuration += 1;
-      coordinationDuration += 1;
-    }
-    const hillPhaseDuration = Math.max(4, Math.round(baseDuration * 0.3));
-    const aerobicBaseDuration = baseDuration - hillPhaseDuration;
-    return {
-      aerobicBase: aerobicBaseDuration,
-      hillPhase: hillPhaseDuration,
-      anaerobic: anaerobicDuration,
-      coordination: coordinationDuration,
-      taper: taperDuration,
-      totalWeeks: aerobicBaseDuration + hillPhaseDuration + anaerobicDuration + coordinationDuration + taperDuration
-    };
-  }
-  /**
-   * Create Lydiard-specific training blocks
-   */
-  createLydiardBlocks(config) {
-    const durations = this.calculatePhaseDurations(
-      config.targetWeeks,
-      config.goalRace?.type || "half_marathon"
-    );
-    const blocks = [];
-    let weekNumber = 1;
-    blocks.push({
-      phase: "base",
-      name: "Aerobic Base Building",
-      description: "Build maximum aerobic capacity through volume and easy running",
-      weekStart: weekNumber,
-      weekEnd: weekNumber + durations.aerobicBase - 1,
-      duration: durations.aerobicBase,
-      microcycles: this.createMicrocycles("base", durations.aerobicBase, weekNumber),
-      focus: ["Aerobic capacity", "Volume building", "Easy running", "Long runs"],
-      keyWorkouts: ["long_run", "easy", "steady"],
-      intensityDistribution: { easy: 95, moderate: 4, hard: 1 }
-    });
-    weekNumber += durations.aerobicBase;
-    blocks.push({
-      phase: "base",
-      name: "Hill Strength Development",
-      description: "Build leg strength and power through systematic hill training",
-      weekStart: weekNumber,
-      weekEnd: weekNumber + durations.hillPhase - 1,
-      duration: durations.hillPhase,
-      microcycles: this.createMicrocycles("base", durations.hillPhase, weekNumber),
-      focus: ["Hill strength", "Running economy", "Power development", "Form improvement"],
-      keyWorkouts: ["hill_repeats", "long_run", "easy"],
-      intensityDistribution: { easy: 85, moderate: 10, hard: 5 }
-    });
-    weekNumber += durations.hillPhase;
-    blocks.push({
-      phase: "build",
-      name: "Anaerobic Development",
-      description: "Develop anaerobic capacity and lactate tolerance",
-      weekStart: weekNumber,
-      weekEnd: weekNumber + durations.anaerobic - 1,
-      duration: durations.anaerobic,
-      microcycles: this.createMicrocycles("build", durations.anaerobic, weekNumber),
-      focus: ["Anaerobic power", "Lactate tolerance", "Tempo running", "Time trials"],
-      keyWorkouts: ["tempo", "threshold", "time_trial", "long_run"],
-      intensityDistribution: { easy: 80, moderate: 15, hard: 5 }
-    });
-    weekNumber += durations.anaerobic;
-    blocks.push({
-      phase: "peak",
-      name: "Coordination & Sharpening",
-      description: "Develop speed coordination and race-specific fitness",
-      weekStart: weekNumber,
-      weekEnd: weekNumber + durations.coordination - 1,
-      duration: durations.coordination,
-      microcycles: this.createMicrocycles("peak", durations.coordination, weekNumber),
-      focus: ["Speed coordination", "Race pace", "Neuromuscular power", "Final sharpening"],
-      keyWorkouts: ["speed", "race_pace", "vo2max", "fartlek"],
-      intensityDistribution: { easy: 75, moderate: 15, hard: 10 }
-    });
-    weekNumber += durations.coordination;
-    blocks.push({
-      phase: "taper",
-      name: "Race Taper",
-      description: "Reduce volume while maintaining fitness for peak performance",
-      weekStart: weekNumber,
-      weekEnd: weekNumber + durations.taper - 1,
-      duration: durations.taper,
-      microcycles: this.createMicrocycles("taper", durations.taper, weekNumber),
-      focus: ["Recovery", "Race preparation", "Maintain fitness", "Mental preparation"],
-      keyWorkouts: ["race_pace", "easy", "tempo"],
-      intensityDistribution: { easy: 85, moderate: 10, hard: 5 }
-    });
-    return blocks;
-  }
-  /**
-   * Create microcycles for Lydiard periodization
-   */
-  createMicrocycles(phase, duration, startWeek) {
-    const microcycles = [];
-    for (let week = 0; week < duration; week++) {
-      const weekNumber = startWeek + week;
-      const isRecoveryWeek = (week + 1) % 4 === 0;
-      microcycles.push({
-        weekNumber,
-        phase,
-        emphasis: this.getWeekEmphasis(phase, week, duration),
-        workoutTypes: this.getLydiardWeeklyWorkouts(phase, week, isRecoveryWeek),
-        volumeModifier: isRecoveryWeek ? 0.7 : 1 + week * 0.05,
-        // Progressive overload
-        intensityModifier: this.getIntensityModifier(phase, week, duration),
-        keyFocus: this.getWeeklyFocus(phase, week, duration),
-        recoveryPriority: isRecoveryWeek ? "high" : "moderate"
-      });
-    }
-    return microcycles;
-  }
-  /**
-   * Get week emphasis based on Lydiard principles
-   */
-  getWeekEmphasis(phase, weekInPhase, phaseDuration) {
-    const progression = weekInPhase / phaseDuration;
-    switch (phase) {
-      case "base":
-        if (progression < 0.3) return "Volume building";
-        if (progression < 0.6) return "Aerobic development";
-        return "Strength building";
-      case "build":
-        if (progression < 0.5) return "Anaerobic introduction";
-        return "Lactate tolerance";
-      case "peak":
-        if (progression < 0.5) return "Speed coordination";
-        return "Race simulation";
-      case "taper":
-        return "Recovery and sharpening";
-      default:
-        return "Recovery";
-    }
-  }
-  /**
-   * Get Lydiard-specific weekly workout distribution
-   */
-  getLydiardWeeklyWorkouts(phase, weekInPhase, isRecoveryWeek) {
-    if (isRecoveryWeek) {
-      return ["easy", "easy", "steady", "easy", "long_run", "easy", "recovery"];
-    }
-    switch (phase) {
-      case "base":
-        if (weekInPhase < 4) {
-          return ["easy", "steady", "easy", "steady", "long_run", "easy", "recovery"];
-        }
-        return ["easy", "hill_repeats", "easy", "steady", "long_run", "hill_repeats", "recovery"];
-      case "build":
-        return ["easy", "tempo", "easy", "threshold", "long_run", "time_trial", "recovery"];
-      case "peak":
-        return ["easy", "speed", "easy", "race_pace", "tempo", "vo2max", "recovery"];
-      case "taper":
-        return ["easy", "race_pace", "easy", "tempo", "easy", "race_pace", "recovery"];
-      default:
-        return ["recovery", "easy", "recovery", "easy", "recovery", "easy", "recovery"];
-    }
-  }
-  /**
-   * Get intensity modifier for progressive overload
-   */
-  getIntensityModifier(phase, weekInPhase, phaseDuration) {
-    const progression = weekInPhase / phaseDuration;
-    switch (phase) {
-      case "base":
-        return 1;
-      // No intensity increase in base
-      case "build":
-        return 1 + progression * 0.1;
-      // Gradual intensity increase
-      case "peak":
-        return 1.1 + progression * 0.05;
-      // Slight increase
-      case "taper":
-        return 1 - progression * 0.2;
-      // Decrease intensity
-      default:
-        return 0.8;
-    }
-  }
-  /**
-   * Get weekly focus points
-   */
-  getWeeklyFocus(phase, weekInPhase, phaseDuration) {
-    const baselineFocus = {
-      "base": ["Aerobic development", "Running form", "Consistency"],
-      "build": ["Lactate threshold", "Tempo endurance", "Mental toughness"],
-      "peak": ["Race pace", "Speed coordination", "Race tactics"],
-      "taper": ["Recovery", "Race visualization", "Maintain sharpness"],
-      "recovery": ["Complete rest", "Regeneration", "Mental refresh"]
-    };
-    return baselineFocus[phase] || ["General fitness"];
-  }
-  /**
-   * Validate phase transition readiness
-   */
-  validatePhaseTransition(currentPhase, completedWorkouts) {
-    const requiredCompletions = {
-      "base": {
-        minWeeks: 8,
-        minLongRuns: 6,
-        minWeeklyVolume: 40,
-        // km
-        requiredWorkoutTypes: ["long_run", "easy", "steady"]
-      },
-      "build": {
-        minWeeks: 3,
-        minTempoRuns: 6,
-        minThresholdWork: 4,
-        requiredWorkoutTypes: ["tempo", "threshold", "time_trial"]
-      },
-      "peak": {
-        minWeeks: 2,
-        minSpeedSessions: 4,
-        minRacePaceWork: 3,
-        requiredWorkoutTypes: ["speed", "race_pace", "vo2max"]
-      }
-    };
-    const isReady = true;
-    const recommendations = isReady ? [] : ["Complete more base work before progressing"];
-    return {
-      currentPhase,
-      nextPhase: this.getNextPhase(currentPhase),
-      isReady,
-      completionPercentage: 85,
-      // Simplified
-      missingRequirements: [],
-      recommendations
-    };
-  }
-  /**
-   * Get next phase in Lydiard progression
-   */
-  getNextPhase(currentPhase) {
-    const progression = {
-      "base": "build",
-      "build": "peak",
-      "peak": "taper",
-      "taper": "recovery",
-      "recovery": "base"
-    };
-    return progression[currentPhase] || "base";
-  }
-  /**
-   * Apply recovery emphasis based on Lydiard principles
-   */
-  applyRecoveryEmphasis(workout, phase, isRecoveryWeek) {
-    if (!isRecoveryWeek && phase !== "recovery") {
-      return workout;
-    }
-    if (workout.type === "recovery" || workout.type === "easy") {
-      return {
-        ...workout,
-        segments: workout.segments.map((segment) => ({
-          ...segment,
-          intensity: Math.min(segment.intensity, 60),
-          // Very easy
-          description: segment.description + " - Complete recovery focus"
-        })),
-        adaptationTarget: "Complete physiological and mental recovery",
-        estimatedTSS: Math.round(workout.estimatedTSS * 0.5),
-        recoveryTime: 8
-        // Minimal stress
-      };
-    }
-    return workout;
-  }
-};
-var LydiardPhilosophy = class extends BaseTrainingPhilosophy {
-  constructor() {
-    super("lydiard", "Arthur Lydiard");
-    this.aerobicBaseCalculator = new AerobicBaseCalculator();
-    this.lydiardHillGenerator = new LydiardHillGenerator();
-    this.periodizationSystem = new LydiardPeriodizationSystem();
-  }
-  /**
-   * Enhanced plan generation with extended aerobic base phase and 85%+ easy running
-   */
-  enhancePlan(basePlan) {
-    const enhancedPlan = super.enhancePlan(basePlan);
-    const totalWeeks = basePlan.weeks?.length || basePlan.summary?.totalWeeks || 12;
-    const targetRace = basePlan.races?.find((r) => r.priority === "A") || basePlan.races?.[0];
-    if (targetRace) {
-      const phaseDurations = this.periodizationSystem.calculatePhaseDurations(totalWeeks, targetRace.type);
-      const lydiardBlocks2 = this.periodizationSystem.createLydiardBlocks(totalWeeks, phaseDurations, targetRace);
-      enhancedPlan.blocks = lydiardBlocks2;
-    }
-    const aerobicCompliantWorkouts = this.aerobicBaseCalculator.enforceAerobicBase(enhancedPlan.workouts);
-    const lydiardBlocks = enhancedPlan.blocks.map(
-      (block) => this.applyLydiardPhaseEmphasis(block)
-    );
-    const timeBasedWorkouts = aerobicCompliantWorkouts.map((plannedWorkout) => ({
-      ...plannedWorkout,
-      workout: this.aerobicBaseCalculator.convertToTimeBased(plannedWorkout.workout)
-    }));
-    const recoveryEmphasizedWorkouts = this.periodizationSystem.applyRecoveryEmphasis(timeBasedWorkouts);
-    const aerobicBaseReport = this.aerobicBaseCalculator.validateAerobicBase(recoveryEmphasizedWorkouts);
-    const lydiardPlan = {
-      ...enhancedPlan,
-      blocks: lydiardBlocks,
-      workouts: recoveryEmphasizedWorkouts,
-      summary: {
-        ...enhancedPlan.summary,
-        phases: enhancedPlan.summary.phases.map((phase) => ({
-          ...phase,
-          intensityDistribution: this.getLydiardPhaseDistribution(phase.phase),
-          focus: this.getLydiardPhaseFocus(phase.phase)
-        }))
-      },
-      metadata: {
-        ...enhancedPlan.metadata,
-        methodology: "lydiard",
-        aerobicBaseReport,
-        lydiardFeatures: {
-          aerobicBaseCompliance: aerobicBaseReport.isCompliant,
-          easyRunningPercentage: aerobicBaseReport.distribution.easy,
-          timeBasedTraining: true,
-          longRunProgression: this.calculateLongRunProgressionForPlan(enhancedPlan),
-          periodizationModel: "lydiard_classic",
-          recoveryPhilosophy: "complete_rest"
-        }
-      }
-    };
-    this.applyEffortBasedZones(lydiardPlan);
-    return lydiardPlan;
-  }
-  /**
-   * Lydiard-specific workout customization emphasizing aerobic development
-   */
-  customizeWorkout(template, phase, weekNumber) {
-    const baseCustomization = super.customizeWorkout(template, phase, weekNumber);
-    const lydiardSegments = baseCustomization.segments.map((segment) => ({
-      ...segment,
-      intensity: this.adjustIntensityForLydiard(segment.intensity, template.type, phase, weekNumber),
-      description: this.enhanceLydiardDescription(segment.description, template.type, phase)
-    }));
-    return {
-      ...baseCustomization,
-      segments: lydiardSegments,
-      adaptationTarget: this.getLydiardAdaptationTarget(template.type, phase),
-      recoveryTime: Math.round(baseCustomization.recoveryTime * 1.1)
-      // Conservative recovery
-    };
-  }
-  /**
-   * Lydiard workout selection emphasizing aerobic base and hill training
-   */
-  selectWorkout(type, phase, weekInPhase) {
-    const availableTemplates = Object.keys(WORKOUT_TEMPLATES).filter((key) => WORKOUT_TEMPLATES[key].type === type);
-    if (availableTemplates.length === 0) {
-      throw new Error(`No templates available for workout type: ${type}`);
-    }
-    switch (type) {
-      case "easy":
-        return "EASY_AEROBIC";
-      // Foundation of Lydiard training
-      case "long_run":
-        return "LONG_RUN";
-      // Critical for aerobic base development
-      case "steady":
-        return availableTemplates[0];
-      case "hill_repeats":
-        return this.selectLydiardHillWorkout(phase, weekInPhase);
-      case "tempo":
-        return "TEMPO_CONTINUOUS";
-      case "threshold":
-        if (phase === "base") {
-          return "TEMPO_CONTINUOUS";
-        }
-        return availableTemplates.includes("THRESHOLD_PROGRESSION") ? "THRESHOLD_PROGRESSION" : availableTemplates[0];
-      case "vo2max":
-        if (phase === "base" || phase === "build") {
-          return this.selectLydiardHillWorkout(phase, weekInPhase);
-        }
-        return availableTemplates[0];
-      case "speed":
-        if (phase === "base" || phase === "build") {
-          return this.selectLydiardHillWorkout(phase, weekInPhase);
-        }
-        return availableTemplates[0];
-      default:
-        return availableTemplates[0];
-    }
-  }
-  /**
-   * Apply Lydiard phase emphasis with extended base phase
-   */
-  applyLydiardPhaseEmphasis(block) {
-    const enhancedMicrocycles = block.microcycles.map((microcycle) => {
-      const modifiedWorkouts = microcycle.workouts.map((plannedWorkout) => {
-        if (block.phase === "base" && this.isHighIntensityWorkout(plannedWorkout.workout.type)) {
-          const easierWorkout = this.convertToAerobicWorkout(plannedWorkout.workout);
-          return {
-            ...plannedWorkout,
-            workout: easierWorkout
-          };
-        }
-        return plannedWorkout;
-      });
-      return {
-        ...microcycle,
-        workouts: modifiedWorkouts
-      };
-    });
-    return {
-      ...block,
-      microcycles: enhancedMicrocycles
-    };
-  }
-  /**
-   * Check if workout is high intensity
-   */
-  isHighIntensityWorkout(type) {
-    return ["vo2max", "speed", "threshold"].includes(type);
-  }
-  /**
-   * Convert high-intensity workout to aerobic alternative
-   */
-  convertToAerobicWorkout(workout) {
-    const aerobicSegments = workout.segments.map((segment) => ({
-      ...segment,
-      intensity: Math.min(segment.intensity, 75),
-      // Cap at steady intensity
-      zone: segment.intensity > 80 ? TRAINING_ZONES.STEADY : segment.zone,
-      description: `Aerobic ${segment.description.toLowerCase()}`
-    }));
-    return {
-      ...workout,
-      type: "steady",
-      primaryZone: TRAINING_ZONES.STEADY,
-      segments: aerobicSegments,
-      adaptationTarget: "Aerobic base development, mitochondrial adaptation",
-      estimatedTSS: Math.round(workout.estimatedTSS * 0.7),
-      // Lower stress
-      recoveryTime: Math.round(workout.recoveryTime * 0.8)
-      // Faster recovery
-    };
-  }
-  /**
-   * Adjust intensity for Lydiard methodology
-   */
-  adjustIntensityForLydiard(baseIntensity, workoutType, phase, weekNumber) {
-    let adjustment = 1;
-    switch (workoutType) {
-      case "easy":
-        adjustment = 0.85;
-        break;
-      case "steady":
-        adjustment = 0.95;
-        break;
-      case "long_run":
-        adjustment = 0.9;
-        break;
-      case "hill_repeats":
-        adjustment = phase === "base" ? 0.9 : 0.95;
-        break;
-      case "tempo":
-        adjustment = 0.95;
-        break;
-      case "threshold":
-        if (phase === "base") {
-          adjustment = 0.85;
-        } else {
-          adjustment = 0.98;
-        }
-        break;
-      case "vo2max":
-        if (phase === "base" || phase === "build") {
-          adjustment = 0.8;
-        } else {
-          adjustment = 1;
-        }
-        break;
-      case "speed":
-        if (phase === "base" || phase === "build") {
-          adjustment = 0.75;
-        } else {
-          adjustment = 0.98;
-        }
-        break;
-      default:
-        adjustment = 0.95;
-    }
-    const weeklyAdjustment = this.getWeeklyAdjustment(weekNumber, phase);
-    adjustment *= weeklyAdjustment;
-    const adjustedIntensity = baseIntensity * adjustment;
-    return Math.max(45, Math.min(100, Math.round(adjustedIntensity)));
-  }
-  /**
-   * Get weekly adjustment for progressive loading
-   */
-  getWeeklyAdjustment(weekNumber, phase) {
-    const baseProgression = 0.02;
-    switch (phase) {
-      case "base":
-        return 1 + weekNumber * baseProgression * 0.5;
-      // Very gradual in base
-      case "build":
-        return 1 + weekNumber * baseProgression * 0.8;
-      // Moderate in build
-      case "peak":
-        return 1 + weekNumber * baseProgression;
-      // Normal in peak
-      default:
-        return 1;
-    }
-  }
-  /**
-   * Get Lydiard phase-specific intensity distribution
-   */
-  getLydiardPhaseDistribution(phase) {
-    switch (phase) {
-      case "base":
-        return { easy: 95, moderate: 4, hard: 1 };
-      // Extreme aerobic emphasis
-      case "build":
-        return { easy: 90, moderate: 8, hard: 2 };
-      // Still very aerobic
-      case "peak":
-        return { easy: 85, moderate: 10, hard: 5 };
-      // Some intensity added
-      case "taper":
-        return { easy: 92, moderate: 5, hard: 3 };
-      // Back to easy emphasis
-      case "recovery":
-        return { easy: 98, moderate: 2, hard: 0 };
-      // Almost all easy
-      default:
-        return this.intensityDistribution;
-    }
-  }
-  /**
-   * Get Lydiard phase focus areas
-   */
-  getLydiardPhaseFocus(phase) {
-    switch (phase) {
-      case "base":
-        return ["Aerobic base development", "Mitochondrial adaptation", "Capillarization", "Hill strength"];
-      case "build":
-        return ["Aerobic power", "Lactate clearance", "Time trials", "Coordination"];
-      case "peak":
-        return ["Race sharpening", "Speed development", "Race tactics", "Final conditioning"];
-      case "taper":
-        return ["Maintain fitness", "Recovery", "Race preparation", "Mental readiness"];
-      case "recovery":
-        return ["Full recovery", "Base maintenance", "Form work", "Preparation for next cycle"];
-      default:
-        return ["General aerobic development"];
-    }
-  }
-  /**
-   * Enhance descriptions with Lydiard terminology
-   */
-  enhanceLydiardDescription(baseDescription, workoutType, phase) {
-    const lydiardTerms = {
-      "easy": {
-        "base": "Aerobic base building - foundation mileage",
-        "build": "Aerobic maintenance - recovery between harder efforts",
-        "peak": "Active recovery - maintain aerobic base",
-        "taper": "Easy aerobic - maintain fitness with minimal stress",
-        "recovery": "Gentle jogging - promote recovery"
-      },
-      "steady": {
-        "base": "Steady state aerobic - key Lydiard development pace",
-        "build": "Sustained aerobic effort - lactate clearance",
-        "peak": "Aerobic power - controlled sustained effort",
-        "taper": "Steady maintenance - keep aerobic systems active",
-        "recovery": "Easy steady - very light aerobic work"
-      },
-      "hill_repeats": {
-        "base": "Hill strength - build power and economy",
-        "build": "Hill power - anaerobic strength development",
-        "peak": "Speed hill work - final power development",
-        "taper": "Light hill work - maintain strength",
-        "recovery": "Easy hill walking - gentle strength work"
-      },
-      "tempo": {
-        "base": "Aerobic tempo - controlled aerobic effort",
-        "build": "Tempo development - lactate threshold preparation",
-        "peak": "Race pace tempo - specific pace practice",
-        "taper": "Light tempo - maintain pace feel",
-        "recovery": "Easy tempo - very light sustained work"
-      }
-    };
-    const enhancement = lydiardTerms[workoutType]?.[phase];
-    return enhancement ? `${enhancement} - ${baseDescription}` : baseDescription;
-  }
-  /**
-   * Get Lydiard-specific adaptation targets
-   */
-  getLydiardAdaptationTarget(workoutType, phase) {
-    const adaptationMatrix = {
-      "easy": {
-        "base": "Aerobic enzyme development, mitochondrial biogenesis, capillary density",
-        "build": "Maintain aerobic base while building anaerobic capacity",
-        "peak": "Recovery facilitation, maintain aerobic fitness",
-        "taper": "Fitness maintenance with minimal fatigue",
-        "recovery": "Complete physiological restoration"
-      },
-      "steady": {
-        "base": "Aerobic power development, fat oxidation, cardiac output",
-        "build": "Lactate clearance, aerobic-anaerobic transition",
-        "peak": "Race pace conditioning, metabolic efficiency",
-        "taper": "Maintain aerobic power with reduced volume",
-        "recovery": "Light aerobic maintenance"
-      },
-      "hill_repeats": {
-        "base": "Leg strength, running economy, biomechanical efficiency",
-        "build": "Anaerobic power, lactate tolerance, neuromuscular coordination",
-        "peak": "Maximum power output, race-specific strength",
-        "taper": "Maintain strength with reduced stress",
-        "recovery": "Gentle strength maintenance"
-      },
-      "long_run": {
-        "base": "Aerobic base, glycogen storage, mental resilience, fat adaptation",
-        "build": "Sustained aerobic power, pace judgment, endurance",
-        "peak": "Race-specific endurance, pacing practice",
-        "taper": "Maintain endurance base with reduced distance",
-        "recovery": "Light endurance maintenance"
-      }
-    };
-    return adaptationMatrix[workoutType]?.[phase] || `${workoutType} adaptation for ${phase} phase in Lydiard system`;
-  }
-  /**
-   * Generate Lydiard-specific hill training workouts
-   */
-  generateLydiardHillTraining(phase, weekInPhase, duration = 45) {
-    return this.lydiardHillGenerator.generateHillWorkout(phase, weekInPhase, duration);
-  }
-  /**
-   * Calculate long run progression for entire plan
-   */
-  calculateLongRunProgressionForPlan(plan) {
-    const baseBlocks = plan.blocks.filter((block) => block.phase === "base");
-    const totalBaseWeeks = baseBlocks.reduce((sum, block) => sum + block.duration, 0);
-    const currentLongRuns = plan.workouts.filter((w) => w.workout.type === "long_run");
-    const currentLongestDistance = currentLongRuns.length > 0 ? Math.max(...currentLongRuns.map((w) => w.targetMetrics.distance || 10)) : 10;
-    const progression = [];
-    let weekCounter = 0;
-    for (const block of plan.blocks) {
-      for (let week = 1; week <= block.duration; week++) {
-        weekCounter++;
-        if (block.phase === "base") {
-          const progressedDistance = this.aerobicBaseCalculator.calculateLongRunProgression(
-            weekCounter,
-            totalBaseWeeks,
-            currentLongestDistance
-          );
-          progression.push({
-            week: weekCounter,
-            phase: block.phase,
-            distance: Math.round(progressedDistance * 1.6 * 10) / 10,
-            // Convert km to miles and round to 0.1
-            effort: "Easy aerobic - conversational pace",
-            focus: "Time on feet, aerobic adaptation"
-          });
-        } else {
-          const maintainedDistance = currentLongestDistance * (block.phase === "peak" ? 0.8 : block.phase === "taper" ? 0.6 : 0.9);
-          progression.push({
-            week: weekCounter,
-            phase: block.phase,
-            distance: Math.round(maintainedDistance * 1.6 * 10) / 10,
-            effort: block.phase === "peak" ? "Moderate with race pace segments" : "Easy aerobic",
-            focus: block.phase === "peak" ? "Race preparation" : "Fitness maintenance"
-          });
-        }
-      }
-    }
-    return {
-      totalWeeks: plan.summary.totalWeeks,
-      basePhaseWeeks: totalBaseWeeks,
-      targetDistance: 22,
-      // Target 22+ mile long runs
-      currentMax: currentLongestDistance * 1.6,
-      // Convert to miles
-      weeklyProgression: progression
-    };
-  }
-  /**
-   * Apply effort-based zone calculations to the plan
-   */
-  applyEffortBasedZones(plan) {
-    plan.workouts.forEach((plannedWorkout) => {
-      if (plannedWorkout.workout && plannedWorkout.workout.segments) {
-        plannedWorkout.workout.segments.forEach((segment) => {
-          const effortLevel = this.getEffortDescription(segment.intensity);
-          segment.description = `${effortLevel} - ${segment.description}`;
-          if (!segment.paceTarget) {
-            segment.paceTarget = {
-              min: 0,
-              max: 0,
-              effortBased: true,
-              perceivedEffort: this.getPerceivedEffortScale(segment.intensity)
-            };
-          } else {
-            segment.paceTarget = {
-              ...segment.paceTarget,
-              effortBased: true,
-              perceivedEffort: this.getPerceivedEffortScale(segment.intensity)
-            };
-          }
-        });
-      }
-    });
-  }
-  /**
-   * Get effort description for intensity level
-   */
-  getEffortDescription(intensity) {
-    if (intensity < 60) return "Very easy effort";
-    if (intensity < 70) return "Easy conversational effort";
-    if (intensity < 80) return "Steady aerobic effort";
-    if (intensity < 85) return "Strong aerobic effort";
-    if (intensity < 90) return "Threshold effort";
-    if (intensity < 95) return "Hard anaerobic effort";
-    return "Maximum effort";
-  }
-  /**
-   * Get perceived effort scale (1-10) for intensity
-   */
-  getPerceivedEffortScale(intensity) {
-    return Math.round((intensity - 50) / 5);
-  }
-  /**
-   * Select appropriate Lydiard hill workout based on phase and week
-   */
-  selectLydiardHillWorkout(phase, weekInPhase) {
-    const hillTemplates = this.lydiardHillGenerator.createLydiardHillTemplates();
-    switch (phase) {
-      case "base":
-        return "LYDIARD_HILL_BASE";
-      case "build":
-        return "LYDIARD_HILL_BUILD";
-      case "peak":
-        return "LYDIARD_HILL_PEAK";
-      case "taper":
-        return "LYDIARD_HILL_TAPER";
-      case "recovery":
-        return "LYDIARD_HILL_RECOVERY";
-      default:
-        return "LYDIARD_HILL_BASE";
-    }
-  }
-  /**
-   * Get hill training guidance for current phase
-   */
-  getHillTrainingGuidance(phase) {
-    return this.lydiardHillGenerator.getHillProgressionGuidance(phase);
-  }
-  /**
-   * Customize hill workout with Lydiard-specific modifications
-   */
-  customizeHillWorkout(phase, weekInPhase, duration = 45) {
-    const hillWorkout = this.lydiardHillGenerator.generateHillWorkout(phase, weekInPhase, duration);
-    const customizedSegments = hillWorkout.segments.map((segment) => ({
-      ...segment,
-      description: this.enhanceLydiardDescription(segment.description, "hill_repeats", phase)
-    }));
-    return {
-      ...hillWorkout,
-      segments: customizedSegments,
-      metadata: {
-        ...hillWorkout.metadata,
-        lydiardCustomization: true,
-        guidance: this.lydiardHillGenerator.getHillProgressionGuidance(phase)
-      }
-    };
-  }
-};
-var PfitsingerPhilosophy = class extends BaseTrainingPhilosophy {
-  constructor() {
-    super("pfitzinger", "Pete Pfitzinger");
-  }
-  /**
-   * Enhanced plan generation with lactate threshold emphasis and medium-long runs
-   */
-  enhancePlan(basePlan) {
-    const enhancedPlan = super.enhancePlan(basePlan);
-    const ltPace = this.calculateLactateThresholdPace(basePlan);
-    const pfitzingerPaces = this.calculatePfitzingerPaces(ltPace);
-    const ltBasedPlan = {
-      ...enhancedPlan,
-      workouts: enhancedPlan.workouts.map(
-        (workout) => this.applyLTBasedPacing(workout, pfitzingerPaces, ltPace)
-      )
-    };
-    const planWithProgression = this.applyThresholdVolumeProgression(ltBasedPlan);
-    const pfitzingerBlocks = planWithProgression.blocks.map(
-      (block) => this.applyPfitzingerStructure(block)
-    );
-    const planWithRaces = this.integrateRacesAndMediumLongs(
-      { ...planWithProgression, blocks: pfitzingerBlocks }
-    );
-    return {
-      ...planWithRaces,
-      metadata: {
-        ...planWithRaces.metadata,
-        methodology: "pfitzinger",
-        lactateThresholdPace: ltPace,
-        pfitzingerPaces,
-        thresholdVolumeProgression: this.calculateLegacyThresholdVolumeProgression(planWithRaces),
-        ltBasedZones: this.generateLTBasedZones(ltPace)
-      }
-    };
-  }
-  /**
-   * Pfitzinger-specific workout customization with threshold focus
-   */
-  customizeWorkout(template, phase, weekNumber) {
-    const baseCustomization = super.customizeWorkout(template, phase, weekNumber);
-    const pfitzingerSegments = baseCustomization.segments.map((segment) => ({
-      ...segment,
-      intensity: this.adjustIntensityForPfitzinger(segment.intensity, template.type, phase, weekNumber),
-      description: this.enhancePfitzingerDescription(segment.description, template.type, phase)
-    }));
-    if (this.isMarathonSpecificWorkout(template.type, phase)) {
-      pfitzingerSegments.forEach((segment) => {
-        if (segment.zone.name === "Tempo" || segment.zone.name === "Threshold") {
-          segment.paceTarget = this.getMarathonPaceTarget(segment.zone.name);
-        }
-      });
-    }
-    return {
-      ...baseCustomization,
-      segments: pfitzingerSegments,
-      adaptationTarget: this.getPfitzingerAdaptationTarget(template.type, phase),
-      estimatedTSS: this.adjustTSSForPfitzinger(baseCustomization.estimatedTSS, template.type)
-    };
-  }
-  /**
-   * Pfitzinger workout selection prioritizing threshold and progression work
-   */
-  selectWorkout(type, phase, weekInPhase) {
-    const availableTemplates = Object.keys(WORKOUT_TEMPLATES).filter((key) => WORKOUT_TEMPLATES[key].type === type);
-    if (availableTemplates.length === 0) {
-      throw new Error(`No templates available for workout type: ${type}`);
-    }
-    switch (type) {
-      case "threshold":
-        if (phase === "build" || phase === "peak") {
-          return availableTemplates.includes("LACTATE_THRESHOLD_2X20") ? "LACTATE_THRESHOLD_2X20" : "THRESHOLD_PROGRESSION";
-        }
-        return "THRESHOLD_PROGRESSION";
-      case "tempo":
-        return "TEMPO_CONTINUOUS";
-      case "progression":
-        return "PROGRESSION_3_STAGE";
-      case "long_run":
-        return "LONG_RUN";
-      case "vo2max":
-        if (phase === "peak") {
-          return availableTemplates.includes("VO2MAX_5X3") ? "VO2MAX_5X3" : availableTemplates[0];
-        }
-        return "THRESHOLD_PROGRESSION";
-      case "easy":
-        return "EASY_AEROBIC";
-      case "recovery":
-        return "RECOVERY_JOG";
-      case "steady":
-        return availableTemplates[0];
-      default:
-        return availableTemplates[0];
-    }
-  }
-  /**
-   * Apply Pfitzinger-specific structure with extended build phase
-   */
-  applyPfitzingerStructure(block) {
-    const enhancedMicrocycles = block.microcycles.map((microcycle, weekIndex) => {
-      const modifiedWorkouts = microcycle.workouts.map((plannedWorkout) => {
-        if (this.shouldBeMediumLong(plannedWorkout, weekIndex, block.phase)) {
-          return this.convertToMediumLong(plannedWorkout, block.phase, weekIndex + 1);
-        }
-        if (plannedWorkout.workout.type === "long_run" && this.shouldAddQuality(block.phase, weekIndex)) {
-          return this.addQualityToLongRun(plannedWorkout);
-        }
-        return plannedWorkout;
-      });
-      return {
-        ...microcycle,
-        workouts: modifiedWorkouts,
-        pattern: this.getPfitzingerWeeklyPattern(block.phase, weekIndex)
-      };
-    });
-    return {
-      ...block,
-      microcycles: enhancedMicrocycles,
-      focusAreas: this.getPfitzingerPhaseFocus(block.phase)
-    };
-  }
-  /**
-   * Integrate tune-up races and medium-long runs
-   */
-  integrateRacesAndMediumLongs(plan) {
-    const modifiedWorkouts = plan.workouts.map((workout, index) => {
-      const weeksToGoal = differenceInWeeks3(plan.config.targetDate || plan.config.endDate || /* @__PURE__ */ new Date(), workout.date);
-      if (this.shouldBeRace(weeksToGoal) && workout.workout.type === "long_run") {
-        return this.convertToRace(workout, weeksToGoal);
-      }
-      return workout;
-    });
-    return {
-      ...plan,
-      workouts: modifiedWorkouts
-    };
-  }
-  /**
-   * Check if workout should be medium-long run
-   */
-  shouldBeMediumLong(workout, weekIndex, phase) {
-    return workout.workout.type === "easy" && weekIndex % 7 === 3 && // Mid-week
-    (phase === "build" || phase === "peak");
-  }
-  // ===============================
-  // PFITZINGER MEDIUM-LONG RUN GENERATION SYSTEM
-  // ===============================
-  /**
-   * Generate Pfitzinger-style medium-long runs (12-16 miles with embedded tempo segments)
-   * Implements progressive difficulty and signature workout patterns
-   */
-  generateMediumLongRun(baseWorkout, phase, weekNumber = 1) {
-    const pattern = this.selectMediumLongPattern(phase, weekNumber);
-    const scaledPattern = this.scaleMediumLongDifficulty(pattern, weekNumber, phase);
-    return this.createMediumLongWorkout(scaledPattern, baseWorkout);
-  }
-  /**
-   * Select appropriate medium-long run pattern based on training phase and progression
-   */
-  selectMediumLongPattern(phase, weekNumber) {
-    const patterns = this.getMediumLongPatterns();
-    if (phase === "base") {
-      return patterns.aerobicMediumLong;
-    } else if (phase === "build") {
-      const buildPatterns = [
-        patterns.tempoMediumLong,
-        patterns.marathonPaceMediumLong,
-        patterns.progressiveMediumLong
-      ];
-      return buildPatterns[weekNumber % buildPatterns.length];
-    } else if (phase === "peak") {
-      return weekNumber % 2 === 0 ? patterns.raceSpecificMediumLong : patterns.tempoMediumLong;
-    } else {
-      return patterns.aerobicMediumLong;
-    }
-  }
-  /**
-   * Get all medium-long run patterns following Pfitzinger's methodology
-   */
-  getMediumLongPatterns() {
-    return {
-      // Pattern 1: Pure aerobic medium-long (base phase)
-      aerobicMediumLong: {
-        name: "Aerobic Medium-Long Run",
-        description: "12-14 mile steady aerobic run building endurance base",
-        totalDuration: 85,
-        // ~12-13 miles at 6:30-7:00 pace
-        segments: [
-          {
-            duration: 85,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Steady aerobic effort, conversational throughout",
-            paceTarget: { min: 6.5, max: 7 }
-          }
-        ],
-        adaptationTarget: "Aerobic capacity, mitochondrial density, fat oxidation",
-        estimatedTSS: 75,
-        recoveryTime: 18
-      },
-      // Pattern 2: Medium-long with embedded tempo (signature Pfitzinger)
-      tempoMediumLong: {
-        name: "Medium-Long Run with Tempo",
-        description: "14-15 mile run with 4-6 mile tempo segment (signature Pfitzinger workout)",
-        totalDuration: 95,
-        // ~14-15 miles
-        segments: [
-          {
-            duration: 25,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Easy warm-up, prepare for tempo effort",
-            paceTarget: { min: 6.5, max: 7 }
-          },
-          {
-            duration: 30,
-            // ~4-5 miles of tempo
-            intensity: 84,
-            zone: TRAINING_ZONES.TEMPO,
-            description: "Lactate threshold pace, controlled discomfort",
-            paceTarget: { min: 5.9, max: 6.2 }
-          },
-          {
-            duration: 40,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Easy cool-down, maintain form despite fatigue",
-            paceTarget: { min: 6.5, max: 7 }
-          }
-        ],
-        adaptationTarget: "Lactate threshold, marathon-specific endurance",
-        estimatedTSS: 105,
-        recoveryTime: 24
-      },
-      // Pattern 3: Medium-long with marathon pace segments
-      marathonPaceMediumLong: {
-        name: "Medium-Long Run with Marathon Pace",
-        description: "13-15 mile run with marathon pace segments for race simulation",
-        totalDuration: 90,
-        // ~13-14 miles
-        segments: [
-          {
-            duration: 20,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Easy warm-up",
-            paceTarget: { min: 6.5, max: 7 }
-          },
-          {
-            duration: 12,
-            // ~2 miles marathon pace
-            intensity: 82,
-            zone: TRAINING_ZONES.STEADY,
-            description: "Marathon race pace - practice goal pace",
-            paceTarget: { min: 6, max: 6.3 }
-          },
-          {
-            duration: 10,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Easy recovery",
-            paceTarget: { min: 6.5, max: 7 }
-          },
-          {
-            duration: 15,
-            // ~2.5 miles marathon pace
-            intensity: 82,
-            zone: TRAINING_ZONES.STEADY,
-            description: "Second marathon pace segment",
-            paceTarget: { min: 6, max: 6.3 }
-          },
-          {
-            duration: 33,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Easy finish, practice running easy when tired",
-            paceTarget: { min: 6.5, max: 7 }
-          }
-        ],
-        adaptationTarget: "Marathon pace practice, pacing discipline, fatigue resistance",
-        estimatedTSS: 95,
-        recoveryTime: 20
-      },
-      // Pattern 4: Progressive medium-long run
-      progressiveMediumLong: {
-        name: "Progressive Medium-Long Run",
-        description: "13-16 mile progressive run finishing at marathon pace or faster",
-        totalDuration: 100,
-        // ~15-16 miles
-        segments: [
-          {
-            duration: 35,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Easy start, very comfortable",
-            paceTarget: { min: 6.5, max: 7 }
-          },
-          {
-            duration: 30,
-            intensity: 76,
-            zone: TRAINING_ZONES.STEADY,
-            description: "Moderate progression, steady effort",
-            paceTarget: { min: 6.2, max: 6.5 }
-          },
-          {
-            duration: 20,
-            intensity: 82,
-            zone: TRAINING_ZONES.STEADY,
-            description: "Marathon pace progression",
-            paceTarget: { min: 6, max: 6.3 }
-          },
-          {
-            duration: 15,
-            intensity: 84,
-            zone: TRAINING_ZONES.TEMPO,
-            description: "Strong finish at lactate threshold pace",
-            paceTarget: { min: 5.9, max: 6.2 }
-          }
-        ],
-        adaptationTarget: "Progressive fatigue resistance, mental toughness, pace judgment",
-        estimatedTSS: 110,
-        recoveryTime: 26
-      },
-      // Pattern 5: Race-specific medium-long (peak phase)
-      raceSpecificMediumLong: {
-        name: "Race-Specific Medium-Long Run",
-        description: "12-14 mile run with race pace segments and surges",
-        totalDuration: 85,
-        // ~12-13 miles
-        segments: [
-          {
-            duration: 20,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Easy warm-up",
-            paceTarget: { min: 6.5, max: 7 }
-          },
-          {
-            duration: 8,
-            // ~1.2 miles
-            intensity: 82,
-            zone: TRAINING_ZONES.STEADY,
-            description: "Marathon pace segment",
-            paceTarget: { min: 6, max: 6.3 }
-          },
-          {
-            duration: 5,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Easy recovery",
-            paceTarget: { min: 6.5, max: 7 }
-          },
-          {
-            duration: 3,
-            // ~0.5 mile surge
-            intensity: 87,
-            zone: TRAINING_ZONES.THRESHOLD,
-            description: "Race surge simulation",
-            paceTarget: { min: 5.7, max: 6 }
-          },
-          {
-            duration: 7,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Recovery from surge",
-            paceTarget: { min: 6.5, max: 7 }
-          },
-          {
-            duration: 12,
-            // ~2 miles
-            intensity: 82,
-            zone: TRAINING_ZONES.STEADY,
-            description: "Final marathon pace segment",
-            paceTarget: { min: 6, max: 6.3 }
-          },
-          {
-            duration: 30,
-            intensity: 68,
-            zone: TRAINING_ZONES.EASY,
-            description: "Easy finish",
-            paceTarget: { min: 6.5, max: 7 }
-          }
-        ],
-        adaptationTarget: "Race simulation, surge response, competitive fitness",
-        estimatedTSS: 100,
-        recoveryTime: 22
-      }
-    };
-  }
-  /**
-   * Create the actual workout from a selected pattern
-   */
-  createMediumLongWorkout(pattern, baseWorkout) {
-    const workout = {
-      type: "long_run",
-      // Use long_run type for medium-long runs
-      primaryZone: pattern.segments[0].zone,
-      segments: pattern.segments.map((segment) => ({
-        duration: segment.duration,
-        intensity: segment.intensity,
-        zone: segment.zone,
-        description: segment.description,
-        cadenceTarget: 180,
-        // Standard Pfitzinger cadence target
-        paceTarget: segment.paceTarget
-      })),
-      adaptationTarget: pattern.adaptationTarget,
-      estimatedTSS: pattern.estimatedTSS,
-      recoveryTime: pattern.recoveryTime
-    };
-    return {
-      name: pattern.name,
-      description: pattern.description,
-      workout
-    };
-  }
-  /**
-   * Progressive difficulty scaling for medium-long runs
-   * Adjusts volume and intensity based on training progression
-   */
-  scaleMediumLongDifficulty(pattern, weekNumber, phase) {
-    let durationScale = 1;
-    let intensityScale = 1;
-    if (phase === "build") {
-      durationScale = 0.9 + weekNumber * 0.025;
-      intensityScale = 0.95 + weekNumber * 0.0125;
-    } else if (phase === "peak") {
-      durationScale = 1.1;
-      intensityScale = 1.05;
-    }
-    const scaledPattern = { ...pattern };
-    scaledPattern.totalDuration = Math.round(pattern.totalDuration * durationScale);
-    scaledPattern.segments = pattern.segments.map((segment) => ({
-      ...segment,
-      duration: Math.round(segment.duration * durationScale),
-      intensity: Math.min(95, Math.round(segment.intensity * intensityScale))
-    }));
-    scaledPattern.estimatedTSS = Math.round(pattern.estimatedTSS * durationScale * intensityScale);
-    scaledPattern.recoveryTime = Math.round(pattern.recoveryTime * durationScale);
-    return scaledPattern;
-  }
-  /**
-   * Convert easy run to Pfitzinger-style medium-long run with embedded tempo segments
-   */
-  convertToMediumLong(workout, phase = "build", weekNumber = 1) {
-    const mediumLongWorkout = this.generateMediumLongRun(workout, phase, weekNumber);
-    return {
-      ...workout,
-      name: mediumLongWorkout.name,
-      description: mediumLongWorkout.description,
-      workout: mediumLongWorkout.workout
-    };
-  }
-  /**
-   * Check if quality should be added to long run
-   */
-  shouldAddQuality(phase, weekIndex) {
-    return (phase === "build" || phase === "peak") && weekIndex % 3 === 0;
-  }
-  /**
-   * Add quality segments to long run
-   */
-  addQualityToLongRun(workout) {
-    const baseWorkout = workout.workout;
-    const totalDuration = baseWorkout.segments.reduce((sum, seg) => sum + seg.duration, 0);
-    const qualityLongRun = {
-      ...baseWorkout,
-      segments: [
-        {
-          duration: totalDuration * 0.4,
-          intensity: 65,
-          zone: TRAINING_ZONES.EASY,
-          description: "Easy pace warm-up"
-        },
-        {
-          duration: totalDuration * 0.3,
-          intensity: 84,
-          zone: TRAINING_ZONES.TEMPO,
-          description: "Marathon pace segment"
-        },
-        {
-          duration: totalDuration * 0.3,
-          intensity: 65,
-          zone: TRAINING_ZONES.EASY,
-          description: "Easy pace cool-down"
-        }
-      ],
-      adaptationTarget: "Marathon-specific endurance with pace practice",
-      estimatedTSS: Math.round(baseWorkout.estimatedTSS * 1.2)
-    };
-    return {
-      ...workout,
-      name: "Long Run with Quality",
-      description: "Long run with marathon pace segment",
-      workout: qualityLongRun
-    };
-  }
-  /**
-   * Check if workout should be a tune-up race
-   */
-  shouldBeRace(weeksToGoal) {
-    return weeksToGoal === 8 || weeksToGoal === 9 || weeksToGoal === 4 || weeksToGoal === 5;
-  }
-  /**
-   * Convert long run to tune-up race
-   */
-  convertToRace(workout, weeksToGoal) {
-    const raceDistance = weeksToGoal > 6 ? "15k" : "10k";
-    const raceWorkout = {
-      type: "race_pace",
-      primaryZone: TRAINING_ZONES.THRESHOLD,
-      segments: [
-        {
-          duration: 15,
-          intensity: 65,
-          zone: TRAINING_ZONES.EASY,
-          description: "Pre-race warm-up"
-        },
-        {
-          duration: weeksToGoal > 6 ? 50 : 35,
-          // 15K or 10K duration
-          intensity: 92,
-          zone: TRAINING_ZONES.THRESHOLD,
-          description: `${raceDistance} race effort`
-        },
-        {
-          duration: 10,
-          intensity: 60,
-          zone: TRAINING_ZONES.RECOVERY,
-          description: "Cool-down jog"
-        }
-      ],
-      adaptationTarget: "Race practice, pace judgment, mental preparation",
-      estimatedTSS: 110,
-      recoveryTime: 48
-    };
-    return {
-      ...workout,
-      name: `${raceDistance} Tune-up Race`,
-      description: `Race simulation ${weeksToGoal} weeks before goal`,
-      workout: raceWorkout
-    };
-  }
-  // ===============================
-  // PFITZINGER WEEKLY STRUCTURE SYSTEM
-  // ===============================
-  /**
-   * Generate comprehensive Pfitzinger weekly structure with specific day patterns,
-   * workout spacing, threshold volume progression, and race-specific pace work
-   */
-  generatePfitzingerWeeklyStructure(phase, weekIndex) {
-    const baseStructure = this.getPfitzingerBaseStructure(phase);
-    const volumeProgression = this.calculateThresholdVolumeProgression(phase, weekIndex);
-    const raceIntegration = this.getRaceSpecificIntegration(phase, weekIndex);
-    return this.applyPfitzingerWeeklySpacing(baseStructure, volumeProgression, raceIntegration, weekIndex);
-  }
-  /**
-   * Get Pfitzinger base weekly structure by training phase
-   * Following authentic Pfitzinger day-of-week patterns
-   */
-  getPfitzingerBaseStructure(phase) {
-    const structures = {
-      "base": {
-        pattern: "Easy-GA-Easy-LT-Recovery-Long-Recovery",
-        dayStructure: {
-          monday: { type: "easy", purpose: "recovery_from_weekend", intensity: 65 },
-          tuesday: { type: "general_aerobic", purpose: "aerobic_development", intensity: 72 },
-          wednesday: { type: "easy", purpose: "active_recovery", intensity: 65 },
-          thursday: { type: "lactate_threshold", purpose: "lt_development", intensity: 85 },
-          friday: { type: "recovery", purpose: "preparation_for_long", intensity: 60 },
-          saturday: { type: "long_run", purpose: "endurance_development", intensity: 70 },
-          sunday: { type: "recovery", purpose: "complete_rest_or_easy", intensity: 60 }
-        },
-        workoutSpacing: {
-          hardDaySpacing: 48,
-          // hours between quality sessions
-          recoveryRatio: 0.4,
-          // 40% of week should be recovery
-          qualityDays: ["tuesday", "thursday", "saturday"]
-        },
-        thresholdVolume: {
-          weeklyMinutes: 20,
-          // Start with 20 minutes/week
-          progressionRate: 1.15,
-          // 15% increase per week
-          maxVolume: 45
-          // Cap at 45 minutes/week
-        },
-        focusAreas: ["Aerobic base building", "LT introduction", "Mileage progression"]
-      },
-      "build": {
-        pattern: "Easy-LT-MLR-Tempo-Recovery-LongQuality-Easy",
-        dayStructure: {
-          monday: { type: "easy", purpose: "recovery_from_weekend", intensity: 65 },
-          tuesday: { type: "lactate_threshold", purpose: "lt_maintenance", intensity: 87 },
-          wednesday: { type: "medium_long", purpose: "endurance_with_quality", intensity: 75 },
-          thursday: { type: "tempo", purpose: "threshold_development", intensity: 84 },
-          friday: { type: "recovery", purpose: "preparation_for_long", intensity: 60 },
-          saturday: { type: "long_quality", purpose: "marathon_simulation", intensity: 73 },
-          sunday: { type: "easy", purpose: "active_recovery", intensity: 65 }
-        },
-        workoutSpacing: {
-          hardDaySpacing: 48,
-          recoveryRatio: 0.35,
-          // Reduced recovery as fitness improves
-          qualityDays: ["tuesday", "wednesday", "thursday", "saturday"]
-        },
-        thresholdVolume: {
-          weeklyMinutes: 35,
-          // Peak threshold volume
-          progressionRate: 1.05,
-          // Slower progression at higher volume
-          maxVolume: 50
-        },
-        focusAreas: ["Threshold progression", "Medium-long runs", "Marathon pace work"]
-      },
-      "peak": {
-        pattern: "Easy-VO2-MLR-LT-Recovery-RaceSimulation-Recovery",
-        dayStructure: {
-          monday: { type: "easy", purpose: "recovery_from_weekend", intensity: 65 },
-          tuesday: { type: "vo2max", purpose: "peak_power_development", intensity: 95 },
-          wednesday: { type: "medium_long", purpose: "race_specific_endurance", intensity: 78 },
-          thursday: { type: "lactate_threshold", purpose: "race_pace_preparation", intensity: 87 },
-          friday: { type: "recovery", purpose: "preparation_for_race_simulation", intensity: 60 },
-          saturday: { type: "race_simulation", purpose: "competitive_preparation", intensity: 82 },
-          sunday: { type: "recovery", purpose: "complete_recovery", intensity: 60 }
-        },
-        workoutSpacing: {
-          hardDaySpacing: 48,
-          recoveryRatio: 0.3,
-          // Minimal recovery for peak fitness
-          qualityDays: ["tuesday", "wednesday", "thursday", "saturday"]
-        },
-        thresholdVolume: {
-          weeklyMinutes: 25,
-          // Reduced volume for peak phase
-          progressionRate: 1,
-          // No progression, maintain
-          maxVolume: 30
-        },
-        focusAreas: ["Race simulation", "Peak power", "Competitive readiness"]
-      },
-      "taper": {
-        pattern: "Easy-Tempo-Easy-LT-Recovery-RaceTune-Recovery",
-        dayStructure: {
-          monday: { type: "easy", purpose: "gentle_recovery", intensity: 65 },
-          tuesday: { type: "tempo", purpose: "sharpening", intensity: 84 },
-          wednesday: { type: "easy", purpose: "maintenance", intensity: 65 },
-          thursday: { type: "lactate_threshold", purpose: "race_feel", intensity: 87 },
-          friday: { type: "recovery", purpose: "complete_rest", intensity: 55 },
-          saturday: { type: "race_tune", purpose: "race_readiness", intensity: 85 },
-          sunday: { type: "recovery", purpose: "pre_race_rest", intensity: 55 }
-        },
-        workoutSpacing: {
-          hardDaySpacing: 72,
-          // More recovery during taper
-          recoveryRatio: 0.5,
-          // Increased recovery
-          qualityDays: ["tuesday", "thursday", "saturday"]
-        },
-        thresholdVolume: {
-          weeklyMinutes: 15,
-          // Minimal threshold work
-          progressionRate: 0.9,
-          // Slight reduction
-          maxVolume: 20
-        },
-        focusAreas: ["Race sharpening", "Recovery optimization", "Mental preparation"]
-      },
-      "recovery": {
-        pattern: "Recovery-Easy-Recovery-Easy-Recovery-Easy-Recovery",
-        dayStructure: {
-          monday: { type: "recovery", purpose: "complete_rest", intensity: 55 },
-          tuesday: { type: "easy", purpose: "gentle_movement", intensity: 62 },
-          wednesday: { type: "recovery", purpose: "active_recovery", intensity: 55 },
-          thursday: { type: "easy", purpose: "gentle_movement", intensity: 62 },
-          friday: { type: "recovery", purpose: "complete_rest", intensity: 55 },
-          saturday: { type: "easy", purpose: "optional_easy_run", intensity: 62 },
-          sunday: { type: "recovery", purpose: "complete_rest", intensity: 55 }
-        },
-        workoutSpacing: {
-          hardDaySpacing: 168,
-          // No hard days
-          recoveryRatio: 0.7,
-          // Maximum recovery
-          qualityDays: []
-        },
-        thresholdVolume: {
-          weeklyMinutes: 0,
-          // No threshold work
-          progressionRate: 1,
-          maxVolume: 0
-        },
-        focusAreas: ["Complete recovery", "Injury prevention", "Adaptation integration"]
-      }
-    };
-    return structures[phase] || structures["base"];
-  }
-  /**
-   * Calculate progressive threshold volume following Pfitzinger protocols
-   */
-  calculateThresholdVolumeProgression(phase, weekIndex) {
-    const baseStructure = this.getPfitzingerBaseStructure(phase);
-    const currentWeek = weekIndex + 1;
-    let weeklyVolume = baseStructure.thresholdVolume.weeklyMinutes;
-    if (phase === "base" || phase === "build") {
-      weeklyVolume = Math.min(
-        baseStructure.thresholdVolume.weeklyMinutes * Math.pow(baseStructure.thresholdVolume.progressionRate, Math.floor(currentWeek / 2)),
-        baseStructure.thresholdVolume.maxVolume
-      );
-    }
-    if (phase === "peak") {
-      weeklyVolume = baseStructure.thresholdVolume.weeklyMinutes;
-    }
-    if (phase === "taper") {
-      const taperReduction = Math.pow(0.85, currentWeek);
-      weeklyVolume = baseStructure.thresholdVolume.weeklyMinutes * taperReduction;
-    }
-    return {
-      weeklyMinutes: Math.round(weeklyVolume),
-      sessionDistribution: this.distributeThresholdVolume(weeklyVolume, phase),
-      intensityTargets: this.getThresholdIntensityTargets(phase),
-      recoveryRequirements: this.getThresholdRecoveryRequirements(weeklyVolume)
-    };
-  }
-  /**
-   * Distribute threshold volume across weekly sessions
-   */
-  distributeThresholdVolume(totalMinutes, phase) {
-    if (totalMinutes === 0) return {};
-    const distributions = {
-      "base": {
-        "thursday": 1
-        // Single LT session
-      },
-      "build": {
-        "tuesday": 0.6,
-        // Primary LT session
-        "thursday": 0.4
-        // Secondary tempo session
-      },
-      "peak": {
-        "tuesday": 0.5,
-        // VO2max with LT elements
-        "thursday": 0.5
-        // Pure LT session
-      },
-      "taper": {
-        "thursday": 1
-        // Single sharpening session
-      },
-      "recovery": {}
-      // No threshold work
-    };
-    const distribution = distributions[phase] || distributions["base"];
-    const result = {};
-    Object.entries(distribution).forEach(([day, ratio]) => {
-      result[day] = Math.round(totalMinutes * ratio);
-    });
-    return result;
-  }
-  /**
-   * Get threshold intensity targets by phase
-   */
-  getThresholdIntensityTargets(phase) {
-    const targets = {
-      "base": { "lactate_threshold": 85, "tempo": 84 },
-      "build": { "lactate_threshold": 87, "tempo": 84, "medium_long_quality": 75 },
-      "peak": { "lactate_threshold": 87, "vo2max": 95, "race_pace": 82 },
-      "taper": { "lactate_threshold": 87, "tempo": 84 },
-      "recovery": {}
-    };
-    return targets[phase] || targets["base"];
-  }
-  /**
-   * Get threshold recovery requirements
-   */
-  getThresholdRecoveryRequirements(weeklyVolume) {
-    return {
-      hoursAfterLT: Math.max(36, weeklyVolume * 0.8),
-      // Minimum 36 hours, scales with volume
-      hoursBeforeLT: Math.max(24, weeklyVolume * 0.6),
-      // Minimum 24 hours preparation
-      easyDayIntensity: Math.max(60, 70 - weeklyVolume * 0.2),
-      // Easier recovery as volume increases
-      recoveryDayFrequency: weeklyVolume > 30 ? 2 : 1
-      // More recovery days at high volume
-    };
-  }
-  /**
-   * Integrate race-specific pace work following Pfitzinger progression
-   */
-  getRaceSpecificIntegration(phase, weekIndex) {
-    const raceWeeksOut = this.estimateWeeksToRace(phase, weekIndex);
-    return {
-      marathonPaceVolume: this.calculateMarathonPaceVolume(phase, raceWeeksOut),
-      raceSimulationFrequency: this.getRaceSimulationFrequency(phase, raceWeeksOut),
-      taperIntegration: this.getTaperIntegration(phase, raceWeeksOut),
-      tuneUpRaces: this.getTuneUpRaceSchedule(phase, raceWeeksOut)
-    };
-  }
-  /**
-   * Calculate marathon pace volume progression
-   */
-  calculateMarathonPaceVolume(phase, weeksToRace) {
-    if (phase === "base") return 0;
-    if (phase === "build") {
-      if (weeksToRace > 12) return 0;
-      if (weeksToRace > 8) return 10;
-      if (weeksToRace > 4) return 15;
-      return 20;
-    }
-    if (phase === "peak") {
-      if (weeksToRace > 6) return 25;
-      if (weeksToRace > 2) return 30;
-      return 20;
-    }
-    if (phase === "taper") {
-      return Math.max(5, 15 - weeksToRace * 2);
-    }
-    return 0;
-  }
-  /**
-   * Get race simulation frequency
-   */
-  getRaceSimulationFrequency(phase, weeksToRace) {
-    if (phase === "peak" && weeksToRace <= 8) {
-      return weeksToRace <= 4 ? 2 : 1;
-    }
-    if (phase === "build" && weeksToRace <= 12) {
-      return 0.5;
-    }
-    return 0;
-  }
-  /**
-   * Get taper integration requirements
-   */
-  getTaperIntegration(phase, weeksToRace) {
-    if (phase !== "taper") {
-      return { volumeReduction: 0, intensityMaintenance: 1, sharpening: false };
-    }
-    return {
-      volumeReduction: Math.min(0.6, 0.15 * (4 - weeksToRace)),
-      // Progressive 15% reduction per week
-      intensityMaintenance: 1,
-      // Keep intensity high
-      sharpening: weeksToRace <= 2
-      // Final sharpening in last 2 weeks
-    };
-  }
-  /**
-   * Get tune-up race schedule
-   */
-  getTuneUpRaceSchedule(phase, weeksToRace) {
-    const tuneUps = [];
-    if (phase === "build" && weeksToRace >= 8 && weeksToRace <= 12) {
-      tuneUps.push({
-        distance: "10K",
-        weeksOut: Math.floor(weeksToRace),
-        purpose: "fitness_assessment",
-        intensity: 95
-      });
-    }
-    if (phase === "peak" && weeksToRace >= 3 && weeksToRace <= 6) {
-      tuneUps.push({
-        distance: "half_marathon",
-        weeksOut: Math.floor(weeksToRace),
-        purpose: "race_simulation",
-        intensity: 90
-      });
-    }
-    return tuneUps;
-  }
-  /**
-   * Estimate weeks to target race (simplified)
-   */
-  estimateWeeksToRace(phase, weekIndex) {
-    const phaseWeeksToRace = {
-      "base": 16 - weekIndex,
-      "build": 8 - weekIndex,
-      "peak": 4 - weekIndex,
-      "taper": 2 - weekIndex,
-      "recovery": 20 - weekIndex
-    };
-    return Math.max(1, phaseWeeksToRace[phase] || 8);
-  }
-  /**
-   * Apply Pfitzinger workout spacing principles
-   */
-  applyPfitzingerWeeklySpacing(baseStructure, volumeProgression, raceIntegration, weekIndex) {
-    const enhancedStructure = { ...baseStructure };
-    Object.entries(volumeProgression.sessionDistribution).forEach(([day, minutes]) => {
-      if (enhancedStructure.dayStructure[day]) {
-        enhancedStructure.dayStructure[day].thresholdMinutes = minutes;
-      }
-    });
-    if (raceIntegration.marathonPaceVolume > 0) {
-      ["wednesday", "saturday"].forEach((day) => {
-        const dayStructure = enhancedStructure.dayStructure[day];
-        if (dayStructure && (dayStructure.type === "medium_long" || dayStructure.type === "long_quality")) {
-          dayStructure.marathonPaceMinutes = Math.round(raceIntegration.marathonPaceVolume * 0.6);
-        }
-      });
-    }
-    const weekVariation = this.getWeeklyVariation(weekIndex);
-    enhancedStructure.weeklyVariation = weekVariation;
-    return enhancedStructure;
-  }
-  /**
-   * Get weekly variation to prevent monotony
-   */
-  getWeeklyVariation(weekIndex) {
-    const variations = [
-      { name: "standard", volumeMultiplier: 1, intensityMultiplier: 1 },
-      { name: "volume_emphasis", volumeMultiplier: 1.15, intensityMultiplier: 0.95 },
-      { name: "intensity_emphasis", volumeMultiplier: 0.9, intensityMultiplier: 1.1 },
-      { name: "recovery", volumeMultiplier: 0.8, intensityMultiplier: 0.9 }
-    ];
-    const cyclePosition = weekIndex % 4;
-    return variations[cyclePosition] || variations[0];
-  }
-  /**
-   * Get Pfitzinger weekly pattern
-   */
-  getPfitzingerWeeklyPattern(phase, weekIndex) {
-    const weeklyStructure = this.generatePfitzingerWeeklyStructure(phase, weekIndex);
-    return weeklyStructure.pattern;
-  }
-  /**
-   * Get Pfitzinger phase focus areas
-   */
-  getPfitzingerPhaseFocus(phase) {
-    switch (phase) {
-      case "base":
-        return ["Aerobic base", "Lactate threshold introduction", "Running economy", "Mileage buildup"];
-      case "build":
-        return ["Lactate threshold development", "Marathon pace work", "Medium-long runs", "Endurance"];
-      case "peak":
-        return ["Race-specific fitness", "Tune-up races", "VO2max touches", "Peak mileage"];
-      case "taper":
-        return ["Maintain fitness", "Reduce fatigue", "Race preparation", "Sharpening"];
-      case "recovery":
-        return ["Active recovery", "Base maintenance", "Preparation for next cycle"];
-      default:
-        return ["General endurance development"];
-    }
-  }
-  /**
-   * Check if workout is marathon-specific
-   */
-  isMarathonSpecificWorkout(type, phase) {
-    return (type === "tempo" || type === "threshold" || type === "progression") && (phase === "build" || phase === "peak");
-  }
-  /**
-   * Get marathon-specific pace targets
-   */
-  getMarathonPaceTarget(zoneName) {
-    switch (zoneName) {
-      case "Tempo":
-        return { min: 4.5, max: 4.7 };
-      // Example: 4:30-4:42 per km for 3:10 marathon
-      case "Threshold":
-        return { min: 4.3, max: 4.5 };
-      // Slightly faster than marathon pace
-      default:
-        return { min: 5, max: 5.5 };
-    }
-  }
-  /**
-   * Adjust intensity for Pfitzinger methodology
-   */
-  adjustIntensityForPfitzinger(baseIntensity, workoutType, phase, weekNumber) {
-    let adjustment = 1;
-    switch (workoutType) {
-      case "easy":
-        adjustment = 0.95;
-        break;
-      case "steady":
-        adjustment = 1;
-        break;
-      case "tempo":
-        adjustment = phase === "peak" ? 1.05 : 1.02;
-        break;
-      case "threshold":
-        adjustment = phase === "build" || phase === "peak" ? 1.08 : 1.05;
-        break;
-      case "progression":
-        adjustment = 1.05;
-        break;
-      case "vo2max":
-        adjustment = phase === "peak" ? 1.1 : 1;
-        break;
-      case "long_run":
-        adjustment = 0.98;
-        break;
-      default:
-        adjustment = 1;
-    }
-    if (phase === "build") {
-      const progressionMultiplier = 1 + weekNumber * 0.01;
-      adjustment *= progressionMultiplier;
-    }
-    const adjustedIntensity = baseIntensity * adjustment;
-    return Math.max(50, Math.min(100, Math.round(adjustedIntensity)));
-  }
-  /**
-   * Enhance descriptions with Pfitzinger terminology
-   */
-  enhancePfitzingerDescription(baseDescription, workoutType, phase) {
-    const pfitzingerTerms = {
-      "easy": "General aerobic run - comfortable effort",
-      "steady": "Medium-long run - sustained aerobic development",
-      "tempo": "Marathon pace run - race rhythm development",
-      "threshold": "Lactate threshold run - push the red line",
-      "progression": "Progressive long run - negative split practice",
-      "vo2max": "VO2max intervals - top-end speed",
-      "long_run": "Endurance long run - time on feet",
-      "recovery": "Recovery run - easy regeneration",
-      "race_pace": "Tune-up race - competitive sharpening",
-      "hill_repeats": "Hill workout - strength and power",
-      "fartlek": "Fartlek - varied pace training",
-      "time_trial": "Time trial - fitness assessment",
-      "cross_training": "Cross-training - active recovery",
-      "strength": "Strength training - injury prevention"
-    };
-    const enhancement = pfitzingerTerms[workoutType];
-    return enhancement ? `${enhancement} - ${baseDescription}` : baseDescription;
-  }
-  /**
-   * Get Pfitzinger-specific adaptation targets
-   */
-  getPfitzingerAdaptationTarget(workoutType, phase) {
-    const adaptationTargets = {
-      "threshold": {
-        "base": "Lactate threshold introduction, aerobic power development",
-        "build": "Lactate threshold improvement, marathon pace efficiency",
-        "peak": "Peak lactate clearance, race-specific endurance",
-        "taper": "Maintain threshold fitness with reduced volume",
-        "recovery": "Light threshold maintenance"
-      },
-      "tempo": {
-        "base": "Marathon pace introduction, rhythm development",
-        "build": "Marathon pace efficiency, glycogen utilization",
-        "peak": "Race pace lock-in, mental preparation",
-        "taper": "Race pace feel, confidence building",
-        "recovery": "Easy tempo for base maintenance"
-      },
-      "progression": {
-        "base": "Negative split practice, fatigue resistance",
-        "build": "Late-race strength, glycogen depletion training",
-        "peak": "Race simulation, pacing discipline",
-        "taper": "Pace control, race strategy",
-        "recovery": "Light progression for maintenance"
-      },
-      "long_run": {
-        "base": "Aerobic base, time on feet, mental toughness",
-        "build": "Endurance with quality, marathon simulation",
-        "peak": "Race-specific endurance, fuel utilization",
-        "taper": "Maintain endurance, reduce fatigue",
-        "recovery": "Easy long run for base maintenance"
-      }
-    };
-    return adaptationTargets[workoutType]?.[phase] || `${workoutType} adaptation for ${phase} phase in Pfitzinger system`;
-  }
-  /**
-   * Adjust TSS for Pfitzinger's higher quality approach
-   */
-  adjustTSSForPfitzinger(baseTSS, workoutType) {
-    const tssMultipliers = {
-      "threshold": 1.15,
-      // Higher stress from threshold work
-      "tempo": 1.1,
-      "progression": 1.12,
-      "steady": 1.05,
-      "long_run": 1.08,
-      // Quality long runs
-      "easy": 1,
-      "recovery": 0.9,
-      "vo2max": 1.2,
-      "race_pace": 1.25
-    };
-    const multiplier = tssMultipliers[workoutType] || 1;
-    return Math.round(baseTSS * multiplier);
-  }
-  // ===============================
-  // LACTATE THRESHOLD-BASED PACE SYSTEM
-  // ===============================
-  /**
-   * Calculate lactate threshold pace as foundation for all other paces
-   * Requirement 3.3: Use LT pace as foundation for all other pace zones
-   */
-  calculateLactateThresholdPace(plan) {
-    const currentFitness = plan.config.currentFitness;
-    if (currentFitness?.vdot) {
-      const ltVelocity = calculateLactateThreshold(currentFitness.vdot);
-      return 60 / ltVelocity;
-    }
-    if (currentFitness?.recentRaces?.length) {
-      const bestRace = currentFitness.recentRaces.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-      const raceVDOT = calculateVDOT(bestRace.distance, bestRace.time);
-      const ltVelocity = calculateLactateThreshold(raceVDOT);
-      return 60 / ltVelocity;
-    }
-    return 5;
-  }
-  /**
-   * Calculate all Pfitzinger training paces based on lactate threshold
-   * Pfitzinger derives all paces from LT as the foundation
-   */
-  calculatePfitzingerPaces(ltPace) {
-    return {
-      // Recovery: 30-45 seconds slower than LT pace
-      recovery: {
-        min: ltPace + 0.5,
-        max: ltPace + 0.75,
-        target: ltPace + 0.625
-      },
-      // General aerobic: 15-30 seconds slower than LT pace
-      generalAerobic: {
-        min: ltPace + 0.25,
-        max: ltPace + 0.5,
-        target: ltPace + 0.375
-      },
-      // Marathon pace: 10-15 seconds slower than LT pace
-      marathonPace: {
-        min: ltPace + 0.167,
-        max: ltPace + 0.25,
-        target: ltPace + 0.208
-      },
-      // Lactate threshold: The foundation pace
-      lactateThreshold: {
-        min: ltPace - 0.05,
-        max: ltPace + 0.05,
-        target: ltPace
-      },
-      // VO2max: 10-15 seconds faster than LT pace
-      vo2max: {
-        min: ltPace - 0.25,
-        max: ltPace - 0.167,
-        target: ltPace - 0.208
-      },
-      // Neuromuscular power: 20-30 seconds faster than LT pace
-      neuromuscular: {
-        min: ltPace - 0.5,
-        max: ltPace - 0.333,
-        target: ltPace - 0.417
-      }
-    };
-  }
-  /**
-   * Apply LT-based pacing to workout
-   */
-  applyLTBasedPacing(workout, paces, ltPace) {
-    const pacedSegments = workout.workout.segments.map((segment) => {
-      const paceRange = this.getPaceRangeForZone(segment.zone.name, paces);
-      return {
-        ...segment,
-        paceTarget: paceRange.target,
-        paceRange: { min: paceRange.min, max: paceRange.max },
-        description: this.enhancePaceDescription(segment.description, paceRange, segment.zone.name)
-      };
-    });
-    return {
-      ...workout,
-      workout: {
-        ...workout.workout,
-        segments: pacedSegments,
-        metadata: {
-          ...workout.workout.metadata,
-          lactateThresholdBased: true,
-          foundationPace: ltPace
-        }
-      }
-    };
-  }
-  /**
-   * Get pace range for training zone based on Pfitzinger system
-   */
-  getPaceRangeForZone(zoneName, paces) {
-    const zoneMapping = {
-      "RECOVERY": "recovery",
-      "EASY": "generalAerobic",
-      "MARATHON": "marathonPace",
-      "TEMPO": "lactateThreshold",
-      "THRESHOLD": "lactateThreshold",
-      "VO2_MAX": "vo2max",
-      "SPEED": "neuromuscular",
-      "NEUROMUSCULAR": "neuromuscular"
-    };
-    const paceKey = zoneMapping[zoneName] || "generalAerobic";
-    return paces[paceKey];
-  }
-  /**
-   * Apply progressive threshold volume calculations
-   * Requirement 3.1: Progressive threshold volume calculations
-   */
-  applyThresholdVolumeProgression(plan) {
-    const totalWeeks = plan.weeks?.length || plan.summary?.totalWeeks || 12;
-    const thresholdProgression = this.calculateLegacyThresholdVolumeProgression(plan);
-    const enhancedWorkouts = plan.workouts.map((workout, index) => {
-      const weekIndex = Math.floor(index / 7);
-      const targetThresholdVolume = thresholdProgression[weekIndex] || thresholdProgression[0];
-      if (this.isThresholdWorkout(workout.type)) {
-        return this.adjustWorkoutForThresholdVolume(workout, targetThresholdVolume);
-      }
-      return workout;
-    });
-    return {
-      ...plan,
-      workouts: enhancedWorkouts
-    };
-  }
-  /**
-   * Calculate threshold volume progression following Pfitzinger's approach (legacy method)
-   */
-  calculateLegacyThresholdVolumeProgression(plan) {
-    const totalWeeks = plan.weeks?.length || plan.summary?.totalWeeks || 12;
-    const baseThresholdVolume = 20;
-    const peakThresholdVolume = 60;
-    const progression = [];
-    for (let week = 0; week < totalWeeks; week++) {
-      const progressRatio = week / (totalWeeks - 1);
-      let weeklyVolume;
-      if (week % 4 === 3) {
-        weeklyVolume = baseThresholdVolume + (peakThresholdVolume - baseThresholdVolume) * progressRatio * 0.75;
-      } else {
-        weeklyVolume = baseThresholdVolume + (peakThresholdVolume - baseThresholdVolume) * progressRatio;
-      }
-      progression.push(Math.round(weeklyVolume));
-    }
-    return progression;
-  }
-  /**
-   * Check if workout is threshold-based
-   */
-  isThresholdWorkout(workoutType) {
-    return ["threshold", "tempo", "progression", "race_pace"].includes(workoutType);
-  }
-  /**
-   * Adjust workout duration based on target threshold volume
-   */
-  adjustWorkoutForThresholdVolume(workout, targetVolume) {
-    const thresholdSegments = workout.workout.segments.filter(
-      (seg) => seg.intensity >= 84 && seg.intensity <= 92
-      // Threshold intensity range
-    );
-    const currentThresholdTime = thresholdSegments.reduce((sum, seg) => sum + seg.duration, 0);
-    if (currentThresholdTime === 0) return workout;
-    const adjustmentFactor = targetVolume / currentThresholdTime;
-    const cappedAdjustment = Math.max(0.5, Math.min(2, adjustmentFactor));
-    const adjustedSegments = workout.workout.segments.map((segment) => {
-      if (segment.intensity >= 84 && segment.intensity <= 92) {
-        return {
-          ...segment,
-          duration: Math.round(segment.duration * cappedAdjustment)
-        };
-      }
-      return segment;
-    });
-    return {
-      ...workout,
-      workout: {
-        ...workout.workout,
-        segments: adjustedSegments,
-        estimatedTSS: Math.round(workout.workout.estimatedTSS * cappedAdjustment)
-      }
-    };
-  }
-  /**
-   * Generate LT-based training zones
-   * Requirement 3.3: Implement LT-based zone derivations
-   */
-  generateLTBasedZones(ltPace) {
-    const ltBasedZones = {};
-    Object.entries(TRAINING_ZONES).forEach(([key, baseZone]) => {
-      const zone = { ...baseZone };
-      if (zone.paceRange) {
-        const ltAdjustment = this.getLTAdjustmentForZone(key);
-        zone.paceRange = {
-          min: ltPace + ltAdjustment.min,
-          max: ltPace + ltAdjustment.max
-        };
-      }
-      zone.description = this.getLTBasedDescription(key, ltPace);
-      ltBasedZones[key] = zone;
-    });
-    return ltBasedZones;
-  }
-  /**
-   * Get LT-based adjustment for each zone
-   */
-  getLTAdjustmentForZone(zoneName) {
-    const adjustments = {
-      "RECOVERY": { min: 0.5, max: 0.75 },
-      "EASY": { min: 0.25, max: 0.5 },
-      "MARATHON": { min: 0.167, max: 0.25 },
-      "TEMPO": { min: -0.05, max: 0.05 },
-      "THRESHOLD": { min: -0.05, max: 0.05 },
-      "VO2_MAX": { min: -0.25, max: -0.167 },
-      "SPEED": { min: -0.5, max: -0.333 }
-    };
-    return adjustments[zoneName] || { min: 0, max: 0 };
-  }
-  /**
-   * Get LT-based description for zone
-   */
-  getLTBasedDescription(zoneName, ltPace) {
-    const paceStr = this.formatPace(ltPace);
-    const adjustments = this.getLTAdjustmentForZone(zoneName);
-    const minPace = this.formatPace(ltPace + adjustments.min);
-    const maxPace = this.formatPace(ltPace + adjustments.max);
-    const descriptions = {
-      "RECOVERY": `Recovery pace (${minPace}-${maxPace}) - Easy effort for active recovery`,
-      "EASY": `General aerobic pace (${minPace}-${maxPace}) - Conversational, aerobic base building`,
-      "MARATHON": `Marathon pace (${minPace}-${maxPace}) - Sustainable race pace effort`,
-      "TEMPO": `Lactate threshold pace (${minPace}-${maxPace}) - Comfortably hard, 1-hour effort`,
-      "THRESHOLD": `Lactate threshold pace (${minPace}-${maxPace}) - Foundation pace (${paceStr})`,
-      "VO2_MAX": `VO2max pace (${minPace}-${maxPace}) - Hard intervals, oxygen uptake`,
-      "SPEED": `Neuromuscular pace (${minPace}-${maxPace}) - Short, fast repetitions`
-    };
-    return descriptions[zoneName] || `Training pace based on LT pace (${paceStr})`;
-  }
-  /**
-   * Enhance pace description with LT-based context
-   */
-  enhancePaceDescription(baseDescription, paceRange, zoneName) {
-    const paceStr = `${this.formatPace(paceRange.min)}-${this.formatPace(paceRange.max)}`;
-    return `${baseDescription} (${paceStr} - LT-derived ${zoneName.toLowerCase()} pace)`;
-  }
-  /**
-   * Format pace for display (mm:ss)
-   */
-  formatPace(paceInMinPerKm) {
-    const minutes = Math.floor(paceInMinPerKm);
-    const seconds = Math.round((paceInMinPerKm - minutes) * 60);
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-  }
-};
-var HudsonPhilosophy = class extends BaseTrainingPhilosophy {
-  constructor() {
-    super("hudson", "Brad Hudson");
-  }
-  // Hudson-specific implementations can be added later
-};
-var CustomPhilosophy = class extends BaseTrainingPhilosophy {
-  constructor() {
-    super("custom", "Custom Methodology");
-  }
-  // Custom philosophy allows for user-defined parameters
-};
-var PhilosophyUtils = {
-  /**
-   * Compare two philosophies by their characteristics
-   */
-  comparePhilosophies(methodology1, methodology2) {
-    const philosophy1 = PhilosophyFactory.create(methodology1);
-    const philosophy2 = PhilosophyFactory.create(methodology2);
-    const intensityDiff = Math.abs(
-      philosophy1.intensityDistribution.hard - philosophy2.intensityDistribution.hard
-    );
-    const recoveryDiff = Math.abs(
-      philosophy1.recoveryEmphasis - philosophy2.recoveryEmphasis
-    );
-    const priorities1 = new Set(philosophy1.workoutPriorities);
-    const priorities2 = new Set(philosophy2.workoutPriorities);
-    const intersection = new Set([...priorities1].filter((x) => priorities2.has(x)));
-    const union = /* @__PURE__ */ new Set([...priorities1, ...priorities2]);
-    const overlap = intersection.size / union.size;
-    return {
-      intensityDifference: intensityDiff,
-      recoveryDifference: recoveryDiff,
-      workoutPriorityOverlap: overlap
-    };
-  },
-  /**
-   * Get philosophy recommendations based on athlete characteristics
-   */
-  recommendPhilosophy(characteristics) {
-    const recommendations = [];
-    if (characteristics.experience === "beginner" || characteristics.injuryHistory) {
-      recommendations.push("lydiard", "hudson");
-    }
-    if (characteristics.goals === "race_performance" || characteristics.goals === "competitive") {
-      recommendations.push("daniels", "pfitzinger");
-    }
-    if (characteristics.timeAvailable === "limited") {
-      recommendations.push("hudson", "daniels");
-    }
-    if (recommendations.length === 0) {
-      recommendations.push("custom", "daniels");
-    }
-    return [...new Set(recommendations)];
-  }
-};
-
 // src/advanced-generator.ts
-import { differenceInWeeks as differenceInWeeks4, addWeeks as addWeeks2, addDays as addDays2 } from "date-fns";
+import {
+  differenceInWeeks as differenceInWeeks2,
+  addWeeks as addWeeks2,
+  addDays as addDays2
+} from "date-fns";
 var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends TrainingPlanGenerator {
   constructor(config) {
     super(config);
@@ -5704,10 +3088,19 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
         (sum, micro) => sum + micro.workouts.length,
         0
       );
-      const easyWorkouts = Math.round(totalWorkouts * (distribution.easy / 100));
-      const moderateWorkouts = Math.round(totalWorkouts * (distribution.moderate / 100));
+      const easyWorkouts = Math.round(
+        totalWorkouts * (distribution.easy / 100)
+      );
+      const moderateWorkouts = Math.round(
+        totalWorkouts * (distribution.moderate / 100)
+      );
       const hardWorkouts = totalWorkouts - easyWorkouts - moderateWorkouts;
-      return this.redistributeWorkouts(block, easyWorkouts, moderateWorkouts, hardWorkouts);
+      return this.redistributeWorkouts(
+        block,
+        easyWorkouts,
+        moderateWorkouts,
+        hardWorkouts
+      );
     });
     return {
       ...plan,
@@ -5860,7 +3253,9 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
    * Sort races by priority and date for optimal planning
    */
   sortRacesByPriority(races) {
-    return [...races].filter((race) => race.date && race.date instanceof Date && !isNaN(race.date.getTime())).sort((a, b) => {
+    return [...races].filter(
+      (race) => race.date && race.date instanceof Date && !isNaN(race.date.getTime())
+    ).sort((a, b) => {
       if (a.priority !== b.priority) {
         return a.priority.charCodeAt(0) - b.priority.charCodeAt(0);
       }
@@ -5874,7 +3269,7 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
     const blocks = [];
     let previousRaceDate = this.advancedConfig.startDate;
     races.forEach((race, index) => {
-      const weeksAvailable = differenceInWeeks4(race.date, previousRaceDate);
+      const weeksAvailable = differenceInWeeks2(race.date, previousRaceDate);
       const raceBlocks = this.createRacePreparationBlocks(
         race,
         previousRaceDate,
@@ -5886,12 +3281,14 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
         const nextRace = races[index + 1];
         const transitionWeeks = this.calculateTransitionPeriod(race, nextRace);
         if (transitionWeeks > 0) {
-          blocks.push(this.createTransitionBlock(
-            race.date,
-            transitionWeeks,
-            race.distance,
-            nextRace.distance
-          ));
+          blocks.push(
+            this.createTransitionBlock(
+              race.date,
+              transitionWeeks,
+              race.distance,
+              nextRace.distance
+            )
+          );
         }
       }
       previousRaceDate = addWeeks2(race.date, 1);
@@ -5903,7 +3300,10 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
    */
   createRacePreparationBlocks(race, startDate, totalWeeks, blockIndex) {
     const blocks = [];
-    const phaseWeeks = this.calculateRacePhaseDistribution(totalWeeks, race.priority);
+    const phaseWeeks = this.calculateRacePhaseDistribution(
+      totalWeeks,
+      race.priority
+    );
     let currentDate = startDate;
     if (phaseWeeks.base > 0) {
       blocks.push({
@@ -5973,18 +3373,27 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
         distribution.base = Math.floor(weeks * 0.25);
         distribution.build = Math.floor(weeks * 0.4);
         distribution.peak = Math.floor(weeks * 0.25);
-        distribution.taper = Math.max(1, weeks - distribution.base - distribution.build - distribution.peak);
+        distribution.taper = Math.max(
+          1,
+          weeks - distribution.base - distribution.build - distribution.peak
+        );
       } else {
         distribution.build = Math.floor(weeks * 0.6);
         distribution.peak = Math.floor(weeks * 0.3);
-        distribution.taper = Math.max(1, weeks - distribution.build - distribution.peak);
+        distribution.taper = Math.max(
+          1,
+          weeks - distribution.build - distribution.peak
+        );
       }
     } else if (priority === "B") {
       if (weeks >= 8) {
         distribution.base = Math.floor(weeks * 0.2);
         distribution.build = Math.floor(weeks * 0.5);
         distribution.peak = Math.floor(weeks * 0.2);
-        distribution.taper = Math.max(1, weeks - distribution.base - distribution.build - distribution.peak);
+        distribution.taper = Math.max(
+          1,
+          weeks - distribution.base - distribution.build - distribution.peak
+        );
       } else {
         distribution.build = Math.floor(weeks * 0.7);
         distribution.taper = Math.max(1, weeks - distribution.build);
@@ -6025,7 +3434,7 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
         taper: ["Volume reduction", "Pace maintenance", "Rest"],
         recovery: ["Recovery runs", "Cross-training"]
       },
-      "marathon": {
+      marathon: {
         base: ["High mileage", "Aerobic development", "Long runs"],
         build: ["Marathon pace", "Long tempo", "Fuel practice"],
         peak: ["Race simulation", "Pace discipline", "Nutrition"],
@@ -6068,7 +3477,7 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
         taper: ["Complete rest", "Recovery", "Mental prep"],
         recovery: ["Extended recovery", "Adaptation", "Planning"]
       },
-      "ultra": {
+      ultra: {
         base: ["Ultra endurance", "Time on feet", "Base building"],
         build: ["Long sustained efforts", "Nutrition", "Mental training"],
         peak: ["Race preparation", "Strategy", "Fueling"],
@@ -6082,9 +3491,18 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
    * Calculate transition period between races
    */
   calculateTransitionPeriod(completedRace, upcomingRace) {
-    const weeksBetween = differenceInWeeks4(upcomingRace.date, completedRace.date);
-    const recoveryNeeded = this.getRecoveryWeeks(completedRace.distance, completedRace.priority);
-    const preparationNeeded = this.getMinimalPreparationWeeks(upcomingRace.distance, upcomingRace.priority);
+    const weeksBetween = differenceInWeeks2(
+      upcomingRace.date,
+      completedRace.date
+    );
+    const recoveryNeeded = this.getRecoveryWeeks(
+      completedRace.distance,
+      completedRace.priority
+    );
+    const preparationNeeded = this.getMinimalPreparationWeeks(
+      upcomingRace.distance,
+      upcomingRace.priority
+    );
     if (weeksBetween < recoveryNeeded + preparationNeeded) {
       return Math.max(1, Math.floor(weeksBetween * 0.2));
     }
@@ -6099,12 +3517,12 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
       "10k": 1,
       "15k": 1,
       "half-marathon": 2,
-      "marathon": 3,
+      marathon: 3,
       "50k": 4,
       "50-mile": 6,
       "100k": 8,
       "100-mile": 12,
-      "ultra": 10
+      ultra: 10
     };
     const priorityMultiplier = priority === "A" ? 1 : priority === "B" ? 0.7 : 0.5;
     return Math.ceil(baseRecovery[distance] * priorityMultiplier);
@@ -6118,12 +3536,12 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
       "10k": 6,
       "15k": 8,
       "half-marathon": 8,
-      "marathon": 12,
+      marathon: 12,
       "50k": 16,
       "50-mile": 20,
       "100k": 24,
       "100-mile": 32,
-      "ultra": 20
+      ultra: 20
     };
     const priorityMultiplier = priority === "A" ? 1 : priority === "B" ? 0.6 : 0.3;
     return Math.ceil(basePrep[distance] * priorityMultiplier);
@@ -6173,7 +3591,9 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
     const enhancedWorkouts = [...plan.workouts];
     races.forEach((race) => {
       if (!race.date || !(race.date instanceof Date) || isNaN(race.date.getTime())) {
-        console.warn(`Invalid race date for ${race.distance} race, skipping...`);
+        console.warn(
+          `Invalid race date for ${race.distance} race, skipping...`
+        );
         return;
       }
       const raceWorkout = {
@@ -6185,12 +3605,14 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
         workout: {
           type: "race_pace",
           primaryZone: this.getZoneForType("race_pace"),
-          segments: [{
-            duration: this.estimateRaceDuration(race.distance),
-            intensity: 95,
-            zone: this.getZoneForType("race_pace"),
-            description: "Race effort"
-          }],
+          segments: [
+            {
+              duration: this.estimateRaceDuration(race.distance),
+              intensity: 95,
+              zone: this.getZoneForType("race_pace"),
+              description: "Race effort"
+            }
+          ],
           adaptationTarget: "Race performance",
           estimatedTSS: this.estimateRaceTSS(race.distance),
           recoveryTime: this.getRecoveryWeeks(race.distance, race.priority) * 168
@@ -6206,7 +3628,10 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
       };
       enhancedWorkouts.push(raceWorkout);
       if (race.priority === "A" || race.priority === "B") {
-        const tuneUpWorkout = this.createRaceTuneUpWorkout(race, addDays2(race.date, -3));
+        const tuneUpWorkout = this.createRaceTuneUpWorkout(
+          race,
+          addDays2(race.date, -3)
+        );
         enhancedWorkouts.push(tuneUpWorkout);
       }
     });
@@ -6225,12 +3650,12 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
       "10k": 50,
       "15k": 80,
       "half-marathon": 110,
-      "marathon": 240,
+      marathon: 240,
       "50k": 360,
       "50-mile": 600,
       "100k": 840,
       "100-mile": 1800,
-      "ultra": 600
+      ultra: 600
     };
     return durations[distance] || 60;
   }
@@ -6243,12 +3668,12 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
       "10k": 10,
       "15k": 15,
       "half-marathon": 21.1,
-      "marathon": 42.2,
+      marathon: 42.2,
       "50k": 50,
       "50-mile": 80.5,
       "100k": 100,
       "100-mile": 161,
-      "ultra": 50
+      ultra: 50
     };
     return distances[distance] || 10;
   }
@@ -6261,12 +3686,12 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
       "10k": 100,
       "15k": 140,
       "half-marathon": 180,
-      "marathon": 300,
+      marathon: 300,
       "50k": 400,
       "50-mile": 600,
       "100k": 800,
       "100-mile": 1200,
-      "ultra": 500
+      ultra: 500
     };
     return tssValues[distance] || 100;
   }
@@ -6328,12 +3753,12 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
       "10k": 8,
       "15k": 10,
       "half-marathon": 12,
-      "marathon": 15,
+      marathon: 15,
       "50k": 20,
       "50-mile": 30,
       "100k": 30,
       "100-mile": 45,
-      "ultra": 25
+      ultra: 25
     };
     return tuneUpMap[distance] || 10;
   }
@@ -6357,8 +3782,13 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
         ...config.preferences
       },
       methodology: config.methodology || "custom",
-      intensityDistribution: config.intensityDistribution || { easy: 80, moderate: 15, hard: 5, veryHard: 0 },
-      periodization: config.periodization || "linear",
+      intensityDistribution: config.intensityDistribution ?? {
+        easy: 80,
+        moderate: 15,
+        hard: 5,
+        veryHard: 0
+      },
+      periodization: config.periodization ?? "linear",
       targetRaces: config.targetRaces || [],
       adaptationEnabled: config.adaptationEnabled || false,
       recoveryMonitoring: config.recoveryMonitoring || false,
@@ -6383,7 +3813,7 @@ var AdvancedTrainingPlanGenerator = class _AdvancedTrainingPlanGenerator extends
 };
 
 // src/adaptation.ts
-import { addDays as addDays3, startOfWeek as startOfWeek3 } from "date-fns";
+import { addDays as addDays3, startOfWeek as startOfWeek2 } from "date-fns";
 var SmartAdaptationEngine = class {
   constructor() {
     this.SAFE_ACWR_LOWER = 0.8;
@@ -6400,7 +3830,10 @@ var SmartAdaptationEngine = class {
    * Analyze workout completion and performance data
    */
   analyzeProgress(completedWorkouts, plannedWorkouts) {
-    const adherence = this.calculateAdherence(completedWorkouts, plannedWorkouts);
+    const adherence = this.calculateAdherence(
+      completedWorkouts,
+      plannedWorkouts
+    );
     const performanceTrend = this.analyzePerformanceTrend(completedWorkouts);
     const volumeProgress = this.analyzeVolumeProgress(completedWorkouts);
     const intensityDistribution = this.analyzeIntensityDistribution(completedWorkouts);
@@ -6465,14 +3898,15 @@ var SmartAdaptationEngine = class {
           }
         });
       }
-      if (recovery.injuryStatus === "injured" || recovery.illnessStatus === "sick") {
+      const extendedRecovery = recovery;
+      if (extendedRecovery.injuryStatus && extendedRecovery.injuryStatus !== "healthy") {
         modifications.push({
           type: "injury_protocol",
-          reason: recovery.injuryStatus === "injured" ? "Injury reported" : "Illness reported",
+          reason: "Injury reported",
           priority: "high",
           suggestedChanges: {
             substituteWorkoutType: "recovery",
-            volumeReduction: recovery.injuryStatus === "injured" ? 100 : 50
+            volumeReduction: extendedRecovery.injuryStatus === "severe" ? 100 : 50
           }
         });
       }
@@ -6548,7 +3982,8 @@ var SmartAdaptationEngine = class {
       if (overallRecovery < this.MIN_RECOVERY_SCORE) {
         return true;
       }
-      if (recovery.injuryStatus === "injured" || recovery.illnessStatus === "sick") {
+      const extendedRecovery = recovery;
+      if (extendedRecovery.injuryStatus && extendedRecovery.injuryStatus !== "healthy") {
         return true;
       }
     }
@@ -6574,8 +4009,10 @@ var SmartAdaptationEngine = class {
    * Analyze performance trend from completed workouts
    */
   analyzePerformanceTrend(completed) {
-    if (completed.length < 5) return "stable";
-    const sortedByDate = [...completed].sort((a, b) => a.date.getTime() - b.date.getTime());
+    if (completed.length < 5) return "maintaining";
+    const sortedByDate = [...completed].sort(
+      (a, b) => a.date.getTime() - b.date.getTime()
+    );
     const midpoint = Math.floor(sortedByDate.length / 2);
     const olderWorkouts = sortedByDate.slice(0, midpoint);
     const recentWorkouts = sortedByDate.slice(midpoint);
@@ -6584,13 +4021,15 @@ var SmartAdaptationEngine = class {
     const improvement = (olderAvgRelativePace - recentAvgRelativePace) / olderAvgRelativePace * 100;
     if (improvement > 2) return "improving";
     if (improvement < -2) return "declining";
-    return "stable";
+    return "maintaining";
   }
   /**
    * Calculate average pace adjusted for effort level
    */
   calculateAverageRelativePace(workouts) {
-    const validWorkouts = workouts.filter((w) => w.actualDistance && w.actualDuration && w.perceivedEffort);
+    const validWorkouts = workouts.filter(
+      (w) => w.actualDistance && w.actualDuration && w.perceivedEffort
+    );
     if (validWorkouts.length === 0) return 0;
     const relativePaces = validWorkouts.map((w) => {
       const pace = w.actualDuration / w.actualDistance;
@@ -6606,9 +4045,12 @@ var SmartAdaptationEngine = class {
     const weeklyVolumes = /* @__PURE__ */ new Map();
     completed.forEach((workout) => {
       if (workout.actualDistance) {
-        const weekStart = startOfWeek3(workout.date);
+        const weekStart = startOfWeek2(workout.date);
         const weekKey = weekStart.toISOString();
-        weeklyVolumes.set(weekKey, (weeklyVolumes.get(weekKey) || 0) + workout.actualDistance);
+        weeklyVolumes.set(
+          weekKey,
+          (weeklyVolumes.get(weekKey) || 0) + workout.actualDistance
+        );
       }
     });
     const volumes = Array.from(weeklyVolumes.values());
@@ -6631,17 +4073,20 @@ var SmartAdaptationEngine = class {
     let easy = 0;
     let moderate = 0;
     let hard = 0;
+    let veryHard = 0;
     completed.forEach((workout) => {
       const effort = workout.perceivedEffort || 5;
-      if (effort <= 4) easy++;
-      else if (effort <= 7) moderate++;
-      else hard++;
+      if (effort <= 3) easy++;
+      else if (effort <= 6) moderate++;
+      else if (effort <= 8) hard++;
+      else veryHard++;
     });
-    const total = easy + moderate + hard || 1;
+    const total = easy + moderate + hard + veryHard || 1;
     return {
       easy: Math.round(easy / total * 100),
       moderate: Math.round(moderate / total * 100),
-      hard: Math.round(hard / total * 100)
+      hard: Math.round(hard / total * 100),
+      veryHard: Math.round(veryHard / total * 100)
     };
   }
   /**
@@ -6721,10 +4166,16 @@ var SmartAdaptationEngine = class {
     const runData = this.convertToRunData(completedWorkouts);
     const trainingLoad = calculateTrainingLoad(runData, 5);
     const weeklyPatterns = analyzeWeeklyPatterns(runData);
-    const recentWeekMileage = runData.filter((run) => run.date > new Date(Date.now() - 7 * 24 * 60 * 60 * 1e3)).reduce((sum, run) => sum + run.distance, 0);
+    const recentWeekMileage = runData.filter(
+      (run) => run.date > new Date(Date.now() - 7 * 24 * 60 * 60 * 1e3)
+    ).reduce((sum, run) => sum + run.distance, 0);
     const weeklyLoadIncrease = weeklyPatterns.avgWeeklyMileage > 0 ? (recentWeekMileage - weeklyPatterns.avgWeeklyMileage) / weeklyPatterns.avgWeeklyMileage * 100 : 0;
     const recoveryScore = calculateRecoveryScore(runData);
-    const currentRisk = calculateInjuryRisk(trainingLoad, weeklyLoadIncrease, recoveryScore);
+    const currentRisk = calculateInjuryRisk(
+      trainingLoad,
+      weeklyLoadIncrease,
+      recoveryScore
+    );
     const projectedRisk = this.projectFutureRisk(
       completedWorkouts,
       plannedWorkouts,
@@ -6764,7 +4215,8 @@ var SmartAdaptationEngine = class {
     let fatigueScore = 0;
     recentWorkouts.forEach((workout) => {
       const effortContribution = (workout.perceivedEffort || 5) * 2;
-      const completionRate = workout.actualDuration && workout.plannedDuration ? workout.actualDuration / workout.plannedDuration : 1;
+      const plannedDuration = workout.plannedWorkout.targetMetrics.duration;
+      const completionRate = workout.actualDuration && plannedDuration ? workout.actualDuration / plannedDuration : 1;
       if (completionRate < 0.9) {
         fatigueScore += 10;
       }
@@ -6789,7 +4241,8 @@ var SmartAdaptationEngine = class {
     let pattern = "none";
     sortedWorkouts.forEach((workout, index) => {
       const highEffort = workout.perceivedEffort && workout.perceivedEffort >= 7;
-      const poorCompletion = workout.actualDuration && workout.plannedDuration ? workout.actualDuration / workout.plannedDuration < 0.85 : false;
+      const plannedDuration = workout.plannedWorkout.targetMetrics.duration;
+      const poorCompletion = workout.actualDuration && plannedDuration ? workout.actualDuration / plannedDuration < 0.85 : false;
       if (highEffort && poorCompletion) {
         consecutiveFatigueDays++;
         maxConsecutive = Math.max(maxConsecutive, consecutiveFatigueDays);
@@ -6818,7 +4271,9 @@ var SmartAdaptationEngine = class {
       const workoutTSS = this.estimateWorkoutTSS(workout);
       dailyTSS.set(dateKey, (dailyTSS.get(dateKey) || 0) + workoutTSS);
     });
-    const sortedDays = Array.from(dailyTSS.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const sortedDays = Array.from(dailyTSS.entries()).sort(
+      (a, b) => a[0].localeCompare(b[0])
+    );
     let consecutiveHighDays = 0;
     let maxConsecutive = 0;
     let maxDailyTSS = 0;
@@ -6867,7 +4322,9 @@ var SmartAdaptationEngine = class {
           ...workout.targetMetrics,
           duration: Math.round(workout.targetMetrics.duration * factors.volume),
           distance: workout.targetMetrics.distance ? workout.targetMetrics.distance * factors.volume : void 0,
-          intensity: Math.round(workout.targetMetrics.intensity * factors.intensity)
+          intensity: Math.round(
+            workout.targetMetrics.intensity * factors.intensity
+          )
         },
         workout: {
           ...workout.workout,
@@ -6895,7 +4352,9 @@ var SmartAdaptationEngine = class {
       recommendations.push("Prioritize hydration and nutrition");
     }
     if (recovery?.sleepQuality && recovery.sleepQuality < 6) {
-      recommendations.push("Improve sleep hygiene - aim for consistent bedtime");
+      recommendations.push(
+        "Improve sleep hygiene - aim for consistent bedtime"
+      );
     }
     if (recovery?.muscleSoreness && recovery.muscleSoreness > 7) {
       recommendations.push("Consider foam rolling and dynamic stretching");
@@ -6931,7 +4390,9 @@ var SmartAdaptationEngine = class {
     const strategies = [];
     if (riskLevel === "critical" || riskLevel === "high") {
       strategies.push("Immediately reduce training volume by 30-40%");
-      strategies.push("Replace high-intensity workouts with easy recovery runs");
+      strategies.push(
+        "Replace high-intensity workouts with easy recovery runs"
+      );
       strategies.push("Schedule professional assessment if pain persists");
     }
     if (acwr > 1.3) {
@@ -7047,12 +4508,14 @@ var SmartAdaptationEngine = class {
           workout: {
             ...workout.workout,
             type: "recovery",
-            segments: [{
-              duration: 30,
-              intensity: 50,
-              zone: { name: "Recovery" },
-              description: "Very easy recovery pace"
-            }]
+            segments: [
+              {
+                duration: 30,
+                intensity: 50,
+                zone: TRAINING_ZONES.RECOVERY,
+                description: "Very easy recovery pace"
+              }
+            ]
           },
           targetMetrics: {
             ...workout.targetMetrics,
@@ -7229,7 +4692,10 @@ var SmartAdaptationEngine = class {
       }
     };
     const newType = substitutionMap[reason][originalWorkout.type] || "easy";
-    const template = this.selectAppropriateTemplate(newType, originalWorkout.targetMetrics.duration);
+    const template = this.selectAppropriateTemplate(
+      newType,
+      originalWorkout.targetMetrics.duration
+    );
     return {
       ...originalWorkout,
       type: newType,
@@ -7238,7 +4704,10 @@ var SmartAdaptationEngine = class {
       workout: template,
       targetMetrics: {
         ...originalWorkout.targetMetrics,
-        intensity: template.segments.reduce((sum, s) => sum + s.intensity, 0) / template.segments.length,
+        intensity: template.segments.reduce(
+          (sum, s) => sum + s.intensity,
+          0
+        ) / template.segments.length,
         tss: template.estimatedTSS,
         load: template.estimatedTSS
       }
@@ -7415,7 +4884,11 @@ var SmartAdaptationEngine = class {
         );
       }
     }
-    const guidelines = this.generateRecoveryGuidelines(condition, severity, affectedArea);
+    const guidelines = this.generateRecoveryGuidelines(
+      condition,
+      severity,
+      affectedArea
+    );
     const returnCriteria = this.generateReturnCriteria(condition, severity);
     return { phases: recoveryPhases, guidelines, returnCriteria };
   }
@@ -7425,12 +4898,18 @@ var SmartAdaptationEngine = class {
   generateRecoveryGuidelines(condition, severity, affectedArea) {
     const guidelines = [];
     if (condition === "injury") {
-      guidelines.push("Follow RICE protocol (Rest, Ice, Compression, Elevation) for acute injuries");
+      guidelines.push(
+        "Follow RICE protocol (Rest, Ice, Compression, Elevation) for acute injuries"
+      );
       guidelines.push("Maintain fitness through cross-training if pain-free");
       guidelines.push("Focus on sleep quality (8+ hours) for optimal healing");
-      guidelines.push("Ensure adequate protein intake (1.6-2.2g/kg body weight)");
+      guidelines.push(
+        "Ensure adequate protein intake (1.6-2.2g/kg body weight)"
+      );
       if (affectedArea?.includes("knee") || affectedArea?.includes("ankle")) {
-        guidelines.push("Consider pool running or cycling for cardio maintenance");
+        guidelines.push(
+          "Consider pool running or cycling for cardio maintenance"
+        );
         guidelines.push("Strengthen supporting muscles (glutes, core, calves)");
       }
       if (severity === "severe") {
@@ -7443,8 +4922,12 @@ var SmartAdaptationEngine = class {
       guidelines.push("Return to activity should be gradual");
       guidelines.push("Monitor heart rate - may be elevated during recovery");
       if (severity !== "mild") {
-        guidelines.push("Wait 24-48 hours after last fever before any exercise");
-        guidelines.push("First workout back should be 50% normal duration at easy pace");
+        guidelines.push(
+          "Wait 24-48 hours after last fever before any exercise"
+        );
+        guidelines.push(
+          "First workout back should be 50% normal duration at easy pace"
+        );
       }
     }
     return guidelines;
@@ -7495,9 +4978,14 @@ var SmartAdaptationEngine = class {
             ...workout,
             targetMetrics: {
               ...workout.targetMetrics,
-              duration: Math.round(workout.targetMetrics.duration * volumeFactor),
+              duration: Math.round(
+                workout.targetMetrics.duration * volumeFactor
+              ),
               distance: workout.targetMetrics.distance ? workout.targetMetrics.distance * volumeFactor : void 0,
-              intensity: Math.min(95, workout.targetMetrics.intensity * intensityFactor)
+              intensity: Math.min(
+                95,
+                workout.targetMetrics.intensity * intensityFactor
+              )
             }
           });
         } else {
@@ -7515,12 +5003,14 @@ var SmartAdaptationEngine = class {
    */
   groupWorkoutsByWeek(workouts) {
     const weeks = [];
-    const sortedWorkouts = [...workouts].sort((a, b) => a.date.getTime() - b.date.getTime());
+    const sortedWorkouts = [...workouts].sort(
+      (a, b) => a.date.getTime() - b.date.getTime()
+    );
     if (sortedWorkouts.length === 0) return weeks;
     let currentWeek = [];
-    let weekStart = startOfWeek3(sortedWorkouts[0].date);
+    let weekStart = startOfWeek2(sortedWorkouts[0].date);
     sortedWorkouts.forEach((workout) => {
-      const workoutWeekStart = startOfWeek3(workout.date);
+      const workoutWeekStart = startOfWeek2(workout.date);
       if (workoutWeekStart.getTime() !== weekStart.getTime()) {
         weeks.push(currentWeek);
         currentWeek = [];
@@ -7561,8 +5051,4465 @@ function createAdaptationEngine() {
   return new SmartAdaptationEngine();
 }
 
+// src/lazy-methodology-loader.ts
+var DEFAULT_CONFIG = {
+  preloadCore: true,
+  enableProgressiveEnhancement: true,
+  maxMemoryUsage: 100,
+  // 100MB limit
+  performanceThresholds: {
+    planGeneration: 2e3,
+    // 2 seconds for preview plans
+    workoutSelection: 1e3,
+    // 1 second for workout selection
+    comparison: 500
+    // 500ms for philosophy comparison
+  },
+  featureLevelDefaults: {
+    beginner: "basic",
+    intermediate: "standard",
+    advanced: "advanced",
+    expert: "expert"
+  },
+  memoryOptimization: {
+    enableAutoCleanup: true,
+    cleanupThreshold: 80,
+    // MB
+    retentionPolicy: "lru"
+  }
+};
+var METHODOLOGY_FEATURE_SETS = {
+  basic: {
+    level: "basic",
+    features: ["core_workouts", "basic_paces", "simple_progressions"],
+    memoryImpact: 5,
+    loadTime: 50,
+    dependencies: [],
+    compatibleWith: ["basic", "standard", "advanced", "expert"]
+  },
+  standard: {
+    level: "standard",
+    features: [
+      "advanced_workouts",
+      "zone_calculations",
+      "phase_transitions",
+      "basic_customization"
+    ],
+    memoryImpact: 15,
+    loadTime: 150,
+    dependencies: ["core_workouts", "basic_paces"],
+    compatibleWith: ["standard", "advanced", "expert"]
+  },
+  advanced: {
+    level: "advanced",
+    features: [
+      "custom_workouts",
+      "environmental_adaptations",
+      "injury_modifications",
+      "performance_optimization"
+    ],
+    memoryImpact: 30,
+    loadTime: 300,
+    dependencies: ["advanced_workouts", "zone_calculations"],
+    compatibleWith: ["advanced", "expert"]
+  },
+  expert: {
+    level: "expert",
+    features: [
+      "research_citations",
+      "advanced_analytics",
+      "methodology_comparisons",
+      "breakthrough_strategies"
+    ],
+    memoryImpact: 50,
+    loadTime: 500,
+    dependencies: ["custom_workouts", "environmental_adaptations"],
+    compatibleWith: ["expert"]
+  }
+};
+var LazyMethodologyLoader = class _LazyMethodologyLoader {
+  constructor(config = {}) {
+    this.loadedMethodologies = /* @__PURE__ */ new Map();
+    this.philosophyInstances = /* @__PURE__ */ new Map();
+    this.performanceMetrics = /* @__PURE__ */ new Map();
+    this.loadingPromises = /* @__PURE__ */ new Map();
+    this.config = { ...DEFAULT_CONFIG, ...config };
+    if (this.config.preloadCore) {
+      this.preloadCoreMethodologies();
+    }
+  }
+  static getInstance(config) {
+    if (!_LazyMethodologyLoader.instance) {
+      _LazyMethodologyLoader.instance = new _LazyMethodologyLoader(config);
+    }
+    return _LazyMethodologyLoader.instance;
+  }
+  /**
+   * Load methodology with specified feature level
+   */
+  async loadMethodology(methodology, targetLevel = "standard") {
+    const loadKey = `${methodology}-${targetLevel}`;
+    if (this.loadingPromises.has(loadKey)) {
+      return this.loadingPromises.get(loadKey);
+    }
+    const currentLevel = this.loadedMethodologies.get(methodology);
+    if (currentLevel && this.isLevelSufficient(currentLevel, targetLevel)) {
+      const cachedInstance = this.philosophyInstances.get(loadKey);
+      if (cachedInstance) {
+        return cachedInstance;
+      }
+    }
+    const loadingPromise = this.performLazyLoad(methodology, targetLevel);
+    this.loadingPromises.set(loadKey, loadingPromise);
+    try {
+      const philosophy = await loadingPromise;
+      this.loadingPromises.delete(loadKey);
+      return philosophy;
+    } catch (error) {
+      this.loadingPromises.delete(loadKey);
+      throw error;
+    }
+  }
+  /**
+   * Perform the actual lazy loading with performance monitoring
+   */
+  async performLazyLoad(methodology, targetLevel) {
+    const loadKey = `${methodology}-${targetLevel}`;
+    return CalculationProfiler.profileAsync(
+      `lazy-load-${loadKey}`,
+      async () => {
+        MemoryMonitor.snapshot(`before-load-${loadKey}`);
+        const startTime = performance.now();
+        const philosophy = await this.loadMethodologyProgressively(
+          methodology,
+          targetLevel
+        );
+        const endTime = performance.now();
+        MemoryMonitor.snapshot(`after-load-${loadKey}`);
+        this.loadedMethodologies.set(methodology, targetLevel);
+        this.philosophyInstances.set(loadKey, philosophy);
+        const metrics = {
+          loadTime: endTime - startTime,
+          memoryUsage: MemoryMonitor.getMemoryIncrease(
+            `before-load-${loadKey}`,
+            `after-load-${loadKey}`
+          ),
+          planGenerationTime: 0,
+          // Will be updated during usage
+          workoutSelectionTime: 0,
+          comparisonTime: 0,
+          cacheHitRatio: 0,
+          timestamp: /* @__PURE__ */ new Date(),
+          featureLevel: targetLevel
+        };
+        this.performanceMetrics.set(loadKey, metrics);
+        this.validatePerformance(methodology, metrics);
+        return philosophy;
+      }
+    );
+  }
+  /**
+   * Load methodology with progressive feature enhancement
+   */
+  async loadMethodologyProgressively(methodology, targetLevel) {
+    const { PhilosophyFactory: PhilosophyFactory2 } = await import("./philosophies-TPXFM56N.mjs");
+    let philosophy = PhilosophyFactory2.create(methodology);
+    const featureLevels = [
+      "basic",
+      "standard",
+      "advanced",
+      "expert"
+    ];
+    const targetIndex = featureLevels.indexOf(targetLevel);
+    for (let i = 0; i <= targetIndex; i++) {
+      const level = featureLevels[i];
+      const featureSet = METHODOLOGY_FEATURE_SETS[level];
+      philosophy = await this.applyFeatureSet(
+        philosophy,
+        methodology,
+        featureSet
+      );
+      if (!this.checkConstraints(featureSet)) {
+        console.warn(
+          `Stopping at ${level} level due to constraints for ${methodology}`
+        );
+        break;
+      }
+    }
+    return philosophy;
+  }
+  /**
+   * Apply feature set to philosophy instance
+   */
+  async applyFeatureSet(philosophy, methodology, featureSet) {
+    await new Promise(
+      (resolve) => setTimeout(resolve, featureSet.loadTime / 10)
+    );
+    return this.enhancePhilosophyWithFeatures(philosophy, methodology, [
+      ...featureSet.features
+    ]);
+  }
+  /**
+   * Enhance philosophy with specific features
+   */
+  enhancePhilosophyWithFeatures(philosophy, methodology, features) {
+    const enhancedPhilosophy = philosophy;
+    if (features.includes("advanced_workouts")) {
+      const originalCustomizeWorkout = enhancedPhilosophy.customizeWorkout;
+      enhancedPhilosophy.customizeWorkout = (template, phase, weekNumber) => {
+        const customized = originalCustomizeWorkout.call(
+          enhancedPhilosophy,
+          template,
+          phase,
+          weekNumber
+        );
+        return customized;
+      };
+    }
+    if (features.includes("environmental_adaptations")) {
+      enhancedPhilosophy.adaptForEnvironment = this.createEnvironmentalAdapter(methodology);
+    }
+    if (features.includes("performance_optimization")) {
+      enhancedPhilosophy.optimizePerformance = this.createPerformanceOptimizer(methodology);
+    }
+    return enhancedPhilosophy;
+  }
+  /**
+   * Create advanced workout generator for methodology
+   */
+  createAdvancedWorkoutGenerator(methodology) {
+    return (phase, fitness) => {
+      return CalculationProfiler.profile(
+        `advanced-workout-${methodology}`,
+        () => {
+          return null;
+        }
+      );
+    };
+  }
+  /**
+   * Create environmental adapter for methodology
+   */
+  createEnvironmentalAdapter(methodology) {
+    return (constraints) => {
+      return CalculationProfiler.profile(`env-adapt-${methodology}`, () => {
+        const paceAdjustments = {};
+        const workoutModifications = [];
+        const recoveryModifications = [];
+        if (constraints.temperature) {
+          const tempFactor = constraints.temperature.max > 25 ? 1.05 : 1;
+          paceAdjustments.easy = tempFactor;
+          paceAdjustments.threshold = tempFactor * 1.02;
+        }
+        if (constraints.altitude && constraints.altitude.meters > 1500) {
+          const altitudeFactor = 1 + constraints.altitude.meters / 1e4;
+          Object.keys(paceAdjustments).forEach((key) => {
+            paceAdjustments[key] = (paceAdjustments[key] || 1) * altitudeFactor;
+          });
+          recoveryModifications.push("increased_recovery_between_intervals");
+        }
+        if (constraints.airQuality && constraints.airQuality.aqi > 100) {
+          workoutModifications.push("reduce_intensity_by_10_percent");
+          workoutModifications.push("indoor_alternative_recommended");
+        }
+        return {
+          paceAdjustments,
+          workoutModifications,
+          recoveryModifications
+        };
+      });
+    };
+  }
+  /**
+   * Create performance optimizer for methodology
+   */
+  createPerformanceOptimizer(methodology) {
+    return (config) => {
+      return CalculationProfiler.profile(`perf-opt-${methodology}`, () => {
+        const optimizedSettings = { ...config };
+        const performanceMetrics = {};
+        const recommendations = [];
+        switch (methodology) {
+          case "daniels":
+            if (config.currentFitness?.weeklyMileage && config.currentFitness.weeklyMileage > 70) {
+              optimizedSettings.intensityDistribution = {
+                easy: 0.82,
+                moderate: 0.1,
+                hard: 0.08,
+                veryHard: 0
+              };
+              recommendations.push(
+                "High mileage detected: adjusted intensity distribution for Daniels method"
+              );
+            }
+            break;
+          case "lydiard":
+            if (config.targetRaces?.[0]?.distance && config.targetRaces[0].distance === "marathon") {
+              recommendations.push(
+                "Marathon distance: extended aerobic base for Lydiard method"
+              );
+            }
+            break;
+          case "pfitzinger":
+            if (config.currentFitness?.trainingAge && config.currentFitness.trainingAge >= 5) {
+              recommendations.push(
+                "Advanced runner: emphasized lactate threshold work for Pfitzinger method"
+              );
+            }
+            break;
+        }
+        performanceMetrics.optimizationScore = 0.85;
+        performanceMetrics.expectedImprovement = 0.03;
+        return {
+          optimizedSettings,
+          performanceMetrics,
+          recommendations
+        };
+      });
+    };
+  }
+  /**
+   * Check if current feature level is sufficient for target
+   */
+  isLevelSufficient(current, target) {
+    const levels = ["basic", "standard", "advanced", "expert"];
+    return levels.indexOf(current) >= levels.indexOf(target);
+  }
+  /**
+   * Check memory and performance constraints
+   */
+  checkConstraints(featureSet) {
+    const currentMemory = MemoryMonitor.getCurrentMemoryUsage();
+    if (currentMemory.heapUsed + featureSet.memoryImpact > this.config.maxMemoryUsage) {
+      return false;
+    }
+    if (featureSet.loadTime > 1e3) {
+      return false;
+    }
+    return true;
+  }
+  /**
+   * Validate performance against configured thresholds
+   */
+  validatePerformance(methodology, metrics) {
+    const warnings = [];
+    if (metrics.loadTime > 1e3) {
+      warnings.push(
+        `Slow loading time for ${methodology}: ${metrics.loadTime.toFixed(2)}ms`
+      );
+    }
+    if (metrics.memoryUsage > 20) {
+      warnings.push(
+        `High memory usage for ${methodology}: ${metrics.memoryUsage.toFixed(2)}MB`
+      );
+    }
+    if (warnings.length > 0) {
+      console.warn("Performance warnings:", warnings);
+    }
+  }
+  /**
+   * Preload core methodologies for faster access
+   */
+  async preloadCoreMethodologies() {
+    const coreMethodologies = [
+      "daniels",
+      "lydiard",
+      "pfitzinger"
+    ];
+    const preloadPromises = coreMethodologies.map(
+      (methodology) => this.loadMethodology(methodology, "basic").catch((error) => {
+        console.warn(`Failed to preload ${methodology}:`, error);
+        return null;
+      })
+    );
+    await Promise.all(preloadPromises);
+  }
+  /**
+   * Get performance metrics for loaded methodologies
+   */
+  getPerformanceMetrics() {
+    const metrics = {};
+    this.performanceMetrics.forEach((value, key) => {
+      const totalCacheOperations = 100;
+      const cacheHits = Math.round(totalCacheOperations * value.cacheHitRatio);
+      const cacheMisses = totalCacheOperations - cacheHits;
+      metrics[key] = {
+        loadTime: value.loadTime,
+        memoryUsage: value.memoryUsage,
+        cacheHits,
+        cacheMisses
+      };
+    });
+    return metrics;
+  }
+  /**
+   * Get loading status for methodologies
+   */
+  getLoadingStatus() {
+    const status = {
+      daniels: null,
+      lydiard: null,
+      pfitzinger: null,
+      hudson: null,
+      custom: null
+    };
+    this.loadedMethodologies.forEach((level, methodology) => {
+      status[methodology] = level;
+    });
+    return status;
+  }
+  /**
+   * Check if methodology is loaded at sufficient level
+   */
+  isMethodologyLoaded(methodology, requiredLevel) {
+    const currentLevel = this.loadedMethodologies.get(methodology);
+    return currentLevel ? this.isLevelSufficient(currentLevel, requiredLevel) : false;
+  }
+  /**
+   * Load methodology with typed options
+   */
+  async loadMethodologyWithOptions(methodology, options) {
+    const targetLevel = options.featureLevel;
+    if (options.constraints) {
+      const currentMemory = MemoryMonitor.getCurrentMemoryUsage();
+      if (currentMemory.heapUsed > options.constraints.maxMemoryUsage) {
+        throw new Error(
+          `Memory constraint exceeded: ${currentMemory.heapUsed}MB > ${options.constraints.maxMemoryUsage}MB`
+        );
+      }
+    }
+    const philosophy = await this.loadMethodology(methodology, targetLevel);
+    if (options.typeGuard && !options.typeGuard(philosophy)) {
+      throw new Error(`Type guard failed for methodology: ${methodology}`);
+    }
+    return philosophy;
+  }
+  /**
+   * Load methodology with environmental adaptations
+   */
+  async loadWithEnvironmentalAdaptation(methodology, constraints, options) {
+    const targetLevel = options?.featureLevel || "standard";
+    const philosophy = await this.loadMethodology(methodology, targetLevel);
+    const adapter = this.createEnvironmentalAdapter(methodology);
+    const adaptations = adapter(constraints);
+    const enhancedPhilosophy = { ...philosophy };
+    const adaptedPhilosophy = enhancedPhilosophy;
+    adaptedPhilosophy.environmentalAdaptations = adaptations;
+    return adaptedPhilosophy;
+  }
+  /**
+   * Load methodology with performance optimization
+   */
+  async loadWithPerformanceOptimization(methodology, config, options) {
+    const targetLevel = options?.featureLevel || "advanced";
+    const philosophy = await this.loadMethodology(methodology, targetLevel);
+    const optimizer = this.createPerformanceOptimizer(methodology);
+    const optimizations = optimizer(config);
+    const enhancedPhilosophy = { ...philosophy };
+    const optimizedPhilosophy = enhancedPhilosophy;
+    optimizedPhilosophy.performanceOptimizations = optimizations;
+    return optimizedPhilosophy;
+  }
+  /**
+   * Clear loaded methodologies to free memory
+   */
+  clearMethodology(methodology) {
+    this.loadedMethodologies.delete(methodology);
+    const keysToDelete = [];
+    this.philosophyInstances.forEach((_, key) => {
+      if (key.startsWith(methodology)) {
+        keysToDelete.push(key);
+      }
+    });
+    keysToDelete.forEach((key) => {
+      this.philosophyInstances.delete(key);
+      this.performanceMetrics.delete(key);
+    });
+  }
+  /**
+   * Get memory usage summary
+   */
+  getMemoryUsage() {
+    const currentUsage = MemoryMonitor.getCurrentMemoryUsage();
+    const byMethodology = {};
+    this.performanceMetrics.forEach((metrics, key) => {
+      byMethodology[key] = metrics.memoryUsage;
+    });
+    const totalMethodologyMemory = Object.values(byMethodology).reduce(
+      (sum, usage) => sum + usage,
+      0
+    );
+    let recommendation = "Memory usage is optimal";
+    if (currentUsage.heapUsed > this.config.maxMemoryUsage * 0.8) {
+      recommendation = "Consider clearing unused methodologies or reducing feature levels";
+    }
+    return {
+      total: currentUsage.heapUsed,
+      byMethodology,
+      recommendation
+    };
+  }
+  /**
+   * Optimize performance by adjusting feature levels
+   */
+  async optimizePerformance() {
+    const metrics = this.getPerformanceMetrics();
+    const memoryUsage = this.getMemoryUsage();
+    if (memoryUsage.total > this.config.maxMemoryUsage * 0.9) {
+      const sortedByMemory = Object.entries(memoryUsage.byMethodology).sort(
+        ([, a], [, b]) => b - a
+      );
+      for (const [key, usage] of sortedByMemory.slice(0, 2)) {
+        const [methodology] = key.split("-");
+        const currentLevel = this.loadedMethodologies.get(methodology);
+        if (currentLevel && currentLevel !== "basic") {
+          console.log(`Downgrading ${methodology} to reduce memory usage`);
+          this.clearMethodology(methodology);
+          await this.loadMethodology(methodology, "basic");
+        }
+      }
+    }
+  }
+};
+var withPerformanceMonitoring = (operation, fn) => {
+  return (...args) => {
+    return CalculationProfiler.profile(operation, () => fn(...args));
+  };
+};
+var withAsyncPerformanceMonitoring = (operation, fn) => {
+  return async (...args) => {
+    return CalculationProfiler.profileAsync(operation, () => fn(...args));
+  };
+};
+var ProgressiveEnhancementManager = class {
+  /**
+   * Get appropriate feature level based on user experience and requirements
+   */
+  static getRecommendedFeatureLevel(userExperience, performanceRequirements) {
+    if (performanceRequirements === "basic") {
+      return "basic";
+    }
+    if (userExperience === "beginner") {
+      return "standard";
+    }
+    if (userExperience === "intermediate") {
+      return performanceRequirements === "high" ? "advanced" : "standard";
+    }
+    return performanceRequirements === "high" ? "expert" : "advanced";
+  }
+  /**
+   * Load methodology with automatic level selection
+   */
+  static async loadWithAutoLevel(methodology, userExperience = "intermediate", performanceRequirements = "standard") {
+    const recommendedLevel = this.getRecommendedFeatureLevel(
+      userExperience,
+      performanceRequirements
+    );
+    return this.loader.loadMethodology(methodology, recommendedLevel);
+  }
+  /**
+   * Monitor and adjust feature levels based on usage patterns
+   */
+  static async adaptToUsage() {
+    await this.loader.optimizePerformance();
+  }
+  /**
+   * Get enhancement recommendations
+   */
+  static getEnhancementRecommendations() {
+    const status = this.loader.getLoadingStatus();
+    const metrics = this.loader.getPerformanceMetrics();
+    const recommendations = [];
+    Object.entries(status).forEach(([methodology, level]) => {
+      if (level === "expert") {
+        const key = `${methodology}-${level}`;
+        const metric = metrics[key];
+        if (metric && metric.loadTime > 800) {
+          recommendations.push(
+            `Consider downgrading ${methodology} from expert to advanced level for better performance`
+          );
+        }
+      }
+    });
+    const memoryUsage = this.loader.getMemoryUsage();
+    if (Object.keys(memoryUsage.byMethodology).length > 3) {
+      recommendations.push(
+        "Consider clearing unused methodologies to free memory"
+      );
+    }
+    if (recommendations.length === 0) {
+      recommendations.push("Progressive enhancement is optimally configured");
+    }
+    return recommendations;
+  }
+};
+ProgressiveEnhancementManager.loader = LazyMethodologyLoader.getInstance();
+var methodologyLoader = LazyMethodologyLoader.getInstance();
+
+// src/methodology-adaptation-engine.ts
+var MethodologyAdaptationEngine = class extends SmartAdaptationEngine {
+  constructor() {
+    super();
+    this.adaptationPatterns = /* @__PURE__ */ new Map();
+    this.responseProfiles = /* @__PURE__ */ new Map();
+    this.philosophies = /* @__PURE__ */ new Map();
+    this.initializeMethodologyPatterns();
+  }
+  /**
+   * Analyze progress with methodology-specific context
+   */
+  analyzeProgressWithMethodology(completedWorkouts, plannedWorkouts, plan) {
+    const baseProgress = super.analyzeProgress(
+      completedWorkouts,
+      plannedWorkouts
+    );
+    const advancedConfig = plan.config;
+    const methodology = advancedConfig.methodology;
+    if (!methodology) {
+      return {
+        ...baseProgress,
+        methodologyInsights: {
+          methodology: "custom",
+          philosophyAlignment: 0,
+          adaptationRecommendations: [],
+          responseProfileStatus: "no_methodology"
+        }
+      };
+    }
+    const methodologyInsights = this.generateMethodologyInsights(
+      completedWorkouts,
+      plannedWorkouts,
+      methodology,
+      plan.config.currentFitness
+    );
+    return {
+      ...baseProgress,
+      methodologyInsights
+    };
+  }
+  /**
+   * Suggest methodology-aware modifications
+   */
+  suggestMethodologyAwareModifications(plan, progress, recovery) {
+    const baseModifications = super.suggestModifications(
+      plan,
+      progress,
+      recovery
+    );
+    const advancedConfig = plan.config;
+    const methodology = advancedConfig.methodology;
+    if (!methodology) {
+      return baseModifications.map(
+        (mod) => this.convertToMethodologyModification(mod, "custom")
+      );
+    }
+    const methodologyPatterns = this.adaptationPatterns.get(methodology) || [];
+    const triggeredPatterns = this.analyzeTriggeredPatterns(
+      methodologyPatterns,
+      progress,
+      recovery
+    );
+    const methodologyModifications = this.generateMethodologyModifications(
+      triggeredPatterns,
+      plan,
+      methodology
+    );
+    const allModifications = [
+      ...baseModifications.map(
+        (mod) => this.convertToMethodologyModification(mod, methodology)
+      ),
+      ...methodologyModifications
+    ];
+    return this.prioritizeModifications(
+      allModifications,
+      methodology,
+      plan.id || "unknown"
+    );
+  }
+  /**
+   * Update individual response profile based on modification outcomes
+   */
+  updateResponseProfile(athleteId, methodology, modification, outcome) {
+    const profileKey = `${athleteId}-${methodology}`;
+    let profile = this.responseProfiles.get(profileKey);
+    if (!profile) {
+      profile = this.createNewResponseProfile(athleteId, methodology);
+      this.responseProfiles.set(profileKey, profile);
+    }
+    const response = {
+      appliedDate: /* @__PURE__ */ new Date(),
+      modification,
+      outcomeMetrics: outcome,
+      effectiveness: this.calculateResponseEffectiveness(outcome),
+      notes: `Applied ${modification.type} modification based on ${modification.philosophyPrinciple}`
+    };
+    profile.responseHistory.push(response);
+    this.updateEffectivenessTrends(
+      profile,
+      modification,
+      response.effectiveness
+    );
+    this.updateModificationPreferences(
+      profile,
+      modification,
+      response.effectiveness
+    );
+    profile.lastUpdated = /* @__PURE__ */ new Date();
+  }
+  /**
+   * Generate methodology-specific insights
+   */
+  generateMethodologyInsights(completedWorkouts, plannedWorkouts, methodology, currentFitness) {
+    const philosophy = this.getPhilosophy(methodology);
+    const philosophyAlignment = this.calculatePhilosophyAlignment(
+      completedWorkouts,
+      plannedWorkouts,
+      philosophy
+    );
+    const adaptationRecommendations = this.generateAdaptationRecommendations(
+      completedWorkouts,
+      methodology,
+      currentFitness
+    );
+    const responseProfileStatus = this.getResponseProfileStatus(methodology);
+    return {
+      methodology,
+      philosophyAlignment,
+      adaptationRecommendations,
+      responseProfileStatus,
+      keyMetrics: this.calculateMethodologyKeyMetrics(
+        completedWorkouts,
+        methodology
+      ),
+      complianceScore: this.calculateMethodologyCompliance(
+        completedWorkouts,
+        plannedWorkouts,
+        methodology
+      )
+    };
+  }
+  /**
+   * Initialize methodology-specific adaptation patterns
+   */
+  initializeMethodologyPatterns() {
+    this.adaptationPatterns.set("daniels", [
+      {
+        id: "daniels-vdot-decline",
+        methodology: "daniels",
+        name: "VDOT Performance Decline",
+        trigger: {
+          type: "performance_decline",
+          conditions: [
+            {
+              metric: "vdot",
+              operator: "less_than",
+              value: -3,
+              // 3+ point decline
+              confidence: 80
+            }
+          ],
+          minimumDuration: 7,
+          philosophyContext: "VDOT decline indicates need for pace adjustment or recovery"
+        },
+        response: {
+          modifications: [
+            {
+              type: "reduce_intensity",
+              reason: "VDOT decline requires pace recalibration",
+              priority: "high",
+              workoutIds: ["tempo", "threshold", "intervals"],
+              suggestedChanges: {
+                intensityReduction: 5
+              },
+              methodologySpecific: true,
+              philosophyPrinciple: "VDOT-based pace prescription",
+              confidence: 90
+            }
+          ],
+          rationale: "Daniels methodology requires pace adjustments when VDOT declines to maintain appropriate training stress",
+          expectedDuration: 14,
+          monitoringPeriod: 21,
+          rollbackCriteria: [
+            {
+              metric: "vdot",
+              operator: "greater_than",
+              value: 2,
+              confidence: 75
+            }
+          ],
+          philosophyJustification: "Maintains 80/20 intensity distribution while adjusting for current fitness"
+        },
+        philosophyAlignment: 95,
+        frequency: 0,
+        successRate: 85
+      },
+      {
+        id: "daniels-intensity-imbalance",
+        methodology: "daniels",
+        name: "Intensity Distribution Imbalance",
+        trigger: {
+          type: "fatigue_buildup",
+          conditions: [
+            {
+              metric: "hard_percentage",
+              operator: "greater_than",
+              value: 25,
+              // More than 25% hard running
+              confidence: 85
+            },
+            {
+              metric: "recovery_score",
+              operator: "less_than",
+              value: 70,
+              confidence: 80
+            }
+          ],
+          minimumDuration: 5,
+          philosophyContext: "80/20 principle violation causing excessive fatigue"
+        },
+        response: {
+          modifications: [
+            {
+              type: "reduce_intensity",
+              reason: "Restore 80/20 intensity distribution",
+              priority: "high",
+              workoutIds: ["intervals", "tempo"],
+              suggestedChanges: {
+                intensityReduction: 15
+              },
+              methodologySpecific: true,
+              philosophyPrinciple: "80/20 intensity distribution",
+              confidence: 92
+            }
+          ],
+          rationale: "Excessive hard training violates Daniels 80/20 principle and leads to overreaching",
+          expectedDuration: 10,
+          monitoringPeriod: 14,
+          rollbackCriteria: [
+            {
+              metric: "hard_percentage",
+              operator: "less_than",
+              value: 22,
+              confidence: 80
+            }
+          ],
+          philosophyJustification: "Returns to fundamental 80/20 easy/hard distribution for sustainable training"
+        },
+        philosophyAlignment: 98,
+        frequency: 0,
+        successRate: 88
+      }
+    ]);
+    this.adaptationPatterns.set("lydiard", [
+      {
+        id: "lydiard-base-insufficient",
+        methodology: "lydiard",
+        name: "Insufficient Aerobic Base",
+        trigger: {
+          type: "performance_decline",
+          conditions: [
+            {
+              metric: "easy_percentage",
+              operator: "less_than",
+              value: 80,
+              // Less than 80% easy running
+              confidence: 90
+            },
+            {
+              metric: "aerobic_efficiency",
+              operator: "less_than",
+              value: 70,
+              confidence: 75
+            }
+          ],
+          minimumDuration: 7,
+          philosophyContext: "Aerobic base is the foundation of Lydiard methodology"
+        },
+        response: {
+          modifications: [
+            {
+              type: "delay_progression",
+              reason: "Increase aerobic base development",
+              priority: "medium",
+              workoutIds: ["easy", "long"],
+              suggestedChanges: {
+                volumeReduction: -15
+                // Negative means increase
+              },
+              methodologySpecific: true,
+              philosophyPrinciple: "Aerobic base development",
+              confidence: 88
+            }
+          ],
+          rationale: "Lydiard methodology requires strong aerobic base before quality work",
+          expectedDuration: 21,
+          monitoringPeriod: 28,
+          rollbackCriteria: [
+            {
+              metric: "aerobic_efficiency",
+              operator: "greater_than",
+              value: 75,
+              confidence: 80
+            }
+          ],
+          philosophyJustification: "Builds aerobic capacity through time-based easy running"
+        },
+        philosophyAlignment: 96,
+        frequency: 0,
+        successRate: 82
+      }
+    ]);
+    this.adaptationPatterns.set("pfitzinger", [
+      {
+        id: "pfitzinger-threshold-overload",
+        methodology: "pfitzinger",
+        name: "Lactate Threshold Overload",
+        trigger: {
+          type: "fatigue_buildup",
+          conditions: [
+            {
+              metric: "threshold_volume",
+              operator: "greater_than",
+              value: 15,
+              // More than 15% of weekly volume at threshold
+              confidence: 85
+            },
+            {
+              metric: "recovery_score",
+              operator: "less_than",
+              value: 65,
+              confidence: 80
+            }
+          ],
+          minimumDuration: 5,
+          philosophyContext: "Excessive threshold volume can lead to plateau or decline"
+        },
+        response: {
+          modifications: [
+            {
+              type: "substitute_workout",
+              reason: "Reduce threshold load while maintaining aerobic base",
+              priority: "medium",
+              workoutIds: ["threshold"],
+              suggestedChanges: {
+                substituteWorkoutType: "easy"
+              },
+              methodologySpecific: true,
+              philosophyPrinciple: "Progressive threshold development",
+              confidence: 87
+            }
+          ],
+          rationale: "Pfitzinger emphasizes progressive threshold development, not excessive volume",
+          expectedDuration: 14,
+          monitoringPeriod: 21,
+          rollbackCriteria: [
+            {
+              metric: "recovery_score",
+              operator: "greater_than",
+              value: 72,
+              confidence: 75
+            }
+          ],
+          philosophyJustification: "Maintains threshold focus while preventing overload"
+        },
+        philosophyAlignment: 91,
+        frequency: 0,
+        successRate: 79
+      }
+    ]);
+    this.adaptationPatterns.set("hudson", [
+      {
+        id: "hudson-adaptive-response",
+        methodology: "hudson",
+        name: "Individual Response Adaptation",
+        trigger: {
+          type: "plateau",
+          conditions: [
+            {
+              metric: "performance_stagnation",
+              operator: "greater_than",
+              value: 14,
+              // 14 days without improvement
+              confidence: 70
+            }
+          ],
+          minimumDuration: 14,
+          philosophyContext: "Hudson methodology emphasizes adapting to individual response"
+        },
+        response: {
+          modifications: [
+            {
+              type: "delay_progression",
+              reason: "Adapt training based on individual response patterns",
+              priority: "low",
+              suggestedChanges: {
+                delayDays: 7
+              },
+              methodologySpecific: true,
+              philosophyPrinciple: "Individual response monitoring",
+              confidence: 75
+            }
+          ],
+          rationale: "Hudson methodology requires frequent adjustments based on individual adaptation",
+          expectedDuration: 7,
+          monitoringPeriod: 14,
+          rollbackCriteria: [
+            {
+              metric: "performance_improvement",
+              operator: "greater_than",
+              value: 2,
+              confidence: 70
+            }
+          ],
+          philosophyJustification: "Highly individualized approach with frequent assessment and adjustment"
+        },
+        philosophyAlignment: 93,
+        frequency: 0,
+        successRate: 71
+      }
+    ]);
+    this.adaptationPatterns.set("custom", [
+      {
+        id: "custom-general-fatigue",
+        methodology: "custom",
+        name: "General Fatigue Management",
+        trigger: {
+          type: "fatigue_buildup",
+          conditions: [
+            {
+              metric: "recovery_score",
+              operator: "less_than",
+              value: 60,
+              confidence: 85
+            }
+          ],
+          minimumDuration: 3,
+          philosophyContext: "General fatigue management without specific methodology bias"
+        },
+        response: {
+          modifications: [
+            {
+              type: "add_recovery",
+              reason: "General fatigue requires increased recovery",
+              priority: "high",
+              workoutIds: ["hard"],
+              suggestedChanges: {
+                additionalRecoveryDays: 2
+              },
+              methodologySpecific: false,
+              philosophyPrinciple: "General recovery principles",
+              confidence: 80
+            }
+          ],
+          rationale: "Custom approach focuses on general training principles",
+          expectedDuration: 7,
+          monitoringPeriod: 10,
+          rollbackCriteria: [
+            {
+              metric: "recovery_score",
+              operator: "greater_than",
+              value: 70,
+              confidence: 80
+            }
+          ],
+          philosophyJustification: "General training principles without methodology bias"
+        },
+        philosophyAlignment: 60,
+        frequency: 0,
+        successRate: 75
+      }
+    ]);
+  }
+  /**
+   * Calculate philosophy alignment based on completed workouts
+   */
+  calculatePhilosophyAlignment(completedWorkouts, plannedWorkouts, philosophy) {
+    if (completedWorkouts.length === 0) return 100;
+    const targetDistribution = philosophy.intensityDistribution;
+    const actualDistribution = this.calculateActualIntensityDistribution(completedWorkouts);
+    const easyAlignment = Math.abs(
+      targetDistribution.easy - actualDistribution.easy
+    );
+    const moderateAlignment = Math.abs(
+      targetDistribution.moderate - actualDistribution.moderate
+    );
+    const hardAlignment = Math.abs(
+      targetDistribution.hard - actualDistribution.hard
+    );
+    const totalDeviation = easyAlignment + moderateAlignment + hardAlignment;
+    const alignmentScore = Math.max(0, 100 - totalDeviation / 3);
+    return Math.round(alignmentScore);
+  }
+  /**
+   * Calculate actual intensity distribution from completed workouts
+   */
+  calculateActualIntensityDistribution(completedWorkouts) {
+    if (completedWorkouts.length === 0) {
+      return { easy: 0, moderate: 0, hard: 0 };
+    }
+    const totalDuration = completedWorkouts.reduce(
+      (sum, w) => sum + (w.actualDuration || 0),
+      0
+    );
+    if (totalDuration === 0) {
+      return { easy: 0, moderate: 0, hard: 0 };
+    }
+    let easyDuration = 0;
+    let moderateDuration = 0;
+    let hardDuration = 0;
+    completedWorkouts.forEach((workout) => {
+      const duration = workout.actualDuration || 0;
+      const type = workout.plannedWorkout?.workout?.type;
+      if (!type) {
+        easyDuration += duration;
+        return;
+      }
+      if (["recovery", "easy", "long"].includes(type)) {
+        easyDuration += duration;
+      } else if (["tempo", "steady"].includes(type)) {
+        moderateDuration += duration;
+      } else if (["threshold", "intervals", "vo2max", "speed"].includes(type)) {
+        hardDuration += duration;
+      } else {
+        easyDuration += duration;
+      }
+    });
+    return {
+      easy: Math.round(easyDuration / totalDuration * 100),
+      moderate: Math.round(moderateDuration / totalDuration * 100),
+      hard: Math.round(hardDuration / totalDuration * 100)
+    };
+  }
+  /**
+   * Generate adaptation recommendations based on methodology
+   */
+  generateAdaptationRecommendations(completedWorkouts, methodology, currentFitness) {
+    const recommendations = [];
+    if (completedWorkouts.length < 5) {
+      recommendations.push(
+        "Complete more workouts to generate methodology-specific recommendations"
+      );
+      return recommendations;
+    }
+    const actualDistribution = this.calculateActualIntensityDistribution(completedWorkouts);
+    const philosophy = this.getPhilosophy(methodology);
+    const targetDistribution = philosophy.intensityDistribution;
+    switch (methodology) {
+      case "daniels":
+        if (actualDistribution.hard > targetDistribution.hard + 5) {
+          recommendations.push(
+            "Reduce hard training intensity to maintain 80/20 distribution"
+          );
+        }
+        if (currentFitness?.vdot && this.detectVdotDecline(completedWorkouts, currentFitness.vdot)) {
+          recommendations.push("Consider pace adjustment due to VDOT decline");
+        }
+        break;
+      case "lydiard":
+        if (actualDistribution.easy < targetDistribution.easy - 5) {
+          recommendations.push(
+            "Increase aerobic base development with more easy running"
+          );
+        }
+        recommendations.push(
+          "Focus on time-based training rather than pace-specific work"
+        );
+        break;
+      case "pfitzinger":
+        const thresholdPercentage = this.calculateThresholdPercentage(completedWorkouts);
+        if (thresholdPercentage > 15) {
+          recommendations.push(
+            "Reduce lactate threshold volume to prevent overload"
+          );
+        }
+        recommendations.push(
+          "Incorporate medium-long runs with tempo segments"
+        );
+        break;
+      case "hudson":
+        recommendations.push(
+          "Monitor individual response and adjust training based on feedback"
+        );
+        recommendations.push(
+          "Assess current adaptation and modify plan accordingly"
+        );
+        break;
+      case "custom":
+        recommendations.push(
+          "Monitor training balance and adjust based on personal response"
+        );
+        break;
+    }
+    return recommendations;
+  }
+  /**
+   * Additional helper methods...
+   */
+  detectVdotDecline(completedWorkouts, currentVdot) {
+    const recentWorkouts = completedWorkouts.slice(-10);
+    return recentWorkouts.some(
+      (w) => w.perceivedEffort && w.perceivedEffort > 8
+    );
+  }
+  calculateThresholdPercentage(completedWorkouts) {
+    const totalDuration = completedWorkouts.reduce(
+      (sum, w) => sum + (w.actualDuration || 0),
+      0
+    );
+    const thresholdDuration = completedWorkouts.filter(
+      (w) => w.plannedWorkout?.workout?.type && ["threshold", "tempo"].includes(w.plannedWorkout.workout.type)
+    ).reduce((sum, w) => sum + (w.actualDuration || 0), 0);
+    return totalDuration > 0 ? thresholdDuration / totalDuration * 100 : 0;
+  }
+  calculateMethodologyKeyMetrics(completedWorkouts, methodology) {
+    const metrics = {};
+    switch (methodology) {
+      case "daniels":
+        metrics.intensityBalance = this.calculateIntensityBalance(completedWorkouts);
+        metrics.paceConsistency = this.calculatePaceConsistency(completedWorkouts);
+        break;
+      case "lydiard":
+        metrics.aerobicVolume = this.calculateAerobicVolume(completedWorkouts);
+        metrics.timeBasedCompliance = this.calculateTimeBasedCompliance(completedWorkouts);
+        break;
+      case "pfitzinger":
+        metrics.thresholdProgression = this.calculateThresholdProgression(completedWorkouts);
+        metrics.mediumLongFrequency = this.calculateMediumLongFrequency(completedWorkouts);
+        break;
+      case "hudson":
+        metrics.adaptationRate = this.calculateAdaptationRate(completedWorkouts);
+        metrics.individualResponse = this.calculateIndividualResponse(completedWorkouts);
+        break;
+    }
+    return metrics;
+  }
+  calculateMethodologyCompliance(completedWorkouts, plannedWorkouts, methodology) {
+    if (plannedWorkouts.length === 0) return 100;
+    const completedCount = completedWorkouts.length;
+    const plannedCount = plannedWorkouts.length;
+    return Math.round(completedCount / plannedCount * 100);
+  }
+  // Simplified implementations for helper methods
+  calculateIntensityBalance(completedWorkouts) {
+    return 85;
+  }
+  calculatePaceConsistency(completedWorkouts) {
+    return 78;
+  }
+  calculateAerobicVolume(completedWorkouts) {
+    return 92;
+  }
+  calculateTimeBasedCompliance(completedWorkouts) {
+    return 88;
+  }
+  calculateThresholdProgression(completedWorkouts) {
+    return 83;
+  }
+  calculateMediumLongFrequency(completedWorkouts) {
+    return 75;
+  }
+  calculateAdaptationRate(completedWorkouts) {
+    return 80;
+  }
+  calculateIndividualResponse(completedWorkouts) {
+    return 85;
+  }
+  getPhilosophy(methodology) {
+    if (!this.philosophies.has(methodology)) {
+      this.philosophies.set(methodology, PhilosophyFactory.create(methodology));
+    }
+    return this.philosophies.get(methodology);
+  }
+  analyzeTriggeredPatterns(patterns, progress, recovery) {
+    return patterns.filter((pattern) => {
+      return pattern.trigger.conditions.some((condition) => {
+        return condition.confidence > 70;
+      });
+    });
+  }
+  generateMethodologyModifications(triggeredPatterns, plan, methodology) {
+    return triggeredPatterns.map((pattern) => pattern.response.modifications).flat();
+  }
+  convertToMethodologyModification(modification, methodology) {
+    return {
+      ...modification,
+      methodologySpecific: false,
+      philosophyPrinciple: "General training principles",
+      confidence: 70
+    };
+  }
+  prioritizeModifications(modifications, methodology, planId) {
+    return modifications.sort((a, b) => {
+      if (a.methodologySpecific && !b.methodologySpecific) return -1;
+      if (!a.methodologySpecific && b.methodologySpecific) return 1;
+      return b.confidence - a.confidence;
+    });
+  }
+  createNewResponseProfile(athleteId, methodology) {
+    return {
+      methodology,
+      athleteId,
+      adaptationPatterns: [],
+      responseHistory: [],
+      preferredModifications: [],
+      avoidedModifications: [],
+      effectivenessTrends: {
+        volumeChanges: 50,
+        intensityChanges: 50,
+        recoveryChanges: 50,
+        workoutTypeChanges: 50
+      },
+      lastUpdated: /* @__PURE__ */ new Date()
+    };
+  }
+  calculateResponseEffectiveness(outcome) {
+    const weights = {
+      performance: 0.4,
+      adherence: 0.3,
+      recovery: 0.2,
+      satisfaction: 0.1
+    };
+    return Math.round(
+      outcome.performanceChange * weights.performance + outcome.adherenceChange * weights.adherence + outcome.recoveryChange * weights.recovery + outcome.satisfactionChange * weights.satisfaction
+    );
+  }
+  updateEffectivenessTrends(profile, modification, effectiveness) {
+    const trend = profile.effectivenessTrends;
+    const alpha = 0.3;
+    switch (modification.type) {
+      case "reduce_volume":
+        trend.volumeChanges = trend.volumeChanges * (1 - alpha) + effectiveness * alpha;
+        break;
+      case "reduce_intensity":
+        trend.intensityChanges = trend.intensityChanges * (1 - alpha) + effectiveness * alpha;
+        break;
+      case "add_recovery":
+        trend.recoveryChanges = trend.recoveryChanges * (1 - alpha) + effectiveness * alpha;
+        break;
+      case "substitute_workout":
+        trend.workoutTypeChanges = trend.workoutTypeChanges * (1 - alpha) + effectiveness * alpha;
+        break;
+    }
+  }
+  updateModificationPreferences(profile, modification, effectiveness) {
+    if (effectiveness > 75) {
+      const exists = profile.preferredModifications.some(
+        (pref) => pref.type === modification.type && pref.philosophyPrinciple === modification.philosophyPrinciple
+      );
+      if (!exists) {
+        profile.preferredModifications.push(modification);
+      }
+    } else if (effectiveness < 40) {
+      const exists = profile.avoidedModifications.some(
+        (avoid) => avoid.type === modification.type && avoid.philosophyPrinciple === modification.philosophyPrinciple
+      );
+      if (!exists) {
+        profile.avoidedModifications.push(modification);
+      }
+    }
+  }
+  getResponseProfileStatus(methodology) {
+    return "learning";
+  }
+};
+var MethodologyAdaptationUtils = {
+  /**
+   * Create methodology adaptation engine instance
+   */
+  createEngine: () => {
+    return new MethodologyAdaptationEngine();
+  },
+  /**
+   * Analyze methodology-specific adaptation needs
+   */
+  analyzeAdaptationNeeds: (plan, completedWorkouts, methodology) => {
+    const engine = new MethodologyAdaptationEngine();
+    const plannedWorkouts = plan.workouts;
+    const result = engine.analyzeProgressWithMethodology(
+      completedWorkouts,
+      plannedWorkouts,
+      plan
+    );
+    return result.methodologyInsights;
+  },
+  /**
+   * Get methodology-specific modification suggestions
+   */
+  getModificationSuggestions: (plan, progress, methodology) => {
+    const engine = new MethodologyAdaptationEngine();
+    return engine.suggestMethodologyAwareModifications(plan, progress);
+  }
+};
+
+// src/philosophy-comparator.ts
+var PhilosophyComparator = class {
+  constructor() {
+    this.cachedMatrix = null;
+    this.methodologyProfiles = /* @__PURE__ */ new Map();
+    this.validationResults = /* @__PURE__ */ new Map();
+    this.comparisonDimensions = this.initializeComparisonDimensions();
+    this.initializeMethodologyProfiles();
+  }
+  /**
+   * Initialize the comparison dimensions used for methodology analysis
+   */
+  initializeComparisonDimensions() {
+    return [
+      {
+        name: "Intensity Distribution",
+        description: "How the methodology balances easy, moderate, and hard training",
+        scale: 10,
+        weight: 0.2
+      },
+      {
+        name: "Scientific Foundation",
+        description: "Strength of research backing and peer review",
+        scale: 10,
+        weight: 0.15
+      },
+      {
+        name: "Periodization Structure",
+        description: "Sophistication and clarity of training phase progression",
+        scale: 10,
+        weight: 0.15
+      },
+      {
+        name: "Workout Variety",
+        description: "Range and diversity of training stimulus",
+        scale: 10,
+        weight: 0.1
+      },
+      {
+        name: "Pace Precision",
+        description: "Accuracy and specificity of training pace calculations",
+        scale: 10,
+        weight: 0.15
+      },
+      {
+        name: "Individual Adaptation",
+        description: "Flexibility to accommodate individual differences",
+        scale: 10,
+        weight: 0.1
+      },
+      {
+        name: "Recovery Integration",
+        description: "How well recovery is planned and emphasized",
+        scale: 10,
+        weight: 0.1
+      },
+      {
+        name: "Practical Application",
+        description: "Ease of implementation for average runners",
+        scale: 10,
+        weight: 0.05
+      }
+    ];
+  }
+  /**
+   * Initialize methodology profiles with detailed characteristics
+   */
+  initializeMethodologyProfiles() {
+    this.methodologyProfiles.set("daniels", {
+      methodology: "daniels",
+      intensityDistribution: { easy: 80, moderate: 15, hard: 5 },
+      workoutTypeEmphasis: {
+        easy: 8,
+        tempo: 9,
+        threshold: 10,
+        vo2max: 8,
+        speed: 7,
+        long_run: 6,
+        recovery: 7,
+        fartlek: 6,
+        hill_repeats: 5,
+        progression: 7,
+        steady: 6,
+        race_pace: 7,
+        time_trial: 6,
+        cross_training: 3,
+        strength: 2
+      },
+      periodizationApproach: "Base-Build-Peak with consistent quality work",
+      paceCalculationMethod: "VDOT-based with 5 distinct training zones",
+      recoveryPhilosophy: "Active recovery with easy pace running",
+      volumeProgression: "Conservative weekly increases with step-back weeks",
+      strengthTraining: false,
+      targetAudience: [
+        "competitive runners",
+        "data-driven athletes",
+        "marathon runners"
+      ],
+      researchBasis: [
+        {
+          author: "Jack Daniels",
+          title: "Daniels' Running Formula",
+          year: 2013,
+          credibilityScore: 10,
+          relevance: "Primary methodology source"
+        },
+        {
+          author: "Daniels & Gilbert",
+          title: "Oxygen Power: Performance Tables for Distance Runners",
+          year: 1979,
+          credibilityScore: 9,
+          relevance: "VDOT system foundation"
+        }
+      ]
+    });
+    this.methodologyProfiles.set("lydiard", {
+      methodology: "lydiard",
+      intensityDistribution: { easy: 85, moderate: 10, hard: 5 },
+      workoutTypeEmphasis: {
+        easy: 10,
+        tempo: 6,
+        threshold: 5,
+        vo2max: 4,
+        speed: 3,
+        long_run: 10,
+        recovery: 9,
+        fartlek: 7,
+        hill_repeats: 8,
+        progression: 6,
+        steady: 9,
+        race_pace: 4,
+        time_trial: 3,
+        cross_training: 2,
+        strength: 8
+      },
+      periodizationApproach: "Strict base-anaerobic-coordination-taper progression",
+      paceCalculationMethod: "Effort-based with time emphasis over pace",
+      recoveryPhilosophy: "Complete rest preferred over active recovery",
+      volumeProgression: "High volume base with gradual anaerobic introduction",
+      strengthTraining: true,
+      targetAudience: [
+        "endurance athletes",
+        "marathon runners",
+        "base-building focused"
+      ],
+      researchBasis: [
+        {
+          author: "Arthur Lydiard",
+          title: "Running to the Top",
+          year: 1997,
+          credibilityScore: 9,
+          relevance: "Primary methodology source"
+        },
+        {
+          author: "Nobby Hashizume",
+          title: "Lydiard Training Principles",
+          year: 2006,
+          credibilityScore: 8,
+          relevance: "Modern interpretation of Lydiard methods"
+        }
+      ]
+    });
+    this.methodologyProfiles.set("pfitzinger", {
+      methodology: "pfitzinger",
+      intensityDistribution: { easy: 75, moderate: 20, hard: 5 },
+      workoutTypeEmphasis: {
+        easy: 7,
+        tempo: 8,
+        threshold: 10,
+        vo2max: 7,
+        speed: 6,
+        long_run: 8,
+        recovery: 6,
+        fartlek: 6,
+        hill_repeats: 6,
+        progression: 9,
+        steady: 7,
+        race_pace: 8,
+        time_trial: 7,
+        cross_training: 4,
+        strength: 3
+      },
+      periodizationApproach: "Lactate threshold focused with medium-long emphasis",
+      paceCalculationMethod: "LT-based pace derivations with race-specific work",
+      recoveryPhilosophy: "Structured recovery with optional easy runs",
+      volumeProgression: "Systematic threshold volume increases",
+      strengthTraining: false,
+      targetAudience: [
+        "marathon runners",
+        "threshold-focused athletes",
+        "systematic trainers"
+      ],
+      researchBasis: [
+        {
+          author: "Pete Pfitzinger & Scott Douglas",
+          title: "Advanced Marathoning",
+          year: 2008,
+          credibilityScore: 9,
+          relevance: "Primary methodology source"
+        },
+        {
+          author: "Pete Pfitzinger",
+          title: "Road Racing for Serious Runners",
+          year: 1999,
+          credibilityScore: 8,
+          relevance: "Training principles foundation"
+        }
+      ]
+    });
+  }
+  /**
+   * Generate comprehensive comparison matrix for all methodologies
+   */
+  generateComparisonMatrix() {
+    if (this.cachedMatrix && this.isCacheValid()) {
+      return this.cachedMatrix;
+    }
+    const methodologies = [
+      "daniels",
+      "lydiard",
+      "pfitzinger"
+    ];
+    const scores = createEmptyScores();
+    methodologies.forEach((methodology) => {
+      scores[methodology] = {};
+      const profile = this.methodologyProfiles.get(methodology);
+      this.comparisonDimensions.forEach((dimension) => {
+        scores[methodology][dimension.name] = this.calculateDimensionScore(
+          methodology,
+          dimension,
+          profile
+        );
+      });
+    });
+    const overallRankings = methodologies.map((methodology) => {
+      const totalScore = this.comparisonDimensions.reduce(
+        (sum, dimension) => {
+          return sum + scores[methodology][dimension.name] * dimension.weight;
+        },
+        0
+      );
+      const profile = this.methodologyProfiles.get(methodology);
+      const strengths = this.identifyStrengths(
+        methodology,
+        scores[methodology]
+      );
+      const weaknesses = this.identifyWeaknesses(
+        methodology,
+        scores[methodology]
+      );
+      return {
+        methodology,
+        totalScore: Math.round(totalScore * 10) / 10,
+        strengths,
+        weaknesses
+      };
+    }).sort((a, b) => b.totalScore - a.totalScore);
+    this.cachedMatrix = {
+      dimensions: this.comparisonDimensions,
+      methodologies,
+      scores,
+      overallRankings,
+      lastUpdated: /* @__PURE__ */ new Date()
+    };
+    return this.cachedMatrix;
+  }
+  /**
+   * Compare two methodologies directly
+   */
+  compareMethodologies(methodology1, methodology2) {
+    const profile1 = this.methodologyProfiles.get(methodology1);
+    const profile2 = this.methodologyProfiles.get(methodology2);
+    const similarities = this.findSimilarities(profile1, profile2);
+    const differences = this.findDifferences(profile1, profile2);
+    const compatibilityScore = this.calculateCompatibilityScore(
+      profile1,
+      profile2
+    );
+    const transitionDifficulty = this.assessTransitionDifficulty(
+      profile1,
+      profile2
+    );
+    const recommendedFor = this.generateRecommendations(profile1, profile2);
+    const researchSupport = {
+      methodology1: this.calculateResearchSupport(profile1),
+      methodology2: this.calculateResearchSupport(profile2)
+    };
+    return {
+      methodology1,
+      methodology2,
+      similarities,
+      differences,
+      compatibilityScore,
+      transitionDifficulty,
+      recommendedFor,
+      researchSupport
+    };
+  }
+  /**
+   * Validate methodology implementation against research
+   */
+  validateMethodology(methodology, validatedBy = "system") {
+    const profile = this.methodologyProfiles.get(methodology);
+    const philosophy = PhilosophyFactory.create(methodology);
+    const testPlan = this.generateTestPlan(methodology);
+    const validatedAspects = [];
+    const discrepancies = [];
+    let accuracyScore = 0;
+    const intensityValidation = this.validateIntensityDistribution(
+      testPlan,
+      profile
+    );
+    if (intensityValidation.isValid) {
+      validatedAspects.push("Intensity Distribution");
+      accuracyScore += 15;
+    } else {
+      discrepancies.push(
+        `Intensity distribution: ${intensityValidation.error}`
+      );
+    }
+    const workoutValidation = this.validateWorkoutTypeEmphasis(
+      testPlan,
+      profile
+    );
+    if (workoutValidation.isValid) {
+      validatedAspects.push("Workout Type Emphasis");
+      accuracyScore += 15;
+    } else {
+      discrepancies.push(`Workout emphasis: ${workoutValidation.error}`);
+    }
+    const periodizationValidation = this.validatePeriodization(
+      testPlan,
+      profile
+    );
+    if (periodizationValidation.isValid) {
+      validatedAspects.push("Periodization Structure");
+      accuracyScore += 20;
+    } else {
+      discrepancies.push(`Periodization: ${periodizationValidation.error}`);
+    }
+    try {
+      const paces = calculateTrainingPaces(50);
+      if (paces && Object.keys(paces).length > 0) {
+        validatedAspects.push("Pace Calculation");
+        accuracyScore += 20;
+      }
+    } catch (error) {
+      discrepancies.push("Pace calculation system not properly implemented");
+    }
+    const recoveryValidation = this.validateRecoveryPhilosophy(
+      testPlan,
+      profile
+    );
+    if (recoveryValidation.isValid) {
+      validatedAspects.push("Recovery Integration");
+      accuracyScore += 15;
+    } else {
+      discrepancies.push(`Recovery philosophy: ${recoveryValidation.error}`);
+    }
+    if (profile.researchBasis.length > 0 && profile.researchBasis.every((citation) => citation.credibilityScore >= 7)) {
+      validatedAspects.push("Research Foundation");
+      accuracyScore += 15;
+    } else {
+      discrepancies.push("Insufficient or low-quality research citations");
+    }
+    const validationResult = {
+      methodology,
+      accuracyScore,
+      validatedAspects,
+      discrepancies,
+      lastValidated: /* @__PURE__ */ new Date(),
+      validatedBy
+    };
+    this.validationResults.set(methodology, validationResult);
+    return validationResult;
+  }
+  /**
+   * Get detailed methodology profile
+   */
+  getMethodologyProfile(methodology) {
+    return this.methodologyProfiles.get(methodology);
+  }
+  /**
+   * Get research citations for methodology
+   */
+  getResearchCitations(methodology) {
+    const profile = this.methodologyProfiles.get(methodology);
+    return profile ? profile.researchBasis : [];
+  }
+  /**
+   * Get validation results for methodology
+   */
+  getValidationResults(methodology) {
+    return this.validationResults.get(methodology);
+  }
+  /**
+   * Calculate dimension score for methodology
+   */
+  calculateDimensionScore(methodology, dimension, profile) {
+    switch (dimension.name) {
+      case "Intensity Distribution":
+        return this.scoreIntensityDistribution(profile);
+      case "Scientific Foundation":
+        return this.scoreScientificFoundation(profile);
+      case "Periodization Structure":
+        return this.scorePeriodizationStructure(profile);
+      case "Workout Variety":
+        return this.scoreWorkoutVariety(profile);
+      case "Pace Precision":
+        return this.scorePacePrecision(profile);
+      case "Individual Adaptation":
+        return this.scoreIndividualAdaptation(profile);
+      case "Recovery Integration":
+        return this.scoreRecoveryIntegration(profile);
+      case "Practical Application":
+        return this.scorePracticalApplication(profile);
+      default:
+        return 5;
+    }
+  }
+  scoreIntensityDistribution(profile) {
+    const easyPercentage = profile.intensityDistribution.easy;
+    if (easyPercentage >= 80) return 9;
+    if (easyPercentage >= 75) return 8;
+    if (easyPercentage >= 70) return 7;
+    return 6;
+  }
+  scoreScientificFoundation(profile) {
+    const avgCredibility = profile.researchBasis.reduce(
+      (sum, citation) => sum + citation.credibilityScore,
+      0
+    ) / profile.researchBasis.length;
+    return Math.min(10, Math.round(avgCredibility));
+  }
+  scorePeriodizationStructure(profile) {
+    if (profile.periodizationApproach.includes("strict") || profile.periodizationApproach.includes("systematic"))
+      return 9;
+    if (profile.periodizationApproach.includes("Base-Build-Peak")) return 8;
+    return 7;
+  }
+  scoreWorkoutVariety(profile) {
+    const emphasisValues = Object.values(profile.workoutTypeEmphasis);
+    const variety = emphasisValues.filter((value) => value >= 6).length;
+    return Math.min(10, variety + 2);
+  }
+  scorePacePrecision(profile) {
+    if (profile.paceCalculationMethod.includes("VDOT")) return 10;
+    if (profile.paceCalculationMethod.includes("LT-based")) return 9;
+    if (profile.paceCalculationMethod.includes("effort-based")) return 7;
+    return 6;
+  }
+  scoreIndividualAdaptation(profile) {
+    if (profile.methodology === "lydiard") return 8;
+    if (profile.methodology === "daniels") return 9;
+    return 7;
+  }
+  scoreRecoveryIntegration(profile) {
+    if (profile.recoveryPhilosophy.includes("complete rest")) return 9;
+    if (profile.recoveryPhilosophy.includes("structured")) return 8;
+    if (profile.recoveryPhilosophy.includes("active recovery")) return 7;
+    return 6;
+  }
+  scorePracticalApplication(profile) {
+    if (profile.methodology === "lydiard") return 8;
+    if (profile.methodology === "pfitzinger") return 7;
+    if (profile.methodology === "daniels") return 6;
+    return 7;
+  }
+  identifyStrengths(methodology, scores) {
+    const strengths = [];
+    Object.entries(scores).forEach(([dimension, score]) => {
+      if (score >= 8) {
+        strengths.push(dimension);
+      }
+    });
+    return strengths;
+  }
+  identifyWeaknesses(methodology, scores) {
+    const weaknesses = [];
+    Object.entries(scores).forEach(([dimension, score]) => {
+      if (score <= 6) {
+        weaknesses.push(dimension);
+      }
+    });
+    return weaknesses;
+  }
+  findSimilarities(profile1, profile2) {
+    const similarities = [];
+    const diff = Math.abs(
+      profile1.intensityDistribution.easy - profile2.intensityDistribution.easy
+    );
+    if (diff <= 10) {
+      similarities.push("Similar easy running emphasis");
+    }
+    const audienceOverlap = profile1.targetAudience.filter(
+      (audience) => profile2.targetAudience.includes(audience)
+    );
+    if (audienceOverlap.length > 0) {
+      similarities.push(`Both target ${audienceOverlap.join(", ")}`);
+    }
+    const sharedEmphases = Object.keys(profile1.workoutTypeEmphasis).filter(
+      (type) => {
+        const type1 = profile1.workoutTypeEmphasis[type];
+        const type2 = profile2.workoutTypeEmphasis[type];
+        return Math.abs(type1 - type2) <= 2 && type1 >= 7;
+      }
+    );
+    if (sharedEmphases.length > 0) {
+      similarities.push(`Both emphasize ${sharedEmphases.join(", ")} workouts`);
+    }
+    return similarities;
+  }
+  findDifferences(profile1, profile2) {
+    const differences = [];
+    if (profile1.periodizationApproach !== profile2.periodizationApproach) {
+      differences.push(
+        `Periodization: ${profile1.methodology} uses ${profile1.periodizationApproach} vs ${profile2.methodology} uses ${profile2.periodizationApproach}`
+      );
+    }
+    if (profile1.paceCalculationMethod !== profile2.paceCalculationMethod) {
+      differences.push(
+        `Pace calculation: ${profile1.methodology} uses ${profile1.paceCalculationMethod} vs ${profile2.methodology} uses ${profile2.paceCalculationMethod}`
+      );
+    }
+    if (profile1.recoveryPhilosophy !== profile2.recoveryPhilosophy) {
+      differences.push(
+        `Recovery: ${profile1.methodology} prefers ${profile1.recoveryPhilosophy} vs ${profile2.methodology} prefers ${profile2.recoveryPhilosophy}`
+      );
+    }
+    if (profile1.strengthTraining !== profile2.strengthTraining) {
+      const withStrength = profile1.strengthTraining ? profile1.methodology : profile2.methodology;
+      const withoutStrength = profile1.strengthTraining ? profile2.methodology : profile1.methodology;
+      differences.push(
+        `${withStrength} includes strength training while ${withoutStrength} does not`
+      );
+    }
+    return differences;
+  }
+  calculateCompatibilityScore(profile1, profile2) {
+    let score = 50;
+    const intensityDiff = Math.abs(
+      profile1.intensityDistribution.easy - profile2.intensityDistribution.easy
+    );
+    score += Math.max(0, 20 - intensityDiff);
+    const audienceOverlap = profile1.targetAudience.filter(
+      (audience) => profile2.targetAudience.includes(audience)
+    ).length;
+    score += audienceOverlap * 5;
+    let workoutCompatibility = 0;
+    Object.keys(profile1.workoutTypeEmphasis).forEach((type) => {
+      const diff = Math.abs(
+        profile1.workoutTypeEmphasis[type] - profile2.workoutTypeEmphasis[type]
+      );
+      workoutCompatibility += Math.max(0, 3 - diff);
+    });
+    score += workoutCompatibility;
+    return Math.min(100, Math.max(0, score));
+  }
+  assessTransitionDifficulty(profile1, profile2) {
+    const compatibilityScore = this.calculateCompatibilityScore(
+      profile1,
+      profile2
+    );
+    if (compatibilityScore >= 80) return "easy";
+    if (compatibilityScore >= 60) return "moderate";
+    return "difficult";
+  }
+  generateRecommendations(profile1, profile2) {
+    const recommendations = [];
+    const combinedAudiences = profile1.targetAudience.concat(
+      profile2.targetAudience
+    );
+    const uniqueAudiences = Array.from(new Set(combinedAudiences));
+    recommendations.push(...uniqueAudiences);
+    if (profile1.methodology === "daniels" && profile2.methodology === "pfitzinger" || profile1.methodology === "pfitzinger" && profile2.methodology === "daniels") {
+      recommendations.push("Data-driven runners seeking threshold development");
+    }
+    if (profile1.methodology === "lydiard" && profile2.methodology === "daniels" || profile1.methodology === "daniels" && profile2.methodology === "lydiard") {
+      recommendations.push(
+        "Runners wanting aerobic base with structured quality"
+      );
+    }
+    return recommendations;
+  }
+  calculateResearchSupport(profile) {
+    return profile.researchBasis.reduce(
+      (sum, citation) => sum + citation.credibilityScore,
+      0
+    ) / profile.researchBasis.length;
+  }
+  generateTestPlan(methodology) {
+    const mockBasePlan = {
+      id: "test-plan",
+      config: {
+        name: "Test Plan",
+        goal: "MARATHON",
+        startDate: /* @__PURE__ */ new Date(),
+        endDate: new Date(Date.now() + 4 * 7 * 24 * 60 * 60 * 1e3)
+      },
+      blocks: [
+        {
+          id: "block-1",
+          phase: "base",
+          startDate: /* @__PURE__ */ new Date(),
+          endDate: new Date(Date.now() + 4 * 7 * 24 * 60 * 60 * 1e3),
+          weeks: 4,
+          focusAreas: ["aerobic base"],
+          microcycles: []
+        }
+      ],
+      summary: {
+        totalWeeks: 4,
+        totalWorkouts: 2,
+        totalDistance: 14,
+        totalTime: 75,
+        peakWeeklyDistance: 14,
+        averageWeeklyDistance: 14,
+        keyWorkouts: 1,
+        recoveryDays: 0,
+        phases: [
+          {
+            phase: "base",
+            weeks: 4,
+            focus: ["aerobic base"],
+            volumeProgression: [14, 16, 18, 20],
+            intensityDistribution: {
+              easy: 80,
+              moderate: 15,
+              hard: 5,
+              veryHard: 0
+            }
+          }
+        ]
+      },
+      workouts: [
+        {
+          id: "w1-1",
+          date: /* @__PURE__ */ new Date(),
+          type: "easy",
+          name: "Easy Run",
+          description: "Base aerobic run",
+          workout: {
+            type: "easy",
+            primaryZone: {
+              name: "Easy",
+              rpe: 4,
+              description: "Easy pace",
+              purpose: "Aerobic base"
+            },
+            segments: [
+              {
+                duration: 45,
+                intensity: 70,
+                zone: {
+                  name: "Easy",
+                  rpe: 4,
+                  description: "Easy pace",
+                  purpose: "Aerobic base"
+                },
+                description: "Easy pace"
+              }
+            ],
+            adaptationTarget: "Aerobic base",
+            estimatedTSS: 50,
+            recoveryTime: 12
+          },
+          targetMetrics: {
+            duration: 45,
+            distance: 8,
+            tss: 50,
+            load: 100,
+            intensity: 70
+          }
+        },
+        {
+          id: "w1-2",
+          date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1e3),
+          type: "tempo",
+          name: "Tempo Run",
+          description: "Threshold workout",
+          workout: {
+            type: "tempo",
+            primaryZone: {
+              name: "Threshold",
+              rpe: 7,
+              description: "Threshold pace",
+              purpose: "Lactate threshold"
+            },
+            segments: [
+              {
+                duration: 30,
+                intensity: 88,
+                zone: {
+                  name: "Threshold",
+                  rpe: 7,
+                  description: "Threshold pace",
+                  purpose: "Lactate threshold"
+                },
+                description: "Tempo segment"
+              }
+            ],
+            adaptationTarget: "Lactate threshold",
+            estimatedTSS: 80,
+            recoveryTime: 24
+          },
+          targetMetrics: {
+            duration: 30,
+            distance: 6,
+            tss: 80,
+            load: 150,
+            intensity: 88
+          }
+        }
+      ]
+    };
+    return mockBasePlan;
+  }
+  validateIntensityDistribution(plan, profile) {
+    const workouts = plan.workouts;
+    const easyWorkouts = workouts.filter(
+      (w) => w.type === "easy" || w.type === "recovery"
+    ).length;
+    const totalWorkouts = workouts.length;
+    const easyPercentage = easyWorkouts / totalWorkouts * 100;
+    const expectedEasy = profile.intensityDistribution.easy;
+    if (Math.abs(easyPercentage - expectedEasy) <= 15) {
+      return { isValid: true };
+    }
+    return {
+      isValid: false,
+      error: `Expected ${expectedEasy}% easy, got ${Math.round(easyPercentage)}%`
+    };
+  }
+  validateWorkoutTypeEmphasis(plan, profile) {
+    const workouts = plan.workouts;
+    const workoutCounts = {};
+    workouts.forEach((workout) => {
+      workoutCounts[workout.type] = (workoutCounts[workout.type] || 0) + 1;
+    });
+    const highEmphasisTypes = Object.entries(profile.workoutTypeEmphasis).filter(([type, emphasis]) => emphasis >= 8).map(([type]) => type);
+    const foundHighEmphasis = highEmphasisTypes.some(
+      (type) => workoutCounts[type] && workoutCounts[type] > 0
+    );
+    if (foundHighEmphasis || highEmphasisTypes.length === 0) {
+      return { isValid: true };
+    }
+    return {
+      isValid: false,
+      error: `Expected emphasis on ${highEmphasisTypes.join(", ")} but not found in plan`
+    };
+  }
+  validatePeriodization(plan, profile) {
+    if (plan.blocks.length === 0) {
+      return {
+        isValid: false,
+        error: "No training blocks found"
+      };
+    }
+    const hasProgression = plan.blocks.some(
+      (block) => ["base", "build", "peak"].includes(block.phase)
+    );
+    if (hasProgression) {
+      return { isValid: true };
+    }
+    return {
+      isValid: false,
+      error: "No clear periodization progression detected"
+    };
+  }
+  validateRecoveryPhilosophy(plan, profile) {
+    const workouts = plan.workouts;
+    const recoveryWorkouts = workouts.filter(
+      (w) => w.type === "recovery"
+    ).length;
+    if (profile.methodology === "lydiard" && recoveryWorkouts > workouts.length * 0.15) {
+      return {
+        isValid: false,
+        error: "Too many active recovery runs for Lydiard methodology"
+      };
+    }
+    return { isValid: true };
+  }
+  isCacheValid() {
+    if (!this.cachedMatrix) return false;
+    const cacheAge = Date.now() - this.cachedMatrix.lastUpdated.getTime();
+    return cacheAge < 24 * 60 * 60 * 1e3;
+  }
+};
+
+// src/methodology-recommendation-engine.ts
+var MethodologyRecommendationEngine = class {
+  constructor() {
+    this.comparator = new PhilosophyComparator();
+    this.scoringWeights = this.initializeScoringWeights();
+  }
+  /**
+   * Initialize scoring weights for different recommendation factors
+   */
+  initializeScoringWeights() {
+    return {
+      experienceMatch: 0.2,
+      goalAlignment: 0.25,
+      timeAvailability: 0.15,
+      injuryHistory: 0.1,
+      trainingApproach: 0.15,
+      environmentalFactors: 0.05,
+      strengthsWeaknesses: 0.1
+    };
+  }
+  /**
+   * Get methodology recommendation based on user profile
+   */
+  recommendMethodology(userProfile) {
+    const methodologyScores = this.scoreMethodologies(userProfile);
+    const sortedRecommendations = methodologyScores.sort(
+      (a, b) => b.compatibilityScore - a.compatibilityScore
+    );
+    const rationale = this.generateRationale(
+      userProfile,
+      sortedRecommendations[0]
+    );
+    const transitionPlan = userProfile.previousMethodologies?.length ? this.createTransitionPlan(
+      userProfile.previousMethodologies[0],
+      sortedRecommendations[0].methodology,
+      userProfile
+    ) : void 0;
+    const warnings = this.generateWarnings(
+      userProfile,
+      sortedRecommendations[0]
+    );
+    return {
+      primaryRecommendation: sortedRecommendations[0],
+      alternativeOptions: sortedRecommendations.slice(1),
+      rationale,
+      transitionPlan,
+      warnings
+    };
+  }
+  /**
+   * Score all methodologies against user profile
+   */
+  scoreMethodologies(userProfile) {
+    const methodologies = [
+      "daniels",
+      "lydiard",
+      "pfitzinger"
+    ];
+    return methodologies.map((methodology) => {
+      const profile = this.comparator.getMethodologyProfile(methodology);
+      const scores = this.calculateMethodologyScores(userProfile, profile);
+      const totalScore = this.calculateTotalScore(scores);
+      return {
+        methodology,
+        compatibilityScore: Math.round(totalScore),
+        strengths: this.identifyMethodologyStrengths(userProfile, profile),
+        considerations: this.identifyConsiderations(userProfile, profile),
+        expectedOutcomes: this.predictOutcomes(userProfile, profile),
+        timeToAdapt: this.estimateAdaptationTime(userProfile, profile)
+      };
+    });
+  }
+  /**
+   * Calculate individual scoring components
+   */
+  calculateMethodologyScores(userProfile, methodologyProfile) {
+    return {
+      experienceMatch: this.scoreExperienceMatch(
+        userProfile,
+        methodologyProfile
+      ),
+      goalAlignment: this.scoreGoalAlignment(userProfile, methodologyProfile),
+      timeAvailability: this.scoreTimeAvailability(
+        userProfile,
+        methodologyProfile
+      ),
+      injuryHistory: this.scoreInjuryHistory(userProfile, methodologyProfile),
+      trainingApproach: this.scoreTrainingApproach(
+        userProfile,
+        methodologyProfile
+      ),
+      environmentalFactors: this.scoreEnvironmentalFactors(
+        userProfile,
+        methodologyProfile
+      ),
+      strengthsWeaknesses: this.scoreStrengthsWeaknesses(
+        userProfile,
+        methodologyProfile
+      )
+    };
+  }
+  /**
+   * Score experience match (0-100)
+   */
+  scoreExperienceMatch(userProfile, methodologyProfile) {
+    const experienceMap = {
+      beginner: 1,
+      novice: 2,
+      intermediate: 3,
+      advanced: 4,
+      expert: 5
+    };
+    const userLevel = experienceMap[userProfile.experience];
+    if (methodologyProfile.methodology === "daniels") {
+      if (userLevel >= 3) return 90 + (userLevel - 3) * 5;
+      return 60 + userLevel * 10;
+    }
+    if (methodologyProfile.methodology === "lydiard") {
+      return 80 + Math.abs(3 - userLevel) * 5;
+    }
+    if (methodologyProfile.methodology === "pfitzinger") {
+      if (userLevel >= 3) return 85 + (userLevel - 3) * 5;
+      return 50 + userLevel * 10;
+    }
+    return 70;
+  }
+  /**
+   * Score goal alignment (0-100)
+   */
+  scoreGoalAlignment(userProfile, methodologyProfile) {
+    const goal = userProfile.primaryGoal;
+    const targetAudience = methodologyProfile.targetAudience;
+    if (goal === "MARATHON" && targetAudience.includes("marathon runners")) {
+      return 95;
+    }
+    if (methodologyProfile.methodology === "daniels") {
+      if (goal.includes("IMPROVE") || userProfile.motivations.includes("improve_times")) {
+        if (goal === "MARATHON" && userProfile.motivations.includes("qualify_boston")) {
+          return 90;
+        }
+        return 95;
+      }
+      if (goal === "MARATHON" || goal === "HALF_MARATHON") return 85;
+      if (goal.includes("FIRST")) return 70;
+      return 75;
+    }
+    if (methodologyProfile.methodology === "lydiard") {
+      if (goal.includes("FIRST") || goal === "ULTRA") return 95;
+      if (goal === "MARATHON") return 90;
+      if (userProfile.motivations.includes("stay_healthy")) return 90;
+      return 80;
+    }
+    if (methodologyProfile.methodology === "pfitzinger") {
+      if (goal === "MARATHON" && userProfile.motivations.includes("qualify_boston")) {
+        return 100;
+      }
+      if (goal === "MARATHON" || goal === "HALF_MARATHON") return 90;
+      if (goal.includes("IMPROVE")) return 85;
+      return 70;
+    }
+    return 75;
+  }
+  /**
+   * Score time availability (0-100)
+   */
+  scoreTimeAvailability(userProfile, methodologyProfile) {
+    const hoursPerWeek = userProfile.timeAvailability;
+    if (methodologyProfile.methodology === "daniels") {
+      if (hoursPerWeek >= 5 && hoursPerWeek <= 10) return 95;
+      if (hoursPerWeek < 5) return 70;
+      if (hoursPerWeek > 10) return 85;
+      return 80;
+    }
+    if (methodologyProfile.methodology === "lydiard") {
+      if (hoursPerWeek >= 8) return 90 + Math.min((hoursPerWeek - 8) * 2, 10);
+      if (hoursPerWeek >= 6) return 70;
+      return 50 + hoursPerWeek * 5;
+    }
+    if (methodologyProfile.methodology === "pfitzinger") {
+      if (hoursPerWeek >= 7 && hoursPerWeek <= 12) return 95;
+      if (hoursPerWeek < 7) return 60 + hoursPerWeek * 5;
+      return 85;
+    }
+    return 75;
+  }
+  /**
+   * Score injury history compatibility (0-100)
+   */
+  scoreInjuryHistory(userProfile, methodologyProfile) {
+    const injuryCount = userProfile.injuryHistory?.length || 0;
+    const hasRecurringInjuries = injuryCount > 2;
+    if (methodologyProfile.methodology === "daniels") {
+      if (injuryCount === 0) return 85;
+      if (hasRecurringInjuries) return 75;
+      return 80;
+    }
+    if (methodologyProfile.methodology === "lydiard") {
+      if (injuryCount === 0) return 80;
+      if (hasRecurringInjuries) return 90;
+      return 85;
+    }
+    if (methodologyProfile.methodology === "pfitzinger") {
+      if (injuryCount === 0) return 85;
+      if (hasRecurringInjuries) return 60;
+      return 70;
+    }
+    return 75;
+  }
+  /**
+   * Score training approach preference (0-100)
+   */
+  scoreTrainingApproach(userProfile, methodologyProfile) {
+    const approach = userProfile.preferredApproach || "flexible";
+    if (methodologyProfile.methodology === "daniels") {
+      if (approach === "scientific") return 100;
+      if (approach === "structured") return 90;
+      if (approach === "flexible") return 70;
+      if (approach === "intuitive") return 60;
+    }
+    if (methodologyProfile.methodology === "lydiard") {
+      if (approach === "intuitive") return 95;
+      if (approach === "flexible") return 85;
+      if (approach === "structured") return 75;
+      if (approach === "scientific") return 70;
+    }
+    if (methodologyProfile.methodology === "pfitzinger") {
+      if (approach === "structured") return 98;
+      if (approach === "scientific") return 85;
+      if (approach === "flexible") return 75;
+      if (approach === "intuitive") return 65;
+    }
+    return 75;
+  }
+  /**
+   * Score environmental factors (0-100)
+   */
+  scoreEnvironmentalFactors(userProfile, methodologyProfile) {
+    const env = userProfile.environmentalFactors;
+    if (!env) return 80;
+    const hasChallengingConditions = env.altitude && env.altitude > 1500 || env.typicalTemperature && (env.typicalTemperature > 25 || env.typicalTemperature < 5) || env.terrain === "hilly" || env.terrain === "trail";
+    if (methodologyProfile.methodology === "lydiard") {
+      return hasChallengingConditions ? 90 : 85;
+    }
+    if (methodologyProfile.methodology === "daniels") {
+      return hasChallengingConditions ? 75 : 90;
+    }
+    return 80;
+  }
+  /**
+   * Score strengths and weaknesses match (0-100)
+   */
+  scoreStrengthsWeaknesses(userProfile, methodologyProfile) {
+    const sw = userProfile.strengthsAndWeaknesses;
+    if (!sw) return 80;
+    let score = 80;
+    if (methodologyProfile.methodology === "daniels") {
+      if (sw.weaknesses.includes("speed")) score += 15;
+      if (sw.strengths.includes("consistency")) score += 10;
+      if (sw.weaknesses.includes("endurance")) score -= 5;
+    }
+    if (methodologyProfile.methodology === "lydiard") {
+      if (sw.weaknesses.includes("endurance")) score += 20;
+      if (sw.weaknesses.includes("injury_resistance")) score += 15;
+      if (sw.strengths.includes("speed")) score -= 5;
+    }
+    if (methodologyProfile.methodology === "pfitzinger") {
+      if (sw.weaknesses.includes("mental_toughness")) score += 15;
+      if (sw.strengths.includes("endurance")) score += 10;
+      if (sw.weaknesses.includes("recovery")) score -= 10;
+    }
+    return Math.min(100, Math.max(0, score));
+  }
+  /**
+   * Calculate total weighted score
+   */
+  calculateTotalScore(scores) {
+    let totalScore = 0;
+    let totalWeight = 0;
+    Object.entries(scores).forEach(([factor, score]) => {
+      const weight = this.scoringWeights[factor] || 0;
+      totalScore += score * weight;
+      totalWeight += weight;
+    });
+    return totalWeight > 0 ? totalScore / totalWeight : 0;
+  }
+  /**
+   * Identify methodology strengths for user
+   */
+  identifyMethodologyStrengths(userProfile, methodologyProfile) {
+    const strengths = [];
+    if (methodologyProfile.methodology === "daniels") {
+      strengths.push("Precise pace-based training for optimal adaptation");
+      strengths.push("Scientific approach with proven VDOT system");
+      if (userProfile.experience !== "beginner") {
+        strengths.push("Efficient training maximizes limited time");
+      }
+    }
+    if (methodologyProfile.methodology === "lydiard") {
+      strengths.push("Strong aerobic base development");
+      strengths.push("Injury prevention through gradual progression");
+      strengths.push("Flexible effort-based approach");
+    }
+    if (methodologyProfile.methodology === "pfitzinger") {
+      strengths.push("Excellent marathon-specific preparation");
+      strengths.push("Lactate threshold development");
+      strengths.push("Structured progression with medium-long runs");
+    }
+    return strengths;
+  }
+  /**
+   * Identify considerations for user
+   */
+  identifyConsiderations(userProfile, methodologyProfile) {
+    const considerations = [];
+    if (methodologyProfile.methodology === "daniels") {
+      if (userProfile.experience === "beginner") {
+        considerations.push("Requires understanding of pace zones");
+      }
+      if (userProfile.preferredApproach === "intuitive") {
+        considerations.push("Very structured approach may feel restrictive");
+      }
+      if (userProfile.timeAvailability < 5) {
+        considerations.push(
+          "Limited time requires careful workout prioritization"
+        );
+      }
+      if (userProfile.injuryHistory && userProfile.injuryHistory.length > 3) {
+        considerations.push(
+          "Structured intensity may need adjustment for injury prevention"
+        );
+      }
+    }
+    if (methodologyProfile.methodology === "lydiard") {
+      if (userProfile.timeAvailability < 6) {
+        considerations.push("High volume requirements may be challenging");
+      }
+      if (userProfile.motivations.includes("improve_times")) {
+        considerations.push("Speed development comes later in progression");
+      }
+      if (userProfile.experience === "intermediate" || userProfile.experience === "advanced") {
+        considerations.push("May require patience with aerobic-only phase");
+      }
+    }
+    if (methodologyProfile.methodology === "pfitzinger") {
+      if (userProfile.injuryHistory && userProfile.injuryHistory.length > 2) {
+        considerations.push("High volume may increase injury risk");
+      }
+      if (userProfile.experience === "beginner" || userProfile.experience === "novice") {
+        considerations.push("Demanding workload requires strong base");
+      }
+      if (userProfile.timeAvailability < 7) {
+        considerations.push(
+          "May need to modify volume to fit time constraints"
+        );
+      }
+    }
+    if (considerations.length === 0) {
+      considerations.push("Monitor adaptation and adjust as needed");
+    }
+    return considerations;
+  }
+  /**
+   * Predict expected outcomes
+   */
+  predictOutcomes(userProfile, methodologyProfile) {
+    const outcomes = [];
+    const vdot = userProfile.currentFitness.vdot || 45;
+    if (methodologyProfile.methodology === "daniels") {
+      outcomes.push("2-3% VDOT improvement per training cycle");
+      outcomes.push("Consistent pacing ability across all distances");
+      if (vdot < 50) {
+        outcomes.push(
+          "Potential for 5-8% performance improvement in first year"
+        );
+      }
+    }
+    if (methodologyProfile.methodology === "lydiard") {
+      outcomes.push("Significant aerobic capacity improvement");
+      outcomes.push("Enhanced injury resistance and longevity");
+      outcomes.push("Strong finishing ability in races");
+    }
+    if (methodologyProfile.methodology === "pfitzinger") {
+      outcomes.push("Marathon time improvement of 3-5%");
+      outcomes.push("Excellent race-specific fitness");
+      outcomes.push("Mental toughness development");
+    }
+    return outcomes;
+  }
+  /**
+   * Estimate adaptation time
+   */
+  estimateAdaptationTime(userProfile, methodologyProfile) {
+    let baseWeeks = 4;
+    if (userProfile.experience === "beginner") baseWeeks += 4;
+    else if (userProfile.experience === "novice") baseWeeks += 2;
+    if (userProfile.previousMethodologies?.length) {
+      const comparison = this.comparator.compareMethodologies(
+        userProfile.previousMethodologies[0],
+        methodologyProfile.methodology
+      );
+      if (comparison.transitionDifficulty === "difficult") baseWeeks += 4;
+      else if (comparison.transitionDifficulty === "moderate") baseWeeks += 2;
+    }
+    if (methodologyProfile.methodology === "daniels" && userProfile.preferredApproach !== "scientific") {
+      baseWeeks += 2;
+    }
+    if (methodologyProfile.methodology === "lydiard" && userProfile.currentFitness.weeklyMileage < 30) {
+      baseWeeks += 4;
+    }
+    return baseWeeks;
+  }
+  /**
+   * Generate detailed rationale
+   */
+  generateRationale(userProfile, recommendation) {
+    const scores = this.calculateMethodologyScores(
+      userProfile,
+      this.comparator.getMethodologyProfile(recommendation.methodology)
+    );
+    const primaryFactors = [];
+    const sortedScores = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    sortedScores.slice(0, 3).forEach(([factor, score]) => {
+      if (score >= 80) {
+        primaryFactors.push(this.explainFactor(factor, score, userProfile));
+      }
+    });
+    const userProfileMatch = this.generateProfileMatchExplanation(
+      userProfile,
+      recommendation
+    );
+    const methodologyAdvantages = recommendation.strengths;
+    return {
+      primaryFactors,
+      scoringBreakdown: scores,
+      userProfileMatch,
+      methodologyAdvantages
+    };
+  }
+  /**
+   * Explain scoring factor
+   */
+  explainFactor(factor, score, userProfile) {
+    const explanations = {
+      experienceMatch: `Your ${userProfile.experience} experience level aligns well with this methodology (${score}% match)`,
+      goalAlignment: `Excellent fit for your ${userProfile.primaryGoal} goal (${score}% alignment)`,
+      timeAvailability: `Works well with your ${userProfile.timeAvailability} hours/week availability (${score}% fit)`,
+      injuryHistory: `Appropriate injury risk management for your history (${score}% safety)`,
+      trainingApproach: `Matches your ${userProfile.preferredApproach || "flexible"} training style (${score}% compatibility)`,
+      environmentalFactors: `Adapts well to your training environment (${score}% suitability)`,
+      strengthsWeaknesses: `Addresses your specific strengths and weaknesses (${score}% targeting)`
+    };
+    return explanations[factor] || `${factor}: ${score}% match`;
+  }
+  /**
+   * Generate profile match explanation
+   */
+  generateProfileMatchExplanation(userProfile, recommendation) {
+    const matches = [];
+    if (userProfile.experience === "intermediate" || userProfile.experience === "advanced") {
+      matches.push(
+        `${recommendation.methodology} is ideal for ${userProfile.experience} runners ready for structured training`
+      );
+    }
+    if (userProfile.primaryGoal === "MARATHON") {
+      matches.push(`Proven marathon training system with excellent results`);
+    }
+    if (userProfile.motivations.includes("improve_times")) {
+      matches.push(
+        `Focus on performance improvement through systematic progression`
+      );
+    }
+    return matches;
+  }
+  /**
+   * Create transition plan between methodologies
+   */
+  createTransitionPlan(fromMethodology, toMethodology, userProfile) {
+    const comparison = this.comparator.compareMethodologies(
+      fromMethodology,
+      toMethodology
+    );
+    const transitionWeeks = this.calculateTransitionWeeks(
+      comparison.transitionDifficulty
+    );
+    return {
+      fromMethodology,
+      toMethodology,
+      transitionWeeks,
+      keyChanges: this.identifyKeyChanges(fromMethodology, toMethodology),
+      adaptationFocus: this.getAdaptationFocus(fromMethodology, toMethodology),
+      gradualAdjustments: this.createWeeklyAdjustments(
+        fromMethodology,
+        toMethodology,
+        transitionWeeks
+      )
+    };
+  }
+  /**
+   * Calculate transition weeks needed
+   */
+  calculateTransitionWeeks(difficulty) {
+    switch (difficulty) {
+      case "easy":
+        return 2;
+      case "moderate":
+        return 4;
+      case "difficult":
+        return 6;
+      default:
+        return 4;
+    }
+  }
+  /**
+   * Identify key changes in transition
+   */
+  identifyKeyChanges(from, to) {
+    const changes = [];
+    if (from === "daniels" && to === "lydiard") {
+      changes.push("Shift from pace-based to effort-based training");
+      changes.push("Increase overall volume with more easy running");
+      changes.push("Reduce structured interval work temporarily");
+    }
+    if (from === "lydiard" && to === "daniels") {
+      changes.push("Introduce precise pace zones and VDOT calculations");
+      changes.push("Add structured quality sessions");
+      changes.push("Maintain aerobic base while adding intensity");
+    }
+    if (from === "daniels" && to === "pfitzinger") {
+      changes.push("Add medium-long runs to weekly schedule");
+      changes.push("Increase lactate threshold volume");
+      changes.push("Shift from VDOT to LT-based pacing");
+    }
+    if (from === "lydiard" && to === "pfitzinger") {
+      changes.push("Add structured threshold workouts");
+      changes.push("Introduce medium-long runs with quality");
+      changes.push("Transition from pure aerobic to threshold focus");
+    }
+    return changes;
+  }
+  /**
+   * Get adaptation focus areas
+   */
+  getAdaptationFocus(from, to) {
+    const focus = [];
+    if (to === "daniels") {
+      focus.push("Learn and internalize pace zones");
+      focus.push("Develop pacing discipline");
+    }
+    if (to === "lydiard") {
+      focus.push("Build aerobic base patience");
+      focus.push("Learn effort-based training");
+    }
+    if (to === "pfitzinger") {
+      focus.push("Adapt to higher training volume");
+      focus.push("Master lactate threshold pacing");
+    }
+    return focus;
+  }
+  /**
+   * Create weekly adjustment plan
+   */
+  createWeeklyAdjustments(from, to, weeks) {
+    const adjustments = [];
+    for (let week = 1; week <= weeks; week++) {
+      const progress = week / weeks;
+      adjustments.push({
+        week,
+        focus: this.getWeeklyFocus(from, to, progress),
+        changes: this.getWeeklyChanges(from, to, progress),
+        targetMetrics: this.getWeeklyTargets(from, to, progress)
+      });
+    }
+    return adjustments;
+  }
+  /**
+   * Get focus for specific week in transition
+   */
+  getWeeklyFocus(from, to, progress) {
+    if (progress <= 0.33) return "Foundation and adaptation";
+    if (progress <= 0.67) return "Methodology integration";
+    return "Full transition completion";
+  }
+  /**
+   * Get specific changes for week
+   */
+  getWeeklyChanges(from, to, progress) {
+    const changes = [];
+    if (to === "daniels" && progress > 0.5) {
+      changes.push("Add VDOT-based interval session");
+    }
+    if (to === "lydiard" && progress <= 0.5) {
+      changes.push("Increase easy run duration by 10%");
+    }
+    return changes;
+  }
+  /**
+   * Get weekly target metrics
+   */
+  getWeeklyTargets(from, to, progress) {
+    const fromProfile = this.comparator.getMethodologyProfile(from);
+    const toProfile = this.comparator.getMethodologyProfile(to);
+    const easyPercent = fromProfile.intensityDistribution.easy + (toProfile.intensityDistribution.easy - fromProfile.intensityDistribution.easy) * progress;
+    return {
+      easyRunningPercent: Math.round(easyPercent),
+      weeklyHours: 8,
+      // Example target
+      qualitySessions: Math.round(2 * progress)
+    };
+  }
+  /**
+   * Generate warnings for recommendation
+   */
+  generateWarnings(userProfile, recommendation) {
+    const warnings = [];
+    if (userProfile.experience === "beginner" && recommendation.methodology === "pfitzinger") {
+      warnings.push(
+        "This methodology requires significant running base - consider building up gradually"
+      );
+    }
+    if (userProfile.timeAvailability < 5 && recommendation.methodology === "lydiard") {
+      warnings.push(
+        "Limited time may require significant modifications to volume-based approach"
+      );
+    }
+    if (userProfile.injuryHistory && userProfile.injuryHistory.length > 3 && recommendation.methodology === "pfitzinger") {
+      warnings.push(
+        "High volume training may increase injury risk - monitor carefully"
+      );
+    }
+    return warnings;
+  }
+  /**
+   * Create recommendation quiz
+   */
+  createRecommendationQuiz() {
+    const questions = [
+      {
+        id: "experience",
+        question: "How long have you been running consistently?",
+        type: "single",
+        options: [
+          { value: "beginner", label: "Less than 1 year" },
+          { value: "novice", label: "1-2 years" },
+          { value: "intermediate", label: "2-5 years" },
+          { value: "advanced", label: "5-10 years" },
+          { value: "expert", label: "More than 10 years" }
+        ]
+      },
+      {
+        id: "goal",
+        question: "What is your primary running goal?",
+        type: "single",
+        options: [
+          { value: "FIRST_5K", label: "Complete my first 5K" },
+          { value: "IMPROVE_5K", label: "Improve my 5K time" },
+          { value: "FIRST_10K", label: "Complete my first 10K" },
+          { value: "HALF_MARATHON", label: "Run a half marathon" },
+          { value: "MARATHON", label: "Run a marathon" },
+          { value: "ULTRA", label: "Run an ultra marathon" },
+          { value: "GENERAL_FITNESS", label: "General fitness and health" }
+        ]
+      },
+      {
+        id: "timeAvailability",
+        question: "How many hours per week can you dedicate to running?",
+        type: "single",
+        options: [
+          { value: "3", label: "Less than 3 hours" },
+          { value: "5", label: "3-5 hours" },
+          { value: "7", label: "5-7 hours" },
+          { value: "10", label: "7-10 hours" },
+          { value: "15", label: "More than 10 hours" }
+        ]
+      },
+      {
+        id: "approach",
+        question: "What training approach appeals to you most?",
+        type: "single",
+        options: [
+          { value: "scientific", label: "Data-driven with precise pacing" },
+          { value: "intuitive", label: "Feel-based and flexible" },
+          { value: "structured", label: "Strict plan adherence" },
+          { value: "flexible", label: "Adaptable to daily life" }
+        ]
+      },
+      {
+        id: "motivations",
+        question: "What motivates you to run? (Select all that apply)",
+        type: "multiple",
+        options: [
+          { value: "finish_first_race", label: "Finish my first race" },
+          { value: "improve_times", label: "Improve my race times" },
+          { value: "qualify_boston", label: "Qualify for Boston Marathon" },
+          { value: "stay_healthy", label: "Stay healthy and fit" },
+          { value: "lose_weight", label: "Lose weight" },
+          { value: "social_aspect", label: "Social connections" },
+          { value: "compete", label: "Compete and win" },
+          { value: "mental_health", label: "Mental health benefits" },
+          { value: "longevity", label: "Long-term health" }
+        ]
+      },
+      {
+        id: "currentMileage",
+        question: "What is your current weekly mileage?",
+        type: "single",
+        options: [
+          { value: "10", label: "Less than 10 miles" },
+          { value: "20", label: "10-20 miles" },
+          { value: "30", label: "20-30 miles" },
+          { value: "40", label: "30-40 miles" },
+          { value: "50", label: "More than 40 miles" }
+        ]
+      },
+      {
+        id: "injuries",
+        question: "How many running injuries have you had in the past 2 years?",
+        type: "single",
+        options: [
+          { value: "0", label: "None" },
+          { value: "1", label: "1 injury" },
+          { value: "2", label: "2 injuries" },
+          { value: "3", label: "3 or more injuries" }
+        ]
+      },
+      {
+        id: "strengths",
+        question: "What are your running strengths? (Select up to 3)",
+        type: "multiple",
+        options: [
+          { value: "speed", label: "Natural speed" },
+          { value: "endurance", label: "Long distance endurance" },
+          { value: "consistency", label: "Consistent training" },
+          { value: "mental_toughness", label: "Mental toughness" },
+          { value: "recovery", label: "Quick recovery" },
+          { value: "injury_resistance", label: "Rarely get injured" },
+          { value: "hill_running", label: "Strong on hills" }
+        ]
+      }
+    ];
+    return {
+      questions,
+      scoringLogic: (answers) => this.scoreQuizAnswers(answers)
+    };
+  }
+  /**
+   * Score quiz answers to create user profile
+   */
+  scoreQuizAnswers(answers) {
+    const answerMap = new Map(answers.map((a) => [a.questionId, a.answer]));
+    const experience = answerMap.get("experience") || "intermediate";
+    const goal = answerMap.get("goal") || "GENERAL_FITNESS";
+    const timeAvailability = parseInt(
+      answerMap.get("timeAvailability") || "7"
+    );
+    const approach = answerMap.get("approach") || "flexible";
+    const motivations = answerMap.get("motivations") || [];
+    const currentMileage = parseInt(
+      answerMap.get("currentMileage") || "20"
+    );
+    const injuryCount = parseInt(answerMap.get("injuries") || "0");
+    const strengths = answerMap.get("strengths") || [];
+    const injuryHistory = [];
+    for (let i = 0; i < injuryCount; i++) {
+      injuryHistory.push(`Previous injury ${i + 1}`);
+    }
+    let estimatedVDOT = 45;
+    if (experience === "intermediate") estimatedVDOT = 48;
+    if (experience === "advanced") estimatedVDOT = 52;
+    if (experience === "expert") estimatedVDOT = 55;
+    if (motivations.includes("qualify_boston")) estimatedVDOT += 3;
+    return {
+      experience,
+      currentFitness: {
+        vdot: estimatedVDOT,
+        weeklyMileage: currentMileage,
+        longestRecentRun: Math.round(currentMileage * 0.4),
+        trainingAge: experience === "beginner" ? 0.5 : experience === "novice" ? 1.5 : experience === "intermediate" ? 3.5 : experience === "advanced" ? 7 : 12,
+        overallScore: estimatedVDOT || currentMileage * 1.5 || 40
+      },
+      trainingPreferences: {
+        availableDays: [0, 1, 2, 3, 4, 5, 6],
+        // Default to all days
+        preferredIntensity: motivations.includes("compete") ? "high" : motivations.includes("stay_healthy") ? "low" : "moderate",
+        crossTraining: false,
+        strengthTraining: strengths.includes("injury_resistance")
+      },
+      primaryGoal: goal,
+      motivations,
+      injuryHistory,
+      timeAvailability,
+      strengthsAndWeaknesses: {
+        strengths,
+        weaknesses: []
+        // Would need additional questions to determine
+      },
+      preferredApproach: approach
+    };
+  }
+};
+
+// src/methodology-customization-engine.ts
+var MethodologyCustomizationEngine = class {
+  // userId -> patterns
+  constructor() {
+    this.adaptationEngine = new SmartAdaptationEngine();
+    this.philosophyComparator = new PhilosophyComparator();
+    this.recommendationEngine = new MethodologyRecommendationEngine();
+    this.configurations = /* @__PURE__ */ new Map();
+    this.adaptationHistory = /* @__PURE__ */ new Map();
+  }
+  /**
+   * Initialize or update methodology configuration for a user
+   */
+  initializeConfiguration(userId, methodology, userProfile, customSettings) {
+    const baseConfig = this.createBaseConfig(methodology, userProfile);
+    const adaptationPatterns = this.initializeAdaptationPatterns(
+      methodology,
+      userProfile
+    );
+    const customizations = this.createCustomizationSettings(
+      userProfile,
+      customSettings
+    );
+    const performanceOptimizations = this.createPerformanceOptimizations(
+      userProfile,
+      methodology
+    );
+    const constraints = this.createConstraints(userProfile);
+    const configuration = {
+      methodology,
+      baseConfig,
+      adaptationPatterns,
+      customizations,
+      performanceOptimizations,
+      constraints,
+      lastUpdated: /* @__PURE__ */ new Date()
+    };
+    this.configurations.set(userId, configuration);
+    return configuration;
+  }
+  /**
+   * Track individual adaptation patterns
+   */
+  trackAdaptationPattern(userId, completedWorkouts, plannedWorkouts, modifications) {
+    const progressData = this.adaptationEngine.analyzeProgress(
+      completedWorkouts,
+      plannedWorkouts
+    );
+    const patterns = this.identifyPatterns(progressData, modifications);
+    const existingPatterns = this.adaptationHistory.get(userId) || [];
+    const updatedPatterns = this.mergePatterns(existingPatterns, patterns);
+    this.adaptationHistory.set(userId, updatedPatterns);
+    const config = this.configurations.get(userId);
+    if (config) {
+      config.adaptationPatterns = this.selectEffectivePatterns(updatedPatterns);
+      config.lastUpdated = /* @__PURE__ */ new Date();
+    }
+  }
+  /**
+   * Optimize performance based on individual response
+   */
+  optimizePerformance(userId, plan, completedWorkouts, targetMetrics) {
+    const config = this.configurations.get(userId);
+    if (!config) {
+      throw new Error("No configuration found for user");
+    }
+    const currentMetrics = this.calculateCurrentMetrics(completedWorkouts);
+    const optimizations = [];
+    targetMetrics.forEach((metric) => {
+      const optimization = this.createOptimization(
+        metric,
+        currentMetrics,
+        config,
+        plan
+      );
+      if (optimization) {
+        optimizations.push(optimization);
+      }
+    });
+    config.performanceOptimizations = optimizations;
+    config.lastUpdated = /* @__PURE__ */ new Date();
+    return optimizations;
+  }
+  /**
+   * Apply environmental adaptations
+   */
+  applyEnvironmentalAdaptations(userId, plan, environmentalFactors) {
+    const config = this.configurations.get(userId);
+    if (!config) {
+      throw new Error("No configuration found for user");
+    }
+    const modifications = [];
+    if (environmentalFactors.altitude && environmentalFactors.altitude > 1500) {
+      modifications.push(
+        ...this.createAltitudeAdjustments(
+          plan,
+          environmentalFactors.altitude,
+          config
+        )
+      );
+    }
+    if (environmentalFactors.typicalTemperature) {
+      if (environmentalFactors.typicalTemperature > 25) {
+        modifications.push(...this.createHeatAdjustments(plan, config));
+      } else if (environmentalFactors.typicalTemperature < 5) {
+        modifications.push(...this.createColdAdjustments(plan, config));
+      }
+    }
+    if (environmentalFactors.terrain === "hilly" || environmentalFactors.terrain === "trail") {
+      modifications.push(
+        ...this.createTerrainAdjustments(
+          plan,
+          environmentalFactors.terrain,
+          config
+        )
+      );
+    }
+    return modifications;
+  }
+  /**
+   * Resolve conflicts between methodology principles and individual needs
+   */
+  resolveMethodologyConflicts(userId, conflicts) {
+    const config = this.configurations.get(userId);
+    if (!config) {
+      throw new Error("No configuration found for user");
+    }
+    const resolutions = [];
+    conflicts.forEach((conflict) => {
+      const resolution = this.createConflictResolution(conflict, config);
+      if (resolution) {
+        resolutions.push(resolution);
+      }
+    });
+    return resolutions;
+  }
+  /**
+   * Unlock advanced features based on experience
+   */
+  unlockAdvancedFeatures(userId, experience, completedWeeks) {
+    const config = this.configurations.get(userId);
+    if (!config) {
+      throw new Error("No configuration found for user");
+    }
+    const unlockedFeatures = [];
+    if (experience.level === "advanced" || experience.level === "expert") {
+      unlockedFeatures.push({
+        id: "double_threshold",
+        name: "Double Threshold Days",
+        description: "Two threshold workouts in one day for advanced adaptation",
+        requirements: "Advanced experience, 50+ weekly miles",
+        implementation: this.createDoubleThresholdProtocol(config.methodology)
+      });
+      unlockedFeatures.push({
+        id: "super_compensation",
+        name: "Super Compensation Cycles",
+        description: "Strategic overreaching followed by taper for peak performance",
+        requirements: "Expert experience, injury-free for 6 months",
+        implementation: this.createSuperCompensationProtocol(
+          config.methodology
+        )
+      });
+    }
+    if (completedWeeks >= 12) {
+      unlockedFeatures.push({
+        id: "race_simulation",
+        name: "Race Simulation Workouts",
+        description: "Full race pace simulation with nutrition practice",
+        requirements: "12+ weeks of consistent training",
+        implementation: this.createRaceSimulationProtocol(config.methodology)
+      });
+    }
+    return unlockedFeatures;
+  }
+  /**
+   * Apply injury prevention modifications
+   */
+  applyInjuryPrevention(userId, plan, injuryHistory, currentRiskFactors) {
+    const config = this.configurations.get(userId);
+    if (!config) {
+      throw new Error("No configuration found for user");
+    }
+    const modifications = [];
+    injuryHistory.forEach((injury) => {
+      const preventionMods = this.createInjuryPreventionMods(
+        injury,
+        plan,
+        config
+      );
+      modifications.push(...preventionMods);
+    });
+    currentRiskFactors.forEach((risk) => {
+      const mitigationMods = this.createRiskMitigationMods(risk, plan, config);
+      modifications.push(...mitigationMods);
+    });
+    return modifications;
+  }
+  /**
+   * Suggest breakthrough strategies for plateaus
+   */
+  suggestBreakthroughStrategies(userId, plateauMetric, plateauDuration) {
+    const config = this.configurations.get(userId);
+    if (!config) {
+      throw new Error("No configuration found for user");
+    }
+    const strategies = [];
+    switch (config.methodology) {
+      case "daniels":
+        strategies.push(
+          ...this.createDanielsBreakthroughs(plateauMetric, plateauDuration)
+        );
+        break;
+      case "lydiard":
+        strategies.push(
+          ...this.createLydiardBreakthroughs(plateauMetric, plateauDuration)
+        );
+        break;
+      case "pfitzinger":
+        strategies.push(
+          ...this.createPfitzingerBreakthroughs(plateauMetric, plateauDuration)
+        );
+        break;
+    }
+    strategies.push(
+      ...this.createGeneralBreakthroughs(
+        plateauMetric,
+        plateauDuration,
+        config
+      )
+    );
+    return strategies.sort(
+      (a, b) => b.successProbability - a.successProbability
+    );
+  }
+  /**
+   * Analyze current customization state
+   */
+  analyzeCustomization(userId, plan, completedWorkouts) {
+    const config = this.configurations.get(userId);
+    if (!config) {
+      throw new Error("No configuration found for user");
+    }
+    const currentState = this.assessMethodologyState(
+      config,
+      plan,
+      completedWorkouts
+    );
+    const recommendations = this.generateCustomizationRecommendations(
+      currentState,
+      config,
+      completedWorkouts
+    );
+    const warnings = this.identifyCustomizationWarnings(currentState, config);
+    const projectedOutcomes = this.projectOutcomes(
+      currentState,
+      config,
+      completedWorkouts
+    );
+    return {
+      currentState,
+      recommendations,
+      warnings,
+      projectedOutcomes
+    };
+  }
+  /**
+   * Get configuration for user
+   */
+  getConfiguration(userId) {
+    return this.configurations.get(userId);
+  }
+  /**
+   * Get adaptation history for user
+   */
+  getAdaptationHistory(userId) {
+    return this.adaptationHistory.get(userId) || [];
+  }
+  // Private helper methods
+  createBaseConfig(methodology, userProfile) {
+    const profile = this.philosophyComparator.getMethodologyProfile(methodology);
+    return {
+      intensityDistribution: profile.intensityDistribution,
+      volumeProgression: {
+        weeklyIncrease: this.calculateWeeklyIncrease(userProfile),
+        stepBackFrequency: 4,
+        stepBackReduction: 20
+      },
+      workoutEmphasis: profile.workoutTypeEmphasis,
+      periodizationModel: {
+        phaseDurations: this.calculatePhaseDurations(methodology),
+        phaseTransitions: methodology === "lydiard" ? "sharp" : "gradual"
+      },
+      recoveryProtocol: {
+        easyDayMinimum: 65,
+        recoveryDayFrequency: 2,
+        completeRestDays: methodology === "lydiard" ? 2 : 0
+      }
+    };
+  }
+  calculateWeeklyIncrease(userProfile) {
+    const baseIncrease = 10;
+    let adjustment = 0;
+    if (userProfile.experience === "beginner") adjustment -= 5;
+    if (userProfile.experience === "expert") adjustment += 2;
+    if (userProfile.injuryHistory && userProfile.injuryHistory.length > 2)
+      adjustment -= 3;
+    return Math.max(5, Math.min(15, baseIncrease + adjustment));
+  }
+  calculatePhaseDurations(methodology) {
+    switch (methodology) {
+      case "daniels":
+        return { base: 25, build: 30, peak: 25, taper: 10, recovery: 10 };
+      case "lydiard":
+        return { base: 40, build: 20, peak: 20, taper: 10, recovery: 10 };
+      case "pfitzinger":
+        return { base: 30, build: 35, peak: 20, taper: 10, recovery: 5 };
+      default:
+        return { base: 30, build: 30, peak: 20, taper: 10, recovery: 10 };
+    }
+  }
+  initializeAdaptationPatterns(methodology, userProfile) {
+    const patterns = [];
+    patterns.push({
+      id: "fatigue_accumulation",
+      name: "Fatigue Accumulation Response",
+      trigger: {
+        type: "fatigue",
+        conditions: [
+          {
+            metric: "fatigue_score",
+            operator: "greater",
+            value: 80,
+            duration: 3
+          }
+        ]
+      },
+      response: {
+        modifications: [
+          {
+            type: "volume",
+            target: "weekly_mileage",
+            adjustment: -20,
+            rationale: "Reduce volume to manage fatigue"
+          }
+        ],
+        priority: "immediate",
+        duration: 7,
+        monitoringPeriod: 14
+      },
+      frequency: 0,
+      effectiveness: 0
+    });
+    patterns.push({
+      id: "performance_improvement",
+      name: "Performance Improvement Pattern",
+      trigger: {
+        type: "performance",
+        conditions: [
+          {
+            metric: "pace_achievement",
+            operator: "greater",
+            value: 90,
+            duration: 7
+          }
+        ]
+      },
+      response: {
+        modifications: [
+          {
+            type: "intensity",
+            target: "workout_intensity",
+            adjustment: 5,
+            rationale: "Increase intensity based on good performance"
+          }
+        ],
+        priority: "next_week",
+        duration: 14,
+        monitoringPeriod: 14
+      },
+      frequency: 0,
+      effectiveness: 0
+    });
+    if (methodology === "daniels") {
+      patterns.push({
+        id: "vdot_improvement",
+        name: "VDOT Improvement Pattern",
+        trigger: {
+          type: "performance",
+          conditions: [
+            {
+              metric: "workout_pace_achievement",
+              operator: "greater",
+              value: 95,
+              duration: 14
+            }
+          ]
+        },
+        response: {
+          modifications: [
+            {
+              type: "intensity",
+              target: "vdot_adjustment",
+              adjustment: 1,
+              rationale: "Increase VDOT based on consistent performance"
+            }
+          ],
+          priority: "next_week",
+          duration: 28,
+          monitoringPeriod: 14
+        },
+        frequency: 0,
+        effectiveness: 0
+      });
+    }
+    if (methodology === "lydiard") {
+      patterns.push({
+        id: "aerobic_development",
+        name: "Aerobic Development Pattern",
+        trigger: {
+          type: "performance",
+          conditions: [
+            {
+              metric: "aerobic_efficiency",
+              operator: "greater",
+              value: 85,
+              duration: 21
+            }
+          ]
+        },
+        response: {
+          modifications: [
+            {
+              type: "volume",
+              target: "long_run_duration",
+              adjustment: 10,
+              rationale: "Extend long runs for aerobic development"
+            }
+          ],
+          priority: "next_phase",
+          duration: 28,
+          monitoringPeriod: 21
+        },
+        frequency: 0,
+        effectiveness: 0
+      });
+    }
+    if (methodology === "pfitzinger") {
+      patterns.push({
+        id: "threshold_progression",
+        name: "Threshold Progression Pattern",
+        trigger: {
+          type: "performance",
+          conditions: [
+            {
+              metric: "threshold_pace",
+              operator: "greater",
+              value: 88,
+              duration: 14
+            }
+          ]
+        },
+        response: {
+          modifications: [
+            {
+              type: "workout_type",
+              target: "threshold_volume",
+              adjustment: "increase",
+              rationale: "Progress threshold work based on adaptation"
+            }
+          ],
+          priority: "next_week",
+          duration: 21,
+          monitoringPeriod: 14
+        },
+        frequency: 0,
+        effectiveness: 0
+      });
+    }
+    return patterns;
+  }
+  createCustomizationSettings(userProfile, customSettings) {
+    const defaults = {
+      allowIntensityAdjustments: true,
+      allowVolumeAdjustments: true,
+      allowWorkoutSubstitutions: true,
+      preferredWorkoutTypes: [],
+      avoidWorkoutTypes: [],
+      aggressiveness: userProfile.experience === "beginner" ? "conservative" : "moderate",
+      adaptationSpeed: "normal",
+      injuryPrevention: userProfile.injuryHistory && userProfile.injuryHistory.length > 2 ? "maximum" : "standard",
+      altitudeAdjustment: false,
+      heatAdaptation: false,
+      coldAdaptation: false,
+      terrainSpecific: false
+    };
+    return { ...defaults, ...customSettings };
+  }
+  createPerformanceOptimizations(userProfile, methodology) {
+    const optimizations = [];
+    if (userProfile.currentFitness.vdot) {
+      optimizations.push({
+        id: "vdot_improvement",
+        name: "VDOT Improvement",
+        targetMetric: "vdot",
+        currentValue: userProfile.currentFitness.vdot,
+        targetValue: userProfile.currentFitness.vdot + 2,
+        strategy: this.createVDOTOptimizationStrategy(methodology),
+        progress: 0,
+        estimatedWeeks: 8
+      });
+    }
+    return optimizations;
+  }
+  createVDOTOptimizationStrategy(methodology) {
+    return {
+      methodologyTweaks: [
+        {
+          parameter: "intensity_distribution_hard",
+          fromValue: 5,
+          toValue: 8,
+          timeline: 4,
+          rationale: "Increase quality work for VDOT improvement"
+        }
+      ],
+      workoutProgressions: [
+        {
+          workoutType: "vo2max",
+          currentVolume: 3,
+          targetVolume: 5,
+          currentIntensity: 95,
+          targetIntensity: 98,
+          progressionRate: 2
+        }
+      ],
+      recoveryEnhancements: [
+        {
+          type: "sleep",
+          frequency: "daily",
+          duration: "8+ hours",
+          expectedBenefit: "Improved adaptation to high intensity work"
+        }
+      ]
+    };
+  }
+  createConstraints(userProfile) {
+    return {
+      maxWeeklyHours: userProfile.timeAvailability || 10,
+      maxWeeklyMiles: userProfile.currentFitness.weeklyMileage * 1.5,
+      maxIntensityPercentage: 95,
+      minRecoveryDays: 1,
+      blackoutDates: [],
+      medicalRestrictions: []
+    };
+  }
+  identifyPatterns(progressData, modifications) {
+    const patterns = [];
+    const adherenceRate = progressData.adherenceRate || 75;
+    if (adherenceRate > 70) {
+      patterns.push({
+        id: "workout_completion_pattern",
+        name: "High Adherence Intensity Pattern",
+        trigger: {
+          type: "performance",
+          conditions: [
+            {
+              metric: "adherence_rate",
+              operator: "greater",
+              value: adherenceRate > 80 ? 80 : 70
+            }
+          ]
+        },
+        response: {
+          modifications: [
+            {
+              type: "intensity",
+              target: "weekly_intensity",
+              adjustment: adherenceRate > 85 ? "maintain or increase intensity" : "maintain intensity",
+              rationale: adherenceRate > 85 ? "High adherence allows for progression" : "Maintaining intensity to ensure consistency"
+            }
+          ],
+          priority: "next_week",
+          duration: 7,
+          monitoringPeriod: 14
+        },
+        effectiveness: Math.min(adherenceRate + 10, 90),
+        frequency: 1,
+        lastApplied: /* @__PURE__ */ new Date()
+      });
+    }
+    if (modifications.length > 0) {
+      const volumeReductions = modifications.filter(
+        (m) => m.type === "reduce_volume"
+      );
+      if (volumeReductions.length > 0) {
+        patterns.push({
+          id: "volume_sensitivity_pattern",
+          name: "Volume Reduction Pattern",
+          trigger: {
+            type: "fatigue",
+            conditions: [
+              {
+                metric: "training_load",
+                operator: "greater",
+                value: 300
+              }
+            ]
+          },
+          response: {
+            modifications: [
+              {
+                type: "volume",
+                target: "weekly_volume",
+                adjustment: "reduce volume by 15%",
+                rationale: "High stress levels indicate need for recovery and volume reduction"
+              }
+            ],
+            priority: "immediate",
+            duration: 7,
+            monitoringPeriod: 14
+          },
+          effectiveness: 75,
+          frequency: 1,
+          lastApplied: /* @__PURE__ */ new Date()
+        });
+      }
+    } else {
+      patterns.push({
+        id: "stable_training_pattern",
+        name: "Stable Training Pattern",
+        trigger: {
+          type: "performance",
+          conditions: [
+            {
+              metric: "modification_count",
+              operator: "equal",
+              value: 0
+            }
+          ]
+        },
+        response: {
+          modifications: [
+            {
+              type: "workout_type",
+              target: "current_approach",
+              adjustment: "continue current approach",
+              rationale: "Current training methodology is producing satisfactory results"
+            }
+          ],
+          priority: "next_phase",
+          duration: 14,
+          monitoringPeriod: 21
+        },
+        effectiveness: 85,
+        frequency: 1,
+        lastApplied: /* @__PURE__ */ new Date()
+      });
+    }
+    const performanceTrend = progressData.performanceTrend || "stable";
+    if (performanceTrend === "declining") {
+      patterns.push({
+        id: "recovery_need_pattern",
+        name: "Recovery Need Pattern",
+        trigger: {
+          type: "performance",
+          conditions: [
+            {
+              metric: "performance_trend",
+              operator: "equal",
+              value: 0
+            }
+          ]
+        },
+        response: {
+          modifications: [
+            {
+              type: "recovery",
+              target: "weekly_recovery",
+              adjustment: "add recovery days",
+              rationale: "Insufficient recovery detected, need additional recovery time"
+            }
+          ],
+          priority: "immediate",
+          duration: 7,
+          monitoringPeriod: 14
+        },
+        effectiveness: 80,
+        frequency: 1,
+        lastApplied: /* @__PURE__ */ new Date()
+      });
+    } else if (performanceTrend === "improving") {
+      patterns.push({
+        id: "progress_pattern",
+        name: "Performance Progress Pattern",
+        trigger: {
+          type: "performance",
+          conditions: [
+            {
+              metric: "performance_trend",
+              operator: "greater",
+              value: 0
+            }
+          ]
+        },
+        response: {
+          modifications: [
+            {
+              type: "intensity",
+              target: "weekly_progression",
+              adjustment: "gradual progression",
+              rationale: "Progressive overload needed for continued adaptation"
+            }
+          ],
+          priority: "next_week",
+          duration: 14,
+          monitoringPeriod: 21
+        },
+        effectiveness: 85,
+        frequency: 1,
+        lastApplied: /* @__PURE__ */ new Date()
+      });
+    }
+    return patterns;
+  }
+  mergePatterns(existing, newPatterns) {
+    const merged = [...existing];
+    newPatterns.forEach((newPattern) => {
+      const existingIndex = merged.findIndex((p) => p.id === newPattern.id);
+      if (existingIndex >= 0) {
+        merged[existingIndex].frequency++;
+      } else {
+        merged.push(newPattern);
+      }
+    });
+    return merged;
+  }
+  selectEffectivePatterns(patterns) {
+    return patterns.filter((p) => p.effectiveness > 60 || p.frequency > 3).sort((a, b) => b.effectiveness - a.effectiveness).slice(0, 10);
+  }
+  calculateCurrentMetrics(completedWorkouts) {
+    const metrics = {};
+    if (completedWorkouts.length === 0) return metrics;
+    const recentWorkouts = completedWorkouts.slice(-10);
+    const paceAchievements = recentWorkouts.filter((w) => w.actualPace && w.plannedWorkout?.targetMetrics).map((w) => {
+      const actualPace = w.actualPace;
+      const targetPace = w.actualPace;
+      return targetPace ? actualPace / targetPace * 100 : 100;
+    });
+    if (paceAchievements.length > 0) {
+      metrics.paceAchievement = paceAchievements.reduce((a, b) => a + b) / paceAchievements.length;
+    }
+    return metrics;
+  }
+  createOptimization(metric, currentMetrics, config, plan) {
+    switch (metric) {
+      case "vdot":
+        return this.createVDOTOptimization(currentMetrics, config);
+      case "threshold":
+        return this.createThresholdOptimization(currentMetrics, config);
+      case "endurance":
+        return this.createEnduranceOptimization(currentMetrics, config);
+      default:
+        return null;
+    }
+  }
+  createThresholdOptimization(currentMetrics, config) {
+    return {
+      id: "threshold_improvement",
+      name: "Lactate Threshold Enhancement",
+      targetMetric: "threshold",
+      currentValue: currentMetrics.threshold || 85,
+      targetValue: (currentMetrics.threshold || 85) + 5,
+      strategy: {
+        methodologyTweaks: [
+          {
+            parameter: "threshold_volume",
+            fromValue: 15,
+            toValue: 25,
+            timeline: 6,
+            rationale: "Increase threshold work for LT improvement"
+          }
+        ],
+        workoutProgressions: [
+          {
+            workoutType: "threshold",
+            currentVolume: 20,
+            targetVolume: 30,
+            currentIntensity: 88,
+            targetIntensity: 90,
+            progressionRate: 1.5
+          }
+        ],
+        recoveryEnhancements: []
+      },
+      progress: 0,
+      estimatedWeeks: 6
+    };
+  }
+  createEnduranceOptimization(currentMetrics, config) {
+    return {
+      id: "endurance_improvement",
+      name: "Aerobic Endurance Development",
+      targetMetric: "endurance",
+      currentValue: currentMetrics.endurance || 70,
+      targetValue: (currentMetrics.endurance || 70) + 10,
+      strategy: {
+        methodologyTweaks: [
+          {
+            parameter: "long_run_duration",
+            fromValue: 90,
+            toValue: 120,
+            timeline: 8,
+            rationale: "Extend long run duration for endurance"
+          }
+        ],
+        workoutProgressions: [
+          {
+            workoutType: "long_run",
+            currentVolume: 15,
+            targetVolume: 20,
+            currentIntensity: 70,
+            targetIntensity: 75,
+            progressionRate: 1
+          }
+        ],
+        recoveryEnhancements: [
+          {
+            type: "nutrition",
+            frequency: "post-long-run",
+            duration: "within 30 minutes",
+            expectedBenefit: "Enhanced glycogen replenishment"
+          }
+        ]
+      },
+      progress: 0,
+      estimatedWeeks: 8
+    };
+  }
+  createVDOTOptimization(currentMetrics, config) {
+    const currentVDOT = currentMetrics.vdot || 45;
+    const targetVDOT = currentVDOT + 2;
+    return {
+      id: "vdot_improvement",
+      name: "VDOT Enhancement",
+      targetMetric: "vdot",
+      currentValue: currentVDOT,
+      targetValue: targetVDOT,
+      strategy: {
+        methodologyTweaks: [
+          {
+            parameter: "vo2max_volume",
+            fromValue: 8,
+            toValue: 12,
+            timeline: 8,
+            rationale: "Increase VO2max work for VDOT improvement"
+          }
+        ],
+        workoutProgressions: [
+          {
+            workoutType: "vo2max",
+            currentVolume: 5,
+            targetVolume: 8,
+            currentIntensity: 100,
+            targetIntensity: 105,
+            progressionRate: 0.5
+          }
+        ],
+        recoveryEnhancements: [
+          {
+            type: "sleep",
+            frequency: "nightly",
+            duration: "8+ hours",
+            expectedBenefit: "Enhanced recovery and adaptation"
+          }
+        ]
+      },
+      progress: 0,
+      estimatedWeeks: 8
+    };
+  }
+  createAltitudeAdjustments(plan, altitude, config) {
+    const modifications = [];
+    modifications.push({
+      type: "reduce_intensity",
+      reason: `Altitude adaptation at ${altitude}m`,
+      priority: "high",
+      suggestedChanges: {
+        intensityReduction: 10 + Math.floor((altitude - 1500) / 500) * 5
+      }
+    });
+    return modifications;
+  }
+  createHeatAdjustments(plan, config) {
+    return [
+      {
+        type: "reduce_intensity",
+        reason: "Heat adaptation required",
+        priority: "medium",
+        suggestedChanges: {
+          intensityReduction: 5,
+          additionalRecoveryDays: 1
+        }
+      }
+    ];
+  }
+  createColdAdjustments(plan, config) {
+    return [
+      {
+        type: "substitute_workout",
+        reason: "Cold weather adaptation",
+        priority: "low",
+        suggestedChanges: {
+          substituteWorkoutType: "fartlek"
+          // More flexible for cold conditions
+        }
+      }
+    ];
+  }
+  createTerrainAdjustments(plan, terrain, config) {
+    const modifications = [];
+    if (terrain === "hilly") {
+      modifications.push({
+        type: "substitute_workout",
+        reason: "Hilly terrain adaptation",
+        priority: "medium",
+        suggestedChanges: {
+          substituteWorkoutType: "hill_repeats"
+        }
+      });
+    }
+    return modifications;
+  }
+  createConflictResolution(conflict, config) {
+    return {
+      type: "phase_adjustment",
+      target: conflict.area,
+      adjustment: "modified_approach",
+      rationale: `Resolving ${conflict.description}`
+    };
+  }
+  createDoubleThresholdProtocol(methodology) {
+    return [
+      "Morning: 20min threshold continuous",
+      "Evening: 3x8min threshold intervals",
+      "Ensure 8+ hours between sessions",
+      "Only once per week maximum"
+    ];
+  }
+  createSuperCompensationProtocol(methodology) {
+    return [
+      "Week 1-2: 120% normal volume",
+      "Week 3: 130% normal volume",
+      "Week 4: 50% volume (super compensation)",
+      "Monitor fatigue markers closely"
+    ];
+  }
+  createRaceSimulationProtocol(methodology) {
+    return [
+      "Full race distance at goal pace",
+      "Practice nutrition strategy",
+      "Simulate race day timing",
+      "2-3 weeks before target race"
+    ];
+  }
+  createInjuryPreventionMods(injury, plan, config) {
+    const modifications = [];
+    modifications.push({
+      type: "reduce_volume",
+      reason: `Previous ${injury} - preventive volume reduction`,
+      priority: "medium",
+      suggestedChanges: {
+        volumeReduction: 10
+      }
+    });
+    return modifications;
+  }
+  createRiskMitigationMods(risk, plan, config) {
+    return [
+      {
+        type: "add_recovery",
+        reason: `Mitigating ${risk.type} risk`,
+        priority: risk.severity,
+        suggestedChanges: {
+          additionalRecoveryDays: 1
+        }
+      }
+    ];
+  }
+  createDanielsBreakthroughs(metric, duration) {
+    return [
+      {
+        id: "vdot_breakthrough",
+        name: "VDOT Breakthrough Protocol",
+        description: "Intensive VDOT improvement through targeted intervals",
+        protocol: [
+          "Week 1-2: Increase I-pace volume by 50%",
+          "Week 3-4: Add R-pace strides to easy runs",
+          "Week 5-6: Time trial to reassess VDOT"
+        ],
+        expectedImprovement: "1-2 VDOT points",
+        duration: 6,
+        intensity: "high",
+        successProbability: 75
+      }
+    ];
+  }
+  createLydiardBreakthroughs(metric, duration) {
+    return [
+      {
+        id: "aerobic_breakthrough",
+        name: "Aerobic Capacity Breakthrough",
+        description: "Break through plateau with increased aerobic stimulus",
+        protocol: [
+          "Increase weekly long run by 20%",
+          "Add second medium-long run",
+          "Introduce fartlek sessions"
+        ],
+        expectedImprovement: "5% endurance improvement",
+        duration: 8,
+        intensity: "moderate",
+        successProbability: 80
+      }
+    ];
+  }
+  createPfitzingerBreakthroughs(metric, duration) {
+    return [
+      {
+        id: "threshold_breakthrough",
+        name: "Lactate Threshold Breakthrough",
+        description: "Enhanced threshold development protocol",
+        protocol: [
+          "Double threshold days (AM/PM)",
+          "Progressive long runs with threshold finish",
+          "Threshold hill repeats"
+        ],
+        expectedImprovement: "3-5% threshold pace improvement",
+        duration: 6,
+        intensity: "high",
+        successProbability: 70
+      }
+    ];
+  }
+  createGeneralBreakthroughs(metric, duration, config) {
+    return [
+      {
+        id: "cross_training_breakthrough",
+        name: "Cross-Training Enhancement",
+        description: "Break plateau with complementary training",
+        protocol: [
+          "Add 2x weekly cycling sessions",
+          "Include weekly pool running",
+          "Strength training 2x per week"
+        ],
+        expectedImprovement: "Varies by individual",
+        duration: 4,
+        intensity: "low",
+        successProbability: 60
+      }
+    ];
+  }
+  assessMethodologyState(config, plan, completedWorkouts) {
+    const adherence = this.calculatePhilosophyAdherence(
+      config,
+      completedWorkouts
+    );
+    const customizationLevel = this.determineCustomizationLevel(config);
+    const effectiveness = this.calculateEffectiveness(completedWorkouts);
+    const injuryRisk = this.assessInjuryRisk(completedWorkouts);
+    const adaptationSuccess = this.calculateAdaptationSuccess(config);
+    return {
+      adherenceToPhilosophy: adherence,
+      customizationLevel,
+      effectivenessScore: effectiveness,
+      injuryRiskLevel: injuryRisk,
+      adaptationSuccess
+    };
+  }
+  calculatePhilosophyAdherence(config, completedWorkouts) {
+    return 85;
+  }
+  determineCustomizationLevel(config) {
+    const modifications = config.adaptationPatterns.filter(
+      (p) => p.frequency > 0
+    ).length;
+    if (modifications < 3) return "minimal";
+    if (modifications < 7) return "moderate";
+    return "extensive";
+  }
+  calculateEffectiveness(completedWorkouts) {
+    if (completedWorkouts.length === 0) return 0;
+    const completionRate = completedWorkouts.filter((w) => w.adherence === "complete").length / completedWorkouts.length;
+    return Math.round(completionRate * 100);
+  }
+  assessInjuryRisk(completedWorkouts) {
+    const recentWorkouts = completedWorkouts.slice(-14);
+    const highIntensityCount = recentWorkouts.filter(
+      (w) => w.avgHeartRate && w.avgHeartRate > 170
+    ).length;
+    if (highIntensityCount > 7) return "high";
+    if (highIntensityCount > 4) return "medium";
+    return "low";
+  }
+  calculateAdaptationSuccess(config) {
+    const successfulPatterns = config.adaptationPatterns.filter(
+      (p) => p.effectiveness > 70
+    ).length;
+    const totalPatterns = config.adaptationPatterns.length;
+    return totalPatterns > 0 ? Math.round(successfulPatterns / totalPatterns * 100) : 0;
+  }
+  generateCustomizationRecommendations(state, config, completedWorkouts) {
+    const recommendations = [];
+    if (state.effectivenessScore < 70) {
+      recommendations.push({
+        id: "improve_effectiveness",
+        category: "performance",
+        title: "Improve Training Effectiveness",
+        description: "Current effectiveness is below optimal. Consider adjustments.",
+        impact: "high",
+        implementation: [
+          "Review workout difficulty settings",
+          "Adjust volume progression rate",
+          "Consider additional recovery"
+        ],
+        timeToEffect: 2
+      });
+    }
+    if (state.injuryRiskLevel !== "low") {
+      recommendations.push({
+        id: "reduce_injury_risk",
+        category: "injury_prevention",
+        title: "Reduce Injury Risk",
+        description: "Current training load presents elevated injury risk.",
+        impact: "high",
+        implementation: [
+          "Reduce high-intensity volume by 20%",
+          "Add additional recovery day",
+          "Include injury prevention exercises"
+        ],
+        timeToEffect: 1
+      });
+    }
+    return recommendations;
+  }
+  identifyCustomizationWarnings(state, config) {
+    const warnings = [];
+    if (state.adherenceToPhilosophy < 60) {
+      warnings.push(
+        "Customizations have significantly deviated from core methodology principles"
+      );
+    }
+    if (state.injuryRiskLevel === "high") {
+      warnings.push(
+        "Current training pattern shows high injury risk - immediate adjustment recommended"
+      );
+    }
+    if (state.customizationLevel === "extensive" && state.effectivenessScore < 50) {
+      warnings.push(
+        "Extensive customizations may be reducing training effectiveness"
+      );
+    }
+    return warnings;
+  }
+  projectOutcomes(state, config, completedWorkouts) {
+    const outcomes = [];
+    config.performanceOptimizations.forEach((opt) => {
+      outcomes.push({
+        metric: opt.targetMetric,
+        currentValue: opt.currentValue,
+        projectedValue: opt.targetValue,
+        confidence: this.calculateProjectionConfidence(opt, state),
+        timeframe: opt.estimatedWeeks,
+        assumptions: [
+          "Consistent training adherence",
+          "No significant injuries",
+          "Proper recovery maintained"
+        ]
+      });
+    });
+    return outcomes;
+  }
+  calculateProjectionConfidence(optimization, state) {
+    let confidence = 70;
+    if (state.effectivenessScore > 80) confidence += 10;
+    if (state.injuryRiskLevel === "low") confidence += 10;
+    if (state.adaptationSuccess > 70) confidence += 10;
+    return Math.min(95, confidence);
+  }
+};
+
+// src/methodology-cache.ts
+var LRUCache = class {
+  constructor(maxSize = 100, maxAgeMs = 5 * 60 * 1e3) {
+    this.cache = /* @__PURE__ */ new Map();
+    this.maxSize = maxSize;
+    this.maxAge = maxAgeMs;
+  }
+  get(key) {
+    const entry = this.cache.get(key);
+    if (!entry) return void 0;
+    if (Date.now() - entry.timestamp > this.maxAge) {
+      this.cache.delete(key);
+      return void 0;
+    }
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    return entry.value;
+  }
+  set(key, value, hash) {
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== void 0) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, {
+      value,
+      timestamp: Date.now(),
+      hash
+    });
+  }
+  clear() {
+    this.cache.clear();
+  }
+  size() {
+    return this.cache.size;
+  }
+};
+var CACHE_CONFIG = {
+  paceCalculations: { maxSize: 200, maxAge: 10 * 60 * 1e3 },
+  // 10 minutes
+  workoutSelection: { maxSize: 500, maxAge: 30 * 60 * 1e3 },
+  // 30 minutes
+  philosophyComparison: { maxSize: 50, maxAge: 60 * 60 * 1e3 },
+  // 1 hour
+  methodologyConfig: { maxSize: 100, maxAge: 15 * 60 * 1e3 },
+  // 15 minutes
+  planGeneration: { maxSize: 50, maxAge: 5 * 60 * 1e3 }
+  // 5 minutes
+};
+var MetricsLRUCache = class extends LRUCache {
+  constructor(maxSize, maxAgeMs) {
+    super(maxSize, maxAgeMs);
+    this.hits = 0;
+    this.misses = 0;
+  }
+  get(key) {
+    const result = super.get(key);
+    if (result !== void 0) {
+      this.hits++;
+    } else {
+      this.misses++;
+    }
+    return result;
+  }
+  getHitRatio() {
+    const total = this.hits + this.misses;
+    return total === 0 ? 0 : this.hits / total;
+  }
+  resetMetrics() {
+    this.hits = 0;
+    this.misses = 0;
+  }
+  getMetrics() {
+    return {
+      hits: this.hits,
+      misses: this.misses,
+      hitRatio: this.getHitRatio()
+    };
+  }
+};
+var paceCalculationCache = new MetricsLRUCache(
+  CACHE_CONFIG.paceCalculations.maxSize,
+  CACHE_CONFIG.paceCalculations.maxAge
+);
+var workoutSelectionCache = new MetricsLRUCache(
+  CACHE_CONFIG.workoutSelection.maxSize,
+  CACHE_CONFIG.workoutSelection.maxAge
+);
+var philosophyComparisonCache = new MetricsLRUCache(
+  CACHE_CONFIG.philosophyComparison.maxSize,
+  CACHE_CONFIG.philosophyComparison.maxAge
+);
+var methodologyConfigCache = new MetricsLRUCache(
+  CACHE_CONFIG.methodologyConfig.maxSize,
+  CACHE_CONFIG.methodologyConfig.maxAge
+);
+var planGenerationCache = new MetricsLRUCache(
+  CACHE_CONFIG.planGeneration.maxSize,
+  CACHE_CONFIG.planGeneration.maxAge
+);
+function getMethodologyPaceCacheKey(methodology, vdot, phase, weekNumber) {
+  return `pace-${methodology}-${vdot}-${phase}-${weekNumber}`;
+}
+function getWorkoutSelectionCacheKey(methodology, phase, weekNumber, dayOfWeek, fitness) {
+  const fitnessHash = `${fitness.vdot || 0}-${fitness.weeklyMileage || 0}`;
+  return `workout-${methodology}-${phase}-${weekNumber}-${dayOfWeek}-${fitnessHash}`;
+}
+function getPhilosophyComparisonCacheKey(methodology1, methodology2, dimensions) {
+  const sortedMethodologies = [methodology1, methodology2].sort();
+  const dimensionKey = dimensions ? dimensions.sort().join("-") : "all";
+  return `compare-${sortedMethodologies[0]}-${sortedMethodologies[1]}-${dimensionKey}`;
+}
+function getPlanGenerationCacheKey(config) {
+  const key = [
+    config.methodology,
+    config.goal,
+    config.targetDate?.getTime() || 0,
+    config.startDate.getTime(),
+    config.currentFitness?.vdot || 0,
+    config.currentFitness?.weeklyMileage || 0,
+    config.currentFitness?.trainingAge || 3
+  ].join("-");
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    const char = key.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return `plan-${hash.toString(36)}`;
+}
+function calculateMethodologyPacesCached(methodology, vdot, phase, weekNumber, calculator) {
+  const cacheKey = getMethodologyPaceCacheKey(
+    methodology,
+    vdot,
+    phase,
+    weekNumber
+  );
+  const cached = paceCalculationCache.get(cacheKey);
+  if (cached !== void 0) {
+    return cached;
+  }
+  const paces = calculator();
+  paceCalculationCache.set(cacheKey, paces, cacheKey);
+  return paces;
+}
+function selectWorkoutCached(methodology, phase, weekNumber, dayOfWeek, fitness, selector) {
+  const cacheKey = getWorkoutSelectionCacheKey(
+    methodology,
+    phase,
+    weekNumber,
+    dayOfWeek,
+    fitness
+  );
+  const cached = workoutSelectionCache.get(cacheKey);
+  if (cached !== void 0) {
+    return cached;
+  }
+  const result = selector();
+  workoutSelectionCache.set(cacheKey, result, cacheKey);
+  return result;
+}
+function comparePhilosophiesCached(methodology1, methodology2, dimensions, comparator) {
+  const cacheKey = getPhilosophyComparisonCacheKey(
+    methodology1,
+    methodology2,
+    dimensions
+  );
+  const cached = philosophyComparisonCache.get(cacheKey);
+  if (cached !== void 0) {
+    return cached;
+  }
+  const comparison = comparator();
+  philosophyComparisonCache.set(cacheKey, comparison, cacheKey);
+  return comparison;
+}
+function getMethodologyConfigCached(methodology, configType, generator) {
+  const cacheKey = `config-${methodology}-${configType}`;
+  const cached = methodologyConfigCache.get(cacheKey);
+  if (cached !== void 0) {
+    return cached;
+  }
+  const config = generator();
+  methodologyConfigCache.set(cacheKey, config, cacheKey);
+  return config;
+}
+function generatePlanCached(config, generator) {
+  const cacheKey = getPlanGenerationCacheKey(config);
+  const cached = planGenerationCache.get(cacheKey);
+  if (cached !== void 0) {
+    return cached;
+  }
+  const plan = generator();
+  planGenerationCache.set(cacheKey, plan, cacheKey);
+  return plan;
+}
+function batchSelectWorkoutsCached(requests, selector) {
+  const results = [];
+  const uncachedIndices = [];
+  const uncachedRequests = [];
+  requests.forEach((request, index) => {
+    const cacheKey = getWorkoutSelectionCacheKey(
+      request.methodology,
+      request.phase,
+      request.weekNumber,
+      request.dayOfWeek,
+      request.fitness
+    );
+    const cached = workoutSelectionCache.get(cacheKey);
+    if (cached !== void 0) {
+      results[index] = cached;
+    } else {
+      uncachedIndices.push(index);
+      uncachedRequests.push(request);
+    }
+  });
+  uncachedRequests.forEach((request, batchIndex) => {
+    const actualIndex = uncachedIndices[batchIndex];
+    const result = selector(request);
+    results[actualIndex] = result;
+    const cacheKey = getWorkoutSelectionCacheKey(
+      request.methodology,
+      request.phase,
+      request.weekNumber,
+      request.dayOfWeek,
+      request.fitness
+    );
+    workoutSelectionCache.set(cacheKey, result, cacheKey);
+  });
+  return results;
+}
+var MethodologyCacheWarmer = class {
+  /**
+   * Pre-warm pace calculation caches for common scenarios
+   */
+  static async warmPaceCalculations(methodologies, vdotRange, calculator) {
+    const phases = ["base", "build", "peak", "taper"];
+    for (const methodology of methodologies) {
+      for (let vdot = vdotRange.min; vdot <= vdotRange.max; vdot += vdotRange.step) {
+        for (const phase of phases) {
+          for (let week = 1; week <= 4; week++) {
+            const cacheKey = getMethodologyPaceCacheKey(
+              methodology,
+              vdot,
+              phase,
+              week
+            );
+            const cached = paceCalculationCache.get(cacheKey);
+            if (cached === void 0) {
+              const paces = calculator(methodology, vdot);
+              paceCalculationCache.set(cacheKey, paces, cacheKey);
+            }
+          }
+        }
+      }
+    }
+  }
+  /**
+   * Pre-warm philosophy comparison cache
+   */
+  static async warmPhilosophyComparisons(comparator) {
+    const methodologies = [
+      "daniels",
+      "lydiard",
+      "pfitzinger"
+    ];
+    for (let i = 0; i < methodologies.length; i++) {
+      for (let j = i + 1; j < methodologies.length; j++) {
+        const cacheKey = getPhilosophyComparisonCacheKey(
+          methodologies[i],
+          methodologies[j],
+          void 0
+        );
+        const cached = philosophyComparisonCache.get(cacheKey);
+        if (cached === void 0) {
+          const comparison = comparator(methodologies[i], methodologies[j]);
+          philosophyComparisonCache.set(cacheKey, comparison, cacheKey);
+        }
+      }
+    }
+  }
+};
+var methodologyCacheInstances = {
+  paceCalculationCache,
+  workoutSelectionCache,
+  philosophyComparisonCache,
+  methodologyConfigCache,
+  planGenerationCache
+};
+
 // src/export.ts
-import { format as format3, addDays as addDays4 } from "date-fns";
+import { format as formatDate, addDays as addDays4 } from "date-fns";
 
 // src/methodology-export-enhancement.ts
 var _MethodologyExportEnhancer = class _MethodologyExportEnhancer {
@@ -7588,15 +9535,17 @@ var _MethodologyExportEnhancer = class _MethodologyExportEnhancer {
   /**
    * Generate methodology-enhanced metadata
    */
-  static generateMethodologyMetadata(plan, format4, content) {
+  static generateMethodologyMetadata(plan, format2, content) {
     const { methodology, philosophy, principles } = this.extractMethodologyInfo(plan);
     const size = typeof content === "string" ? Buffer.byteLength(content, "utf8") : content.length;
     const baseMetadata = {
       planName: plan.config.name,
       exportDate: /* @__PURE__ */ new Date(),
-      format: format4,
+      format: format2,
       totalWorkouts: plan.workouts.length,
-      planDuration: Math.ceil((plan.config.endDate?.getTime() || Date.now() - plan.config.startDate.getTime()) / (1e3 * 60 * 60 * 24 * 7)),
+      planDuration: Math.ceil(
+        (plan.config.endDate?.getTime() || Date.now() - plan.config.startDate.getTime()) / (1e3 * 60 * 60 * 24 * 7)
+      ),
       fileSize: size,
       version: "1.0.0"
     };
@@ -7731,16 +9680,28 @@ var _MethodologyExportEnhancer = class _MethodologyExportEnhancer {
     let rationale = "";
     switch (methodology) {
       case "daniels":
-        rationale = _MethodologyExportEnhancer.generateDanielsRationale(workoutType, phase);
+        rationale = _MethodologyExportEnhancer.generateDanielsRationale(
+          workoutType,
+          phase
+        );
         break;
       case "lydiard":
-        rationale = _MethodologyExportEnhancer.generateLydiardRationale(workoutType, phase);
+        rationale = _MethodologyExportEnhancer.generateLydiardRationale(
+          workoutType,
+          phase
+        );
         break;
       case "pfitzinger":
-        rationale = _MethodologyExportEnhancer.generatePfitzingerRationale(workoutType, phase);
+        rationale = _MethodologyExportEnhancer.generatePfitzingerRationale(
+          workoutType,
+          phase
+        );
         break;
       case "hudson":
-        rationale = _MethodologyExportEnhancer.generateHudsonRationale(workoutType, phase);
+        rationale = _MethodologyExportEnhancer.generateHudsonRationale(
+          workoutType,
+          phase
+        );
         break;
       default:
         rationale = `${workoutType} workout scheduled according to ${methodology} methodology principles.`;
@@ -7863,7 +9824,9 @@ var _MethodologyExportEnhancer = class _MethodologyExportEnhancer {
    */
   static generateMethodologyComparison(currentMethodology, options) {
     if (!options.includeMethodologyComparison) return "";
-    const otherMethodologies = Object.keys(TRAINING_METHODOLOGIES).filter((m) => m !== currentMethodology);
+    const otherMethodologies = Object.keys(TRAINING_METHODOLOGIES).filter(
+      (m) => m !== currentMethodology
+    );
     let comparison = `## Methodology Comparison
 
 `;
@@ -8181,7 +10144,9 @@ var MethodologyAwareFormatter = class {
     }
     const advancedConfig = plan.config;
     if (!advancedConfig.methodology) {
-      warnings.push("No methodology specified - enhanced export features will be limited");
+      warnings.push(
+        "No methodology specified - enhanced export features will be limited"
+      );
     }
     return {
       isValid: errors.length === 0,
@@ -8197,7 +10162,11 @@ var MethodologyAwareFormatter = class {
       includeMethodologyComparison: { type: "boolean", default: false },
       includeTrainingZoneExplanations: { type: "boolean", default: true },
       includeWorkoutRationale: { type: "boolean", default: false },
-      detailLevel: { type: "string", enum: ["basic", "standard", "comprehensive"], default: "standard" }
+      detailLevel: {
+        type: "string",
+        enum: ["basic", "standard", "comprehensive"],
+        default: "standard"
+      }
     };
   }
   /**
@@ -8211,7 +10180,10 @@ var MethodologyAwareFormatter = class {
     }
     const { methodology } = MethodologyExportEnhancer.extractMethodologyInfo(plan);
     if (methodology && options.includeMethodologyComparison) {
-      const comparison = MethodologyExportEnhancer.generateMethodologyComparison(methodology, options);
+      const comparison = MethodologyExportEnhancer.generateMethodologyComparison(
+        methodology,
+        options
+      );
       enhancedContent += "\n\n" + comparison;
     }
     return enhancedContent;
@@ -8219,8 +10191,12 @@ var MethodologyAwareFormatter = class {
   /**
    * Generate methodology-aware metadata
    */
-  generateEnhancedMetadata(plan, format4, content) {
-    return MethodologyExportEnhancer.generateMethodologyMetadata(plan, format4, content);
+  generateEnhancedMetadata(plan, format2, content) {
+    return MethodologyExportEnhancer.generateMethodologyMetadata(
+      plan,
+      format2,
+      content
+    );
   }
 };
 var EnhancedMethodologyJSONFormatter = class extends MethodologyAwareFormatter {
@@ -8240,7 +10216,9 @@ var EnhancedMethodologyJSONFormatter = class extends MethodologyAwareFormatter {
         goal: plan.config.goal,
         startDate: plan.config.startDate.toISOString(),
         endDate: plan.config.endDate?.toISOString(),
-        totalWeeks: Math.ceil((plan.config.endDate?.getTime() || Date.now() - plan.config.startDate.getTime()) / (1e3 * 60 * 60 * 24 * 7)),
+        totalWeeks: Math.ceil(
+          (plan.config.endDate?.getTime() || Date.now() - plan.config.startDate.getTime()) / (1e3 * 60 * 60 * 24 * 7)
+        ),
         totalWorkouts: plan.workouts.length
       },
       methodology: methodology ? {
@@ -8255,7 +10233,8 @@ var EnhancedMethodologyJSONFormatter = class extends MethodologyAwareFormatter {
         rationale: options.includeWorkoutRationale && methodology ? MethodologyExportEnhancer.generateWorkoutRationale(
           workout,
           methodology,
-          workout.phase || "base"
+          "base"
+          // Default phase since PlannedWorkout doesn't have phase property
         ) : void 0
       })),
       blocks: plan.blocks,
@@ -8272,94 +10251,6 @@ var EnhancedMethodologyJSONFormatter = class extends MethodologyAwareFormatter {
     return {
       content,
       filename: `${plan.config.name.replace(/\s+/g, "-").toLowerCase()}-enhanced.${this.fileExtension}`,
-      mimeType: this.mimeType,
-      size: Buffer.byteLength(content, "utf8"),
-      metadata,
-      philosophyData: principles,
-      citations
-    };
-  }
-};
-var MethodologyMarkdownFormatter = class extends MethodologyAwareFormatter {
-  constructor() {
-    super(...arguments);
-    this.format = "markdown";
-    this.mimeType = "text/markdown";
-    this.fileExtension = "md";
-  }
-  async formatPlan(plan, options = {}) {
-    const { methodology, principles, citations } = MethodologyExportEnhancer.extractMethodologyInfo(plan);
-    let content = "";
-    const methodologyDoc = MethodologyExportEnhancer.generateMethodologyDocumentation(plan, options);
-    if (methodologyDoc) {
-      content += methodologyDoc + "\n\n";
-    }
-    content += `# Training Plan: ${plan.config.name}
-
-`;
-    content += `**Goal:** ${plan.config.goal}
-`;
-    content += `**Start Date:** ${plan.config.startDate.toLocaleDateString()}
-`;
-    content += `**Duration:** ${Math.ceil((plan.config.endDate?.getTime() || Date.now() - plan.config.startDate.getTime()) / (1e3 * 60 * 60 * 24 * 7))} weeks
-`;
-    content += `**Total Workouts:** ${plan.workouts.length}
-
-`;
-    if (plan.config.description) {
-      content += `## Description
-
-${plan.config.description}
-
-`;
-    }
-    content += `## Workout Schedule
-
-`;
-    let currentWeek = 1;
-    let currentWeekStart = null;
-    plan.workouts.forEach((workout) => {
-      const workoutDate = new Date(workout.scheduledDate);
-      if (!currentWeekStart || workoutDate.getTime() - currentWeekStart.getTime() >= 7 * 24 * 60 * 60 * 1e3) {
-        currentWeekStart = workoutDate;
-        content += `### Week ${currentWeek}
-
-`;
-        currentWeek++;
-      }
-      content += `**${workoutDate.toLocaleDateString()}** - ${workout.workout.name}
-`;
-      content += `- Type: ${workout.workout.type}
-`;
-      if (workout.workout.targetMetrics?.duration) {
-        content += `- Duration: ${workout.workout.targetMetrics.duration} minutes
-`;
-      }
-      if (workout.workout.targetMetrics?.distance) {
-        content += `- Distance: ${workout.workout.targetMetrics.distance} miles
-`;
-      }
-      if (options.includeWorkoutRationale && methodology) {
-        const rationale = MethodologyExportEnhancer.generateWorkoutRationale(
-          workout,
-          methodology,
-          workout.phase || "base"
-        );
-        if (rationale) {
-          content += `- Rationale: ${rationale}
-`;
-        }
-      }
-      content += "\n";
-    });
-    if (methodology && options.includeMethodologyComparison) {
-      const comparison = MethodologyExportEnhancer.generateMethodologyComparison(methodology, options);
-      content += comparison;
-    }
-    const metadata = this.generateEnhancedMetadata(plan, this.format, content);
-    return {
-      content,
-      filename: `${plan.config.name.replace(/\s+/g, "-").toLowerCase()}-methodology.${this.fileExtension}`,
       mimeType: this.mimeType,
       size: Buffer.byteLength(content, "utf8"),
       metadata,
@@ -8385,16 +10276,18 @@ var MultiFormatExporter = class {
   /**
    * Export plan in specified format with type-safe options
    */
-  async exportPlan(plan, format4, options) {
-    const formatter = this.formatters.get(format4);
+  async exportPlan(plan, format2, options) {
+    const formatter = this.formatters.get(format2);
     if (!formatter) {
-      throw new Error(`Unsupported export format: ${format4}`);
+      throw new Error(`Unsupported export format: ${format2}`);
     }
     const validation = formatter.validatePlan(plan);
     if (!validation.isValid) {
-      throw new Error(`Plan validation failed: ${validation.errors.join(", ")}`);
+      throw new Error(
+        `Plan validation failed: ${validation.errors.join(", ")}`
+      );
     }
-    const formatOptions = format4 === "csv" ? { ...options, detailLevel: "basic" } : options;
+    const formatOptions = format2 === "csv" ? { ...options, detailLevel: "basic" } : options;
     return await formatter.formatPlan(plan, formatOptions);
   }
   /**
@@ -8402,7 +10295,7 @@ var MultiFormatExporter = class {
    */
   async exportMultiFormat(plan, formats, options) {
     const results = await Promise.all(
-      formats.map((format4) => this.exportPlan(plan, format4, options))
+      formats.map((format2) => this.exportPlan(plan, format2, options))
     );
     return results;
   }
@@ -8416,17 +10309,20 @@ var MultiFormatExporter = class {
    * Register a new formatter with type safety
    */
   registerFormatter(formatter) {
-    this.formatters.set(formatter.format, formatter);
+    this.formatters.set(
+      formatter.format,
+      formatter
+    );
   }
   /**
    * Validate plan for export compatibility
    */
-  validateForExport(plan, format4) {
-    const formatter = this.formatters.get(format4);
+  validateForExport(plan, format2) {
+    const formatter = this.formatters.get(format2);
     if (!formatter) {
       return {
         isValid: false,
-        errors: [`Unsupported format: ${format4}`],
+        errors: [`Unsupported format: ${format2}`],
         warnings: []
       };
     }
@@ -8445,20 +10341,20 @@ var MultiFormatExporter = class {
   /**
    * Export plan with methodology awareness
    */
-  async exportPlanWithMethodology(plan, format4, options) {
+  async exportPlanWithMethodology(plan, format2, options) {
     const advancedConfig = plan.config;
     const hasMethodology = !!advancedConfig.methodology;
     const enhancedRequested = options?.enhancedExport === true;
     const useEnhanced = enhancedRequested && hasMethodology;
     if (useEnhanced) {
-      return this.exportWithMethodologyAwareFormatter(plan, format4, options);
+      return this.exportWithMethodologyAwareFormatter(plan, format2, options);
     }
-    return this.exportPlan(plan, format4, options);
+    return this.exportPlan(plan, format2, options);
   }
   /**
    * Export using methodology-aware formatters
    */
-  async exportWithMethodologyAwareFormatter(plan, format4, options) {
+  async exportWithMethodologyAwareFormatter(plan, format2, options) {
     const methodologyOptions = {
       ...options,
       includePhilosophyPrinciples: options?.includePhilosophyPrinciples ?? true,
@@ -8470,16 +10366,21 @@ var MultiFormatExporter = class {
       detailLevel: options?.detailLevel ?? "standard"
     };
     let formatter;
-    switch (format4) {
+    switch (format2) {
       case "json":
         formatter = new EnhancedMethodologyJSONFormatter();
         break;
-      case "markdown":
-        formatter = new MethodologyMarkdownFormatter();
-        break;
+      // Markdown format not supported in ExportFormat type
+      // case 'markdown':
+      //   formatter = new MethodologyMarkdownFormatter();
+      //   break;
       default:
-        const standardResult = await this.exportPlan(plan, format4, options);
-        return this.enhanceStandardExport(plan, standardResult, methodologyOptions);
+        const standardResult = await this.exportPlan(plan, format2, options);
+        return this.enhanceStandardExport(
+          plan,
+          standardResult,
+          methodologyOptions
+        );
     }
     return formatter.formatPlan(plan, methodologyOptions);
   }
@@ -8495,7 +10396,10 @@ var MultiFormatExporter = class {
     );
     let enhancedContent = standardResult.content;
     if (typeof enhancedContent === "string" && (standardResult.metadata.format === "csv" || standardResult.metadata.format === "ical")) {
-      const methodologyDoc = MethodologyExportEnhancer.generateMethodologyDocumentation(plan, options);
+      const methodologyDoc = MethodologyExportEnhancer.generateMethodologyDocumentation(
+        plan,
+        options
+      );
       if (methodologyDoc) {
         enhancedContent = `# ${methodologyDoc}
 
@@ -8536,20 +10440,29 @@ var BaseFormatter = class {
   getOptionsSchema() {
     return {
       validate: (data) => {
-        return typeof data === "object" && data !== null;
+        const isValid = typeof data === "object" && data !== null;
+        if (isValid) {
+          return { success: true, data };
+        } else {
+          return {
+            success: false,
+            error: new TypeValidationError2(
+              "Invalid options format",
+              "object",
+              data
+            )
+          };
+        }
       },
-      properties: [
-        "includePaces",
-        "includeHeartRates",
-        "includePower",
-        "timeZone",
-        "units"
-      ],
-      metadata: {
-        version: "1.0.0",
-        description: "Base export options schema",
-        examples: []
-      }
+      properties: {
+        includePaces: true,
+        includeHeartRates: true,
+        includePower: true,
+        timeZone: "UTC",
+        units: "metric"
+      },
+      required: ["includePaces", "includeHeartRates", "includePower"],
+      name: "BaseExportOptions"
     };
   }
   /**
@@ -8562,7 +10475,9 @@ var BaseFormatter = class {
       exportDate: /* @__PURE__ */ new Date(),
       format: this.format,
       totalWorkouts: plan.workouts.length,
-      planDuration: Math.ceil((plan.config.targetDate?.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)) || 16,
+      planDuration: plan.config.targetDate ? Math.ceil(
+        (plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
+      ) : 16,
       fileSize: contentSize,
       version: "1.0.0"
     };
@@ -8589,7 +10504,10 @@ var BaseFormatter = class {
         (workout.date.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
       ) + 1;
       const currentDistance = weeklyData.get(weekNumber) || 0;
-      weeklyData.set(weekNumber, currentDistance + (workout.targetMetrics.distance || 0));
+      weeklyData.set(
+        weekNumber,
+        currentDistance + (workout.targetMetrics.distance || 0)
+      );
     });
     return Array.from(weeklyData.entries()).map(([week, distance]) => ({ week, distance })).sort((a, b) => a.week - b.week);
   }
@@ -8600,7 +10518,10 @@ var BaseFormatter = class {
       zoneCounts.set(zone, (zoneCounts.get(zone) || 0) + 1);
     });
     const total = plan.workouts.length;
-    return Array.from(zoneCounts.entries()).map(([zone, count]) => ({ zone, percentage: Math.round(count / total * 100) }));
+    return Array.from(zoneCounts.entries()).map(([zone, count]) => ({
+      zone,
+      percentage: Math.round(count / total * 100)
+    }));
   }
   generatePeriodizationData(plan) {
     return plan.blocks.map((block) => ({
@@ -8611,7 +10532,7 @@ var BaseFormatter = class {
   }
   generateTrainingLoadData(plan) {
     return plan.workouts.map((workout) => ({
-      date: format3(workout.date, "yyyy-MM-dd"),
+      date: formatDate(workout.date, "yyyy-MM-dd"),
       tss: workout.workout.estimatedTSS || 0
     }));
   }
@@ -8678,7 +10599,7 @@ var JSONFormatter = class extends BaseFormatter {
         targetMetrics: workout.targetMetrics,
         workout: workout.workout
       })),
-      charts: options?.customFields?.includeCharts ? this.generateChartData(plan) : void 0
+      charts: options?.includeSchema ? this.generateChartData(plan) : void 0
     };
     const content = JSON.stringify(exportData, null, 2);
     const metadata = this.generateMetadata(plan, content);
@@ -8699,7 +10620,7 @@ var CSVFormatter = class extends BaseFormatter {
     this.fileExtension = "csv";
   }
   async formatPlan(plan, options) {
-    const useComprehensive = options?.comprehensive !== false;
+    const useComprehensive = options?.detailLevel === "comprehensive";
     const csvContent = useComprehensive ? this.generateComprehensiveCSV(plan, options) : this.generateSimpleCSV(plan, options);
     const metadata = this.generateMetadata(plan, csvContent);
     return {
@@ -8713,7 +10634,7 @@ var CSVFormatter = class extends BaseFormatter {
   generateSimpleCSV(plan, options) {
     const headers = "Date,Workout Type,Duration";
     const rows = plan.workouts.map((workout) => {
-      const date = format3(workout.date, "yyyy-MM-dd");
+      const date = formatDate(workout.date, "yyyy-MM-dd");
       const workoutType = workout.type.replace("_", " ");
       const duration = workout.targetMetrics.duration;
       return `${date},${workoutType},${duration}`;
@@ -8736,20 +10657,34 @@ var CSVFormatter = class extends BaseFormatter {
     return sections.join("\n");
   }
   generatePlanOverviewSection(plan) {
-    const totalDistance = plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0);
-    const totalTSS = plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.tss || 0), 0);
-    const duration = plan.config.targetDate ? Math.ceil((plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)) : 16;
+    const totalDistance = plan.workouts.reduce(
+      (sum, w) => sum + (w.targetMetrics.distance || 0),
+      0
+    );
+    const totalTSS = plan.workouts.reduce(
+      (sum, w) => sum + (w.targetMetrics.tss || 0),
+      0
+    );
+    const duration = plan.config.targetDate ? Math.ceil(
+      (plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
+    ) : 16;
     const rows = [
       ['"=== TRAINING PLAN OVERVIEW ==="'],
       ['"Plan Name"', `"${plan.config.name || "Training Plan"}"`],
       ['"Goal"', `"${plan.config.goal}"`],
-      ['"Start Date"', `"${format3(plan.config.startDate, "yyyy-MM-dd")}"`],
-      ['"End Date"', `"${format3(plan.config.targetDate || addDays4(plan.config.startDate, duration * 7), "yyyy-MM-dd")}"`],
+      ['"Start Date"', `"${formatDate(plan.config.startDate, "yyyy-MM-dd")}"`],
+      [
+        '"End Date"',
+        `"${formatDate(plan.config.targetDate || addDays4(plan.config.startDate, duration * 7), "yyyy-MM-dd")}"`
+      ],
       ['"Duration (weeks)"', `"${duration}"`],
       ['"Total Workouts"', `"${plan.workouts.length}"`],
       ['"Total Distance (km)"', `"${Math.round(totalDistance)}"`],
       ['"Total TSS"', `"${Math.round(totalTSS)}"`],
-      ['"Average Weekly Distance"', `"${Math.round(totalDistance / duration)}"`],
+      [
+        '"Average Weekly Distance"',
+        `"${Math.round(totalDistance / duration)}"`
+      ],
       ['"Phases"', `"${plan.blocks.length}"`],
       ['""'],
       // Empty row
@@ -8817,8 +10752,8 @@ var CSVFormatter = class extends BaseFormatter {
       const paceRange = zone ? this.calculatePace(zone, 5) : { min: "", max: "" };
       const hrRange = zone?.heartRateRange ? `${zone.heartRateRange.min}-${zone.heartRateRange.max}%` : "";
       return [
-        `"${format3(workout.date, "yyyy-MM-dd")}"`,
-        `"${format3(workout.date, "EEEE")}"`,
+        `"${formatDate(workout.date, "yyyy-MM-dd")}"`,
+        `"${formatDate(workout.date, "EEEE")}"`,
         `"${weekNumber}"`,
         `"${block?.phase || ""}"`,
         `"${workout.type}"`,
@@ -8880,7 +10815,7 @@ var CSVFormatter = class extends BaseFormatter {
     ];
     const rows = weeklyData.map((week) => [
       `"${week.weekNumber}"`,
-      `"${format3(week.startDate, "yyyy-MM-dd")}"`,
+      `"${formatDate(week.startDate, "yyyy-MM-dd")}"`,
       `"${week.phase}"`,
       `"${Math.round(week.plannedDistance)}"`,
       `"${Math.round(week.plannedTSS)}"`,
@@ -8934,13 +10869,17 @@ var CSVFormatter = class extends BaseFormatter {
       const acuteTSS = acuteWeeks.reduce((sum, w) => sum + w.plannedTSS, 0) / Math.min(1, acuteWeeks.length);
       const chronicTSS = chronicWeeks.reduce((sum, w) => sum + w.plannedTSS, 0) / Math.min(4, chronicWeeks.length);
       const acuteChronicRatio = chronicTSS > 0 ? acuteTSS / chronicTSS : 1;
-      const recoveryScore = Math.max(0, 100 - week.hardPercentage * 1.5 - Math.max(0, rampRate));
+      const recoveryScore = Math.max(
+        0,
+        100 - week.hardPercentage * 1.5 - Math.max(0, rampRate)
+      );
       let fatigueRisk = "Low";
       if (acuteChronicRatio > 1.3 || rampRate > 15) fatigueRisk = "High";
-      else if (acuteChronicRatio > 1.1 || rampRate > 10) fatigueRisk = "Moderate";
+      else if (acuteChronicRatio > 1.1 || rampRate > 10)
+        fatigueRisk = "Moderate";
       return [
         `"${week.weekNumber}"`,
-        `"${format3(week.startDate, "yyyy-MM-dd")}"`,
+        `"${formatDate(week.startDate, "yyyy-MM-dd")}"`,
         `"${Math.round(week.plannedTSS)}"`,
         `"${Math.round(cumulativeTSS)}"`,
         `"${Math.round(rampRate)}%"`,
@@ -8991,7 +10930,7 @@ var CSVFormatter = class extends BaseFormatter {
       '"Workout Notes"'
     ];
     const rows = plan.workouts.map((workout) => [
-      `"${format3(workout.date, "yyyy-MM-dd")}"`,
+      `"${formatDate(workout.date, "yyyy-MM-dd")}"`,
       `"${workout.name}"`,
       `"${workout.targetMetrics.distance || 0}"`,
       '""',
@@ -9035,15 +10974,28 @@ var CSVFormatter = class extends BaseFormatter {
       const blockWorkouts = plan.workouts.filter(
         (w) => w.date >= block.startDate && w.date <= block.endDate
       );
-      const totalDistance = blockWorkouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0);
-      const totalTSS = blockWorkouts.reduce((sum, w) => sum + (w.targetMetrics.tss || 0), 0);
-      const workoutTypes = blockWorkouts.reduce((acc, workout) => {
-        acc[workout.type] = (acc[workout.type] || 0) + 1;
-        return acc;
-      }, {});
+      const totalDistance = blockWorkouts.reduce(
+        (sum, w) => sum + (w.targetMetrics.distance || 0),
+        0
+      );
+      const totalTSS = blockWorkouts.reduce(
+        (sum, w) => sum + (w.targetMetrics.tss || 0),
+        0
+      );
+      const workoutTypes = blockWorkouts.reduce(
+        (acc, workout) => {
+          acc[workout.type] = (acc[workout.type] || 0) + 1;
+          return acc;
+        },
+        {}
+      );
       const keyWorkouts = Object.entries(workoutTypes).sort(([, a], [, b]) => b - a).slice(0, 3).map(([type, count]) => `${type} (${count})`).join(", ");
-      const easyWorkouts = blockWorkouts.filter((w) => w.targetMetrics.intensity < 70).length;
-      const hardWorkouts = blockWorkouts.filter((w) => w.targetMetrics.intensity >= 85).length;
+      const easyWorkouts = blockWorkouts.filter(
+        (w) => w.targetMetrics.intensity < 70
+      ).length;
+      const hardWorkouts = blockWorkouts.filter(
+        (w) => w.targetMetrics.intensity >= 85
+      ).length;
       const totalWorkouts = blockWorkouts.length;
       const volumeEmphasis = totalDistance / block.weeks > 50 ? "High" : totalDistance / block.weeks > 30 ? "Moderate" : "Low";
       const intensityEmphasis = hardWorkouts / totalWorkouts > 0.3 ? "High" : hardWorkouts / totalWorkouts > 0.15 ? "Moderate" : "Low";
@@ -9076,11 +11028,23 @@ var CSVFormatter = class extends BaseFormatter {
       const block = plan.blocks.find(
         (b) => workouts[0] && workouts[0].date >= b.startDate && workouts[0].date <= b.endDate
       );
-      const plannedDistance = workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0);
-      const plannedTSS = workouts.reduce((sum, w) => sum + (w.targetMetrics.tss || 0), 0);
-      const easyCount = workouts.filter((w) => w.targetMetrics.intensity < 70).length;
-      const moderateCount = workouts.filter((w) => w.targetMetrics.intensity >= 70 && w.targetMetrics.intensity < 85).length;
-      const hardCount = workouts.filter((w) => w.targetMetrics.intensity >= 85).length;
+      const plannedDistance = workouts.reduce(
+        (sum, w) => sum + (w.targetMetrics.distance || 0),
+        0
+      );
+      const plannedTSS = workouts.reduce(
+        (sum, w) => sum + (w.targetMetrics.tss || 0),
+        0
+      );
+      const easyCount = workouts.filter(
+        (w) => w.targetMetrics.intensity < 70
+      ).length;
+      const moderateCount = workouts.filter(
+        (w) => w.targetMetrics.intensity >= 70 && w.targetMetrics.intensity < 85
+      ).length;
+      const hardCount = workouts.filter(
+        (w) => w.targetMetrics.intensity >= 85
+      ).length;
       const total = workouts.length;
       return {
         weekNumber,
@@ -9111,7 +11075,13 @@ var iCalFormatter = class extends BaseFormatter {
       icalContent += this.generateTimezoneDefinition(timeZone);
     }
     plan.workouts.forEach((workout) => {
-      icalContent += this.generateWorkoutEvent(workout, plan, timeZone, now, options);
+      icalContent += this.generateWorkoutEvent(
+        workout,
+        plan,
+        timeZone,
+        now,
+        options
+      );
     });
     icalContent += this.generatePlanOverviewEvent(plan, timeZone, now);
     icalContent += this.foldLine("END:VCALENDAR") + "\r\n";
@@ -9126,7 +11096,9 @@ var iCalFormatter = class extends BaseFormatter {
   }
   generateCalendarHeader(plan, timeZone, now) {
     const calendarName = this.sanitizeText(plan.config.name || "Training Plan");
-    const description = this.sanitizeText(plan.config.goal || "Running Training Plan");
+    const description = this.sanitizeText(
+      plan.config.goal || "Running Training Plan"
+    );
     const lines = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
@@ -9167,10 +11139,17 @@ var iCalFormatter = class extends BaseFormatter {
   }
   generateWorkoutEvent(workout, plan, timeZone, now, options) {
     const startTime = this.calculateWorkoutStartTime(workout, options);
-    const endTime = new Date(startTime.getTime() + workout.targetMetrics.duration * 6e4);
+    const endTime = new Date(
+      startTime.getTime() + workout.targetMetrics.duration * 6e4
+    );
     const zone = TRAINING_ZONES[workout.workout.primaryZone?.name || "EASY"];
     const paceRange = zone ? this.calculatePace(zone, 5) : { min: "5:00", max: "5:00" };
-    const description = this.generateWorkoutDescription(workout, zone, paceRange, options);
+    const description = this.generateWorkoutDescription(
+      workout,
+      zone,
+      paceRange,
+      options
+    );
     const location = this.generateWorkoutLocation(workout, options);
     const alarms = this.generateWorkoutAlarms(workout, options);
     const eventLines = [
@@ -9201,20 +11180,21 @@ var iCalFormatter = class extends BaseFormatter {
   calculateWorkoutStartTime(workout, options) {
     const startTime = new Date(workout.date);
     const optimalTimes = {
-      "easy": { hour: 7, minute: 0 },
-      "long_run": { hour: 8, minute: 0 },
-      "recovery": { hour: 7, minute: 30 },
-      "tempo": { hour: 17, minute: 0 },
-      "threshold": { hour: 17, minute: 30 },
-      "vo2max": { hour: 17, minute: 0 },
-      "speed": { hour: 17, minute: 30 },
-      "hill_repeats": { hour: 17, minute: 0 },
-      "fartlek": { hour: 17, minute: 30 },
-      "progression": { hour: 16, minute: 30 },
-      "race_pace": { hour: 17, minute: 0 },
-      "time_trial": { hour: 9, minute: 0 },
-      "cross_training": { hour: 18, minute: 0 },
-      "strength": { hour: 18, minute: 30 }
+      easy: { hour: 7, minute: 0 },
+      long_run: { hour: 8, minute: 0 },
+      recovery: { hour: 7, minute: 30 },
+      steady: { hour: 16, minute: 0 },
+      tempo: { hour: 17, minute: 0 },
+      threshold: { hour: 17, minute: 30 },
+      vo2max: { hour: 17, minute: 0 },
+      speed: { hour: 17, minute: 30 },
+      hill_repeats: { hour: 17, minute: 0 },
+      fartlek: { hour: 17, minute: 30 },
+      progression: { hour: 16, minute: 30 },
+      race_pace: { hour: 17, minute: 0 },
+      time_trial: { hour: 9, minute: 0 },
+      cross_training: { hour: 18, minute: 0 },
+      strength: { hour: 18, minute: 30 }
     };
     const timing = optimalTimes[workout.type] || { hour: 7, minute: 0 };
     const dayOfWeek = startTime.getDay();
@@ -9225,7 +11205,9 @@ var iCalFormatter = class extends BaseFormatter {
     return startTime;
   }
   generateWorkoutDescription(workout, zone, paceRange, options) {
-    const template = Object.values(WORKOUT_TEMPLATES).find((t) => t.type === workout.type);
+    const template = Object.values(WORKOUT_TEMPLATES).find(
+      (t) => t.type === workout.type
+    );
     const descriptionParts = [
       `\u{1F3C3} ${workout.description}`,
       "",
@@ -9245,7 +11227,9 @@ var iCalFormatter = class extends BaseFormatter {
     if (template && template.segments.length > 1) {
       descriptionParts.push(
         "\u{1F4CB} WORKOUT STRUCTURE:",
-        ...template.segments.filter((seg) => seg.duration > 1).map((seg) => `\u2022 ${seg.duration}min @ ${seg.zone.name} - ${seg.description}`),
+        ...template.segments.filter((seg) => seg.duration > 1).map(
+          (seg) => `\u2022 ${seg.duration}min @ ${seg.zone.name} - ${seg.description}`
+        ),
         ""
       );
     }
@@ -9275,11 +11259,11 @@ var iCalFormatter = class extends BaseFormatter {
   }
   generateWorkoutLocation(workout, options) {
     const locationMap = {
-      "track": "Local Running Track",
-      "trail": "Trail System",
-      "road": "Road Route",
-      "treadmill": "Gym/Home Treadmill",
-      "hills": "Hilly Route/Park"
+      track: "Local Running Track",
+      trail: "Trail System",
+      road: "Road Route",
+      treadmill: "Gym/Home Treadmill",
+      hills: "Hilly Route/Park"
     };
     if (workout.type === "speed" || workout.type === "vo2max") {
       return "Running Track (400m)";
@@ -9292,7 +11276,7 @@ var iCalFormatter = class extends BaseFormatter {
     } else if (workout.type === "cross_training" || workout.type === "strength") {
       return "Gym/Fitness Center";
     }
-    return options?.customFields?.defaultLocation || "Your Preferred Running Route";
+    return options?.defaultLocation || "Your Preferred Running Route";
   }
   generateWorkoutAlarms(workout, options) {
     const alarms = [];
@@ -9322,12 +11306,18 @@ var iCalFormatter = class extends BaseFormatter {
   generatePlanOverviewEvent(plan, timeZone, now) {
     const startDate = new Date(plan.config.startDate);
     const endDate = plan.config.targetDate || addDays4(startDate, 112);
-    const totalDistance = plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0);
-    const totalTSS = plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.tss || 0), 0);
+    const totalDistance = plan.workouts.reduce(
+      (sum, w) => sum + (w.targetMetrics.distance || 0),
+      0
+    );
+    const totalTSS = plan.workouts.reduce(
+      (sum, w) => sum + (w.targetMetrics.tss || 0),
+      0
+    );
     const description = [
       `\u{1F3C3}\u200D\u2642\uFE0F TRAINING PLAN OVERVIEW`,
       "",
-      `\u{1F4C5} Duration: ${format3(startDate, "MMM dd, yyyy")} - ${format3(endDate, "MMM dd, yyyy")}`,
+      `\u{1F4C5} Duration: ${formatDate(startDate, "MMM dd, yyyy")} - ${formatDate(endDate, "MMM dd, yyyy")}`,
       `\u{1F3AF} Goal: ${plan.config.goal}`,
       `\u{1F3CB}\uFE0F Total Workouts: ${plan.workouts.length}`,
       `\u{1F4CF} Total Distance: ${Math.round(totalDistance)} km`,
@@ -9345,8 +11335,8 @@ var iCalFormatter = class extends BaseFormatter {
       "BEGIN:VEVENT",
       `UID:plan-overview-${plan.config.startDate.getTime()}@training-plan-generator.com`,
       `DTSTAMP:${this.formatICalDate(now)}`,
-      timeZone === "UTC" ? `DTSTART;VALUE=DATE:${format3(startDate, "yyyyMMdd")}` : `DTSTART;TZID=${timeZone};VALUE=DATE:${format3(startDate, "yyyyMMdd")}`,
-      timeZone === "UTC" ? `DTEND;VALUE=DATE:${format3(addDays4(endDate, 1), "yyyyMMdd")}` : `DTEND;TZID=${timeZone};VALUE=DATE:${format3(addDays4(endDate, 1), "yyyyMMdd")}`,
+      timeZone === "UTC" ? `DTSTART;VALUE=DATE:${formatDate(startDate, "yyyyMMdd")}` : `DTSTART;TZID=${timeZone};VALUE=DATE:${formatDate(startDate, "yyyyMMdd")}`,
+      timeZone === "UTC" ? `DTEND;VALUE=DATE:${formatDate(addDays4(endDate, 1), "yyyyMMdd")}` : `DTEND;TZID=${timeZone};VALUE=DATE:${formatDate(addDays4(endDate, 1), "yyyyMMdd")}`,
       `SUMMARY:\u{1F4CB} ${plan.config.name || "Training Plan"} - Overview`,
       `DESCRIPTION:${this.sanitizeText(description)}`,
       "CATEGORIES:TRAINING,PLAN-OVERVIEW",
@@ -9360,21 +11350,21 @@ var iCalFormatter = class extends BaseFormatter {
   }
   getWorkoutPriority(workout) {
     const priorityMap = {
-      "vo2max": 1,
-      "threshold": 2,
-      "tempo": 3,
-      "long_run": 2,
-      "race_pace": 1,
-      "time_trial": 1,
-      "speed": 3,
-      "hill_repeats": 3,
-      "progression": 4,
-      "fartlek": 4,
-      "steady": 5,
-      "easy": 6,
-      "recovery": 7,
-      "cross_training": 8,
-      "strength": 8
+      vo2max: 1,
+      threshold: 2,
+      tempo: 3,
+      long_run: 2,
+      race_pace: 1,
+      time_trial: 1,
+      speed: 3,
+      hill_repeats: 3,
+      progression: 4,
+      fartlek: 4,
+      steady: 5,
+      easy: 6,
+      recovery: 7,
+      cross_training: 8,
+      strength: 8
     };
     return priorityMap[workout.type] || 5;
   }
@@ -9436,7 +11426,9 @@ var iCalFormatter = class extends BaseFormatter {
     const futureCutoff = /* @__PURE__ */ new Date();
     futureCutoff.setFullYear(futureCutoff.getFullYear() + 2);
     if (plan.workouts.some((w) => w.date > futureCutoff)) {
-      warnings.push("Some workouts are scheduled more than 2 years in the future");
+      warnings.push(
+        "Some workouts are scheduled more than 2 years in the future"
+      );
     }
     return {
       isValid: errors.length === 0,
@@ -9692,24 +11684,39 @@ var PDFFormatter = class extends BaseFormatter {
     `;
   }
   generatePlanHeader(plan) {
-    const duration = plan.config.targetDate ? Math.ceil((plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)) : 16;
+    const duration = plan.config.targetDate ? Math.ceil(
+      (plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
+    ) : 16;
     return `
       <div class="header">
         <h1>${plan.config.name || "Training Plan"}</h1>
         <div class="subtitle">Goal: ${plan.config.goal}</div>
         <div class="subtitle">
-          ${format3(plan.config.startDate, "MMMM dd, yyyy")} - 
-          ${format3(plan.config.targetDate || addDays4(plan.config.startDate, duration * 7), "MMMM dd, yyyy")}
+          ${formatDate(plan.config.startDate, "MMMM dd, yyyy")} - 
+          ${formatDate(plan.config.targetDate || addDays4(plan.config.startDate, duration * 7), "MMMM dd, yyyy")}
         </div>
         <div class="subtitle">${duration} weeks \u2022 ${plan.workouts.length} workouts</div>
       </div>
     `;
   }
   generatePlanOverview(plan, chartData) {
-    const totalDistance = plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0);
-    const totalTSS = plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.tss || 0), 0);
-    const avgWeeklyDistance = chartData.weeklyVolume.length > 0 ? Math.round(chartData.weeklyVolume.reduce((sum, week) => sum + week.distance, 0) / chartData.weeklyVolume.length) : 0;
-    const peakWeeklyDistance = Math.max(...chartData.weeklyVolume.map((w) => w.distance));
+    const totalDistance = plan.workouts.reduce(
+      (sum, w) => sum + (w.targetMetrics.distance || 0),
+      0
+    );
+    const totalTSS = plan.workouts.reduce(
+      (sum, w) => sum + (w.targetMetrics.tss || 0),
+      0
+    );
+    const avgWeeklyDistance = chartData.weeklyVolume.length > 0 ? Math.round(
+      chartData.weeklyVolume.reduce(
+        (sum, week) => sum + week.distance,
+        0
+      ) / chartData.weeklyVolume.length
+    ) : 0;
+    const peakWeeklyDistance = Math.max(
+      ...chartData.weeklyVolume.map((w) => w.distance)
+    );
     return `
       <div class="section">
         <h2>Plan Overview</h2>
@@ -9736,12 +11743,14 @@ var PDFFormatter = class extends BaseFormatter {
           
           <div class="overview-card">
             <h4>Intensity Distribution</h4>
-            ${chartData.intensityDistribution.map((zone) => `
+            ${chartData.intensityDistribution.map(
+      (zone) => `
               <div class="stat-item">
                 <span class="stat-label">${zone.zone}:</span>
                 <span class="stat-value">${zone.percentage}%</span>
               </div>
-            `).join("")}
+            `
+    ).join("")}
           </div>
         </div>
       </div>
@@ -9795,13 +11804,15 @@ var PDFFormatter = class extends BaseFormatter {
             </tr>
           </thead>
           <tbody>
-            ${chartData.periodization.map((phase) => `
+            ${chartData.periodization.map(
+      (phase) => `
               <tr>
                 <td><strong>${phase.phase}</strong></td>
                 <td>${phase.weeks} weeks</td>
                 <td>${phase.focus.join(", ")}</td>
               </tr>
-            `).join("")}
+            `
+    ).join("")}
           </tbody>
         </table>
         
@@ -9830,8 +11841,14 @@ var PDFFormatter = class extends BaseFormatter {
         <h2>Weekly Training Schedule</h2>
     `;
     weeks.forEach((workouts, weekNumber) => {
-      const weekDistance = workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0);
-      const weekTSS = workouts.reduce((sum, w) => sum + (w.targetMetrics.tss || 0), 0);
+      const weekDistance = workouts.reduce(
+        (sum, w) => sum + (w.targetMetrics.distance || 0),
+        0
+      );
+      const weekTSS = workouts.reduce(
+        (sum, w) => sum + (w.targetMetrics.tss || 0),
+        0
+      );
       const weekBlock = plan.blocks.find(
         (b) => workouts[0] && workouts[0].date >= b.startDate && workouts[0].date <= b.endDate
       );
@@ -9862,7 +11879,7 @@ var PDFFormatter = class extends BaseFormatter {
         const zoneClass = zone ? `zone-${zone.name.toLowerCase().replace(/\s+/g, "-")}` : "";
         return `
                 <tr class="${zoneClass}">
-                  <td>${format3(workout.date, "EEE MMM dd")}</td>
+                  <td>${formatDate(workout.date, "EEE MMM dd")}</td>
                   <td><strong>${workout.name}</strong></td>
                   <td>${workout.targetMetrics.duration} min</td>
                   <td>${workout.targetMetrics.distance || 0} km</td>
@@ -9887,7 +11904,9 @@ var PDFFormatter = class extends BaseFormatter {
         <p><small>Detailed descriptions of workout types used in this plan</small></p>
         
         ${uniqueWorkoutTypes.map((type) => {
-      const template = Object.values(WORKOUT_TEMPLATES).find((t) => t.type === type);
+      const template = Object.values(WORKOUT_TEMPLATES).find(
+        (t) => t.type === type
+      );
       if (!template) return "";
       return `
             <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
@@ -9902,9 +11921,7 @@ var PDFFormatter = class extends BaseFormatter {
               </div>
               ${template.segments.length > 1 ? `
                 <div style="font-size: 9pt; color: #555;">
-                  <strong>Structure:</strong> ${template.segments.map(
-        (seg) => `${seg.duration}min @ ${seg.zone.name}`
-      ).join(" \u2192 ")}
+                  <strong>Structure:</strong> ${template.segments.map((seg) => `${seg.duration}min @ ${seg.zone.name}`).join(" \u2192 ")}
                 </div>
               ` : ""}
             </div>
@@ -9932,7 +11949,8 @@ var PDFFormatter = class extends BaseFormatter {
             </tr>
           </thead>
           <tbody>
-            ${weeklyData.map((week) => `
+            ${weeklyData.map(
+      (week) => `
               <tr>
                 <td><strong>${week.week}</strong></td>
                 <td>${Math.round(week.distance)} km</td>
@@ -9941,7 +11959,8 @@ var PDFFormatter = class extends BaseFormatter {
                 <td style="border-bottom: 1px solid #999;"></td>
                 <td style="border-bottom: 1px solid #999; width: 200px;"></td>
               </tr>
-            `).join("")}
+            `
+    ).join("")}
           </tbody>
         </table>
       </div>
@@ -9951,7 +11970,7 @@ var PDFFormatter = class extends BaseFormatter {
     return `
       <div class="footer">
         <div>Training Plan generated by Training Plan Generator</div>
-        <div>Generated on ${format3(/* @__PURE__ */ new Date(), "MMMM dd, yyyy")}</div>
+        <div>Generated on ${formatDate(/* @__PURE__ */ new Date(), "MMMM dd, yyyy")}</div>
         <div style="margin-top: 10px; font-size: 8pt;">
           <strong>Important:</strong> Always listen to your body. Adjust training intensity based on how you feel.
           Consult with a healthcare provider before starting any new training program.
@@ -9960,7 +11979,9 @@ var PDFFormatter = class extends BaseFormatter {
     `;
   }
   getDetailedWorkoutDescription(workout) {
-    const template = Object.values(WORKOUT_TEMPLATES).find((t) => t.type === workout.type);
+    const template = Object.values(WORKOUT_TEMPLATES).find(
+      (t) => t.type === workout.type
+    );
     if (template && template.segments.length > 1) {
       return template.segments.filter((seg) => seg.duration > 2).map((seg) => `${seg.duration}min @ ${seg.zone.name}`).join(" \u2192 ");
     }
@@ -9998,9 +12019,14 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
         planType: "running",
         difficulty: this.calculatePlanDifficulty(plan),
         weeklyHours: this.estimateWeeklyHours(plan),
-        totalTSS: plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.tss || 0), 0)
+        totalTSS: plan.workouts.reduce(
+          (sum, w) => sum + (w.targetMetrics.tss || 0),
+          0
+        )
       },
-      workouts: plan.workouts.map((workout) => this.formatTrainingPeaksWorkout(workout, plan)),
+      workouts: plan.workouts.map(
+        (workout) => this.formatTrainingPeaksWorkout(workout, plan)
+      ),
       phases: plan.blocks.map((block) => ({
         name: block.phase,
         startDate: block.startDate.toISOString(),
@@ -10015,11 +12041,16 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
   formatTrainingPeaksWorkout(workout, plan) {
     const zone = TRAINING_ZONES[workout.workout.primaryZone?.name || "EASY"];
     const workoutCode = this.generateWorkoutCode(workout);
-    const template = Object.values(WORKOUT_TEMPLATES).find((t) => t.type === workout.type);
+    const template = Object.values(WORKOUT_TEMPLATES).find(
+      (t) => t.type === workout.type
+    );
     return {
       date: workout.date.toISOString().split("T")[0],
       name: workout.name,
-      description: this.generateTrainingPeaksDescription(workout, template),
+      description: this.generateTrainingPeaksDescription(
+        workout,
+        template || workout.workout
+      ),
       workoutCode,
       tss: workout.targetMetrics.tss,
       duration: workout.targetMetrics.duration,
@@ -10027,7 +12058,10 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
       intensity: workout.targetMetrics.intensity,
       workoutType: this.mapToTrainingPeaksType(workout.type),
       primaryZone: zone?.name || "Aerobic",
-      structure: this.generateWorkoutStructure(workout, template),
+      structure: this.generateWorkoutStructure(
+        workout,
+        template || workout.workout
+      ),
       tags: this.generateWorkoutTags(workout),
       priority: this.getWorkoutPriority(workout),
       equipment: this.getRequiredEquipment(workout)
@@ -10035,21 +12069,21 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
   }
   generateWorkoutCode(workout) {
     const typeMap = {
-      "recovery": "REC",
-      "easy": "E",
-      "steady": "ST",
-      "tempo": "T",
-      "threshold": "LT",
-      "vo2max": "VO2",
-      "speed": "SP",
-      "hill_repeats": "H",
-      "fartlek": "F",
-      "progression": "PR",
-      "long_run": "LSD",
-      "race_pace": "RP",
-      "time_trial": "TT",
-      "cross_training": "XT",
-      "strength": "S"
+      recovery: "REC",
+      easy: "E",
+      steady: "ST",
+      tempo: "T",
+      threshold: "LT",
+      vo2max: "VO2",
+      speed: "SP",
+      hill_repeats: "H",
+      fartlek: "F",
+      progression: "PR",
+      long_run: "LSD",
+      race_pace: "RP",
+      time_trial: "TT",
+      cross_training: "XT",
+      strength: "S"
     };
     const code = typeMap[workout.type] || "GEN";
     const duration = Math.round(workout.targetMetrics.duration);
@@ -10071,19 +12105,23 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
     if (template && template.segments.length > 1) {
       parts.push("", "Workout Structure:");
       template.segments.filter((seg) => seg.duration > 2).forEach((seg) => {
-        parts.push(`\u2022 ${seg.duration}min @ ${seg.zone.name} - ${seg.description}`);
+        parts.push(
+          `\u2022 ${seg.duration}min @ ${seg.zone.name} - ${seg.description}`
+        );
       });
     }
     return parts.filter(Boolean).join("\n");
   }
   generateWorkoutStructure(workout, template) {
     if (!template || template.segments.length <= 1) {
-      return [{
-        duration: workout.targetMetrics.duration,
-        intensity: workout.targetMetrics.intensity,
-        zone: workout.workout.primaryZone?.name || "Easy",
-        description: workout.description
-      }];
+      return [
+        {
+          duration: workout.targetMetrics.duration,
+          intensity: workout.targetMetrics.intensity,
+          zone: workout.workout.primaryZone?.name || "Easy",
+          description: workout.description
+        }
+      ];
     }
     return template.segments.map((segment) => ({
       duration: segment.duration,
@@ -10099,7 +12137,7 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
       const thresholdPace = 5;
       const minPace = thresholdPace * (segment.zone.paceRange.min / 100);
       const maxPace = thresholdPace * (segment.zone.paceRange.max / 100);
-      return `${this.formatPace(minPace)}-${this.formatPace(maxPace)}`;
+      return `${this.formatTrainingPeaksPace(minPace)}-${this.formatTrainingPeaksPace(maxPace)}`;
     }
     return null;
   }
@@ -10109,28 +12147,28 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
     }
     return null;
   }
-  formatPace(pace) {
+  formatTrainingPeaksPace(pace) {
     const minutes = Math.floor(pace);
     const seconds = Math.round((pace - minutes) * 60);
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   }
   mapToTrainingPeaksType(type) {
     const typeMap = {
-      "recovery": "Recovery",
-      "easy": "Aerobic",
-      "steady": "Aerobic",
-      "tempo": "Tempo",
-      "threshold": "Lactate Threshold",
-      "vo2max": "VO2max",
-      "speed": "Neuromuscular Power",
-      "hill_repeats": "Aerobic Power",
-      "fartlek": "Mixed",
-      "progression": "Aerobic Power",
-      "long_run": "Aerobic",
-      "race_pace": "Lactate Threshold",
-      "time_trial": "Testing",
-      "cross_training": "Cross Training",
-      "strength": "Strength"
+      recovery: "Recovery",
+      easy: "Aerobic",
+      steady: "Aerobic",
+      tempo: "Tempo",
+      threshold: "Lactate Threshold",
+      vo2max: "VO2max",
+      speed: "Neuromuscular Power",
+      hill_repeats: "Aerobic Power",
+      fartlek: "Mixed",
+      progression: "Aerobic Power",
+      long_run: "Aerobic",
+      race_pace: "Lactate Threshold",
+      time_trial: "Testing",
+      cross_training: "Cross Training",
+      strength: "Strength"
     };
     return typeMap[type] || "General";
   }
@@ -10143,17 +12181,21 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
     return tags;
   }
   getWorkoutPriority(workout) {
-    if (["vo2max", "threshold", "race_pace", "time_trial"].includes(workout.type)) return "A";
-    if (["tempo", "long_run", "speed", "hill_repeats"].includes(workout.type)) return "B";
+    if (["vo2max", "threshold", "race_pace", "time_trial"].includes(workout.type))
+      return "A";
+    if (["tempo", "long_run", "speed", "hill_repeats"].includes(workout.type))
+      return "B";
     return "C";
   }
   getRequiredEquipment(workout) {
     const equipment = ["Running Shoes"];
     if (workout.type === "speed") equipment.push("Track Access");
     if (workout.type === "hill_repeats") equipment.push("Hilly Route");
-    if (workout.type === "cross_training") equipment.push("Cross Training Equipment");
+    if (workout.type === "cross_training")
+      equipment.push("Cross Training Equipment");
     if (workout.type === "strength") equipment.push("Gym Access");
-    if (workout.targetMetrics.intensity >= 85) equipment.push("Heart Rate Monitor");
+    if (workout.targetMetrics.intensity >= 85)
+      equipment.push("Heart Rate Monitor");
     return equipment;
   }
   calculatePlanDifficulty(plan) {
@@ -10164,8 +12206,13 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
     return "Beginner";
   }
   estimateWeeklyHours(plan) {
-    const totalMinutes = plan.workouts.reduce((sum, w) => sum + w.targetMetrics.duration, 0);
-    const weeks = Math.ceil((plan.config.targetDate?.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)) || 16;
+    const totalMinutes = plan.workouts.reduce(
+      (sum, w) => sum + w.targetMetrics.duration,
+      0
+    );
+    const weeks = plan.config.targetDate ? Math.ceil(
+      (plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
+    ) : 16;
     return Math.round(totalMinutes / weeks / 60 * 10) / 10;
   }
   generateTrainingPeaksAnnotations(plan) {
@@ -10179,7 +12226,9 @@ var TrainingPeaksFormatter = class extends BaseFormatter {
         priority: "high"
       });
     });
-    plan.workouts.filter((w) => w.targetMetrics.tss >= 100 || ["vo2max", "threshold", "time_trial"].includes(w.type)).forEach((workout) => {
+    plan.workouts.filter(
+      (w) => w.targetMetrics.tss >= 100 || ["vo2max", "threshold", "time_trial"].includes(w.type)
+    ).forEach((workout) => {
       annotations.push({
         date: workout.date.toISOString().split("T")[0],
         type: "key-workout",
@@ -10219,14 +12268,21 @@ var StravaFormatter = class extends BaseFormatter {
         start_date: plan.config.startDate.toISOString(),
         end_date: plan.config.targetDate?.toISOString() || addDays4(plan.config.startDate, 112).toISOString()
       },
-      activities: plan.workouts.map((workout) => this.formatStravaActivity(workout, plan)),
+      activities: plan.workouts.map(
+        (workout) => this.formatStravaActivity(workout, plan)
+      ),
       segments: this.generateStravaSegments(plan),
       goals: this.generateStravaGoals(plan)
     };
   }
   generateStravaDescription(plan) {
-    const totalDistance = plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0);
-    const weeks = Math.ceil((plan.config.targetDate?.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)) || 16;
+    const totalDistance = plan.workouts.reduce(
+      (sum, w) => sum + (w.targetMetrics.distance || 0),
+      0
+    );
+    const weeks = plan.config.targetDate ? Math.ceil(
+      (plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
+    ) : 16;
     return [
       `\u{1F3C3}\u200D\u2642\uFE0F ${plan.config.goal}`,
       "",
@@ -10237,17 +12293,24 @@ var StravaFormatter = class extends BaseFormatter {
       `\u2022 Training Phases: ${plan.blocks.length}`,
       "",
       `\u{1F3AF} Training Focus:`,
-      ...plan.blocks.map((block) => `\u2022 ${block.phase}: ${block.focusAreas.join(", ")}`),
+      ...plan.blocks.map(
+        (block) => `\u2022 ${block.phase}: ${block.focusAreas.join(", ")}`
+      ),
       "",
       `\u{1F4AA} Generated by Training Plan Generator`
     ].join("\n");
   }
   formatStravaActivity(workout, plan) {
     const zone = TRAINING_ZONES[workout.workout.primaryZone?.name || "EASY"];
-    const template = Object.values(WORKOUT_TEMPLATES).find((t) => t.type === workout.type);
+    const template = Object.values(WORKOUT_TEMPLATES).find(
+      (t) => t.type === workout.type
+    );
     return {
       name: this.generateStravaActivityName(workout),
-      description: this.generateStravaActivityDescription(workout, template),
+      description: this.generateStravaActivityDescription(
+        workout,
+        template || workout.workout
+      ),
       type: "Run",
       start_date: workout.date.toISOString(),
       distance: (workout.targetMetrics.distance || 0) * 1e3,
@@ -10264,10 +12327,19 @@ var StravaFormatter = class extends BaseFormatter {
       max_speed: this.calculateMaxSpeed(workout),
       suffer_score: Math.round(workout.targetMetrics.tss * 0.8),
       // Strava's relative effort
-      segments_effort: this.generateSegmentEfforts(workout, template),
-      segments: this.generateSegmentEfforts(workout, template),
+      segments_effort: this.generateSegmentEfforts(
+        workout,
+        template || workout.workout
+      ),
+      segments: this.generateSegmentEfforts(
+        workout,
+        template || workout.workout
+      ),
       // Alias for test compatibility
-      splits_metric: this.generateKilometerSplits(workout, template),
+      splits_metric: this.generateKilometerSplits(
+        workout,
+        template || workout.workout
+      ),
       tags: this.generateStravaTags(workout),
       kudos_count: 0,
       comment_count: 0,
@@ -10285,21 +12357,21 @@ var StravaFormatter = class extends BaseFormatter {
   }
   generateStravaActivityName(workout) {
     const emojiMap = {
-      "recovery": "\u{1F60C}",
-      "easy": "\u{1F3C3}\u200D\u2642\uFE0F",
-      "steady": "\u{1F3C3}\u200D\u2640\uFE0F",
-      "tempo": "\u{1F4A8}",
-      "threshold": "\u{1F525}",
-      "vo2max": "\u26A1",
-      "speed": "\u{1F680}",
-      "hill_repeats": "\u26F0\uFE0F",
-      "fartlek": "\u{1F3AF}",
-      "progression": "\u{1F4C8}",
-      "long_run": "\u{1F3C3}\u200D\u2642\uFE0F\u{1F4AA}",
-      "race_pace": "\u{1F3C1}",
-      "time_trial": "\u23F1\uFE0F",
-      "cross_training": "\u{1F3CB}\uFE0F\u200D\u2642\uFE0F",
-      "strength": "\u{1F4AA}"
+      recovery: "\u{1F60C}",
+      easy: "\u{1F3C3}\u200D\u2642\uFE0F",
+      steady: "\u{1F3C3}\u200D\u2640\uFE0F",
+      tempo: "\u{1F4A8}",
+      threshold: "\u{1F525}",
+      vo2max: "\u26A1",
+      speed: "\u{1F680}",
+      hill_repeats: "\u26F0\uFE0F",
+      fartlek: "\u{1F3AF}",
+      progression: "\u{1F4C8}",
+      long_run: "\u{1F3C3}\u200D\u2642\uFE0F\u{1F4AA}",
+      race_pace: "\u{1F3C1}",
+      time_trial: "\u23F1\uFE0F",
+      cross_training: "\u{1F3CB}\uFE0F\u200D\u2642\uFE0F",
+      strength: "\u{1F4AA}"
     };
     const emoji = emojiMap[workout.type] || "\u{1F3C3}\u200D\u2642\uFE0F";
     const distance = workout.targetMetrics.distance ? ` ${workout.targetMetrics.distance}km` : "";
@@ -10324,7 +12396,9 @@ var StravaFormatter = class extends BaseFormatter {
     if (template && template.segments.length > 1) {
       parts.push("\u{1F3C3}\u200D\u2642\uFE0F Workout Structure:");
       template.segments.filter((seg) => seg.duration > 2).forEach((seg, index) => {
-        parts.push(`${index + 1}. ${seg.duration}min @ ${seg.zone.name} - ${seg.description}`);
+        parts.push(
+          `${index + 1}. ${seg.duration}min @ ${seg.zone.name} - ${seg.description}`
+        );
       });
       parts.push("");
     }
@@ -10348,35 +12422,35 @@ var StravaFormatter = class extends BaseFormatter {
   }
   mapToStravaWorkoutType(type) {
     const typeMap = {
-      "recovery": 1,
+      recovery: 1,
       // Default Run
-      "easy": 1,
+      easy: 1,
       // Default Run
-      "steady": 1,
+      steady: 1,
       // Default Run
-      "tempo": 11,
+      tempo: 11,
       // Workout
-      "threshold": 11,
+      threshold: 11,
       // Workout
-      "vo2max": 11,
+      vo2max: 11,
       // Workout
-      "speed": 11,
+      speed: 11,
       // Workout
-      "hill_repeats": 11,
+      hill_repeats: 11,
       // Workout
-      "fartlek": 11,
+      fartlek: 11,
       // Workout
-      "progression": 1,
+      progression: 1,
       // Default Run
-      "long_run": 2,
+      long_run: 2,
       // Long Run
-      "race_pace": 3,
+      race_pace: 3,
       // Race
-      "time_trial": 3,
+      time_trial: 3,
       // Race
-      "cross_training": 1,
+      cross_training: 1,
       // Default Run
-      "strength": 1
+      strength: 1
       // Default Run
     };
     return typeMap[type] || 1;
@@ -10384,7 +12458,9 @@ var StravaFormatter = class extends BaseFormatter {
   estimateAverageHR(zone) {
     if (zone?.heartRateRange) {
       const maxHR = 185;
-      return Math.round((zone.heartRateRange.min + zone.heartRateRange.max) / 2 * maxHR / 100);
+      return Math.round(
+        (zone.heartRateRange.min + zone.heartRateRange.max) / 2 * maxHR / 100
+      );
     }
     return null;
   }
@@ -10403,7 +12479,9 @@ var StravaFormatter = class extends BaseFormatter {
   }
   calculateMaxSpeed(workout) {
     const avgSpeed = this.calculateAverageSpeed(workout);
-    const multiplier = ["vo2max", "speed", "hill_repeats"].includes(workout.type) ? 1.3 : 1.1;
+    const multiplier = ["vo2max", "speed", "hill_repeats"].includes(
+      workout.type
+    ) ? 1.3 : 1.1;
     return avgSpeed * multiplier;
   }
   generateSegmentEfforts(workout, template) {
@@ -10411,7 +12489,9 @@ var StravaFormatter = class extends BaseFormatter {
     return template.segments.filter((seg) => seg.duration > 2 && seg.intensity > 75).map((seg, index) => ({
       id: `segment_${index}`,
       name: `${seg.zone.name} Interval`,
-      distance: Math.round((workout.targetMetrics.distance || 5) * (seg.duration / workout.targetMetrics.duration) * 1e3),
+      distance: Math.round(
+        (workout.targetMetrics.distance || 5) * (seg.duration / workout.targetMetrics.duration) * 1e3
+      ),
       moving_time: seg.duration * 60,
       elapsed_time: seg.duration * 60,
       start_index: index * 100,
@@ -10439,7 +12519,9 @@ var StravaFormatter = class extends BaseFormatter {
         pace_zone: this.getSplitPaceZone(workout, i, totalKm),
         split: i,
         average_speed: 1e3 / splitTime,
-        average_heartrate: this.estimateAverageHR(TRAINING_ZONES[workout.workout.primaryZone?.name || "EASY"])
+        average_heartrate: this.estimateAverageHR(
+          TRAINING_ZONES[workout.workout.primaryZone?.name || "EASY"]
+        )
       });
     }
     return splits;
@@ -10450,7 +12532,10 @@ var StravaFormatter = class extends BaseFormatter {
     } else if (workout.type === "fartlek") {
       return Math.floor(3 + Math.random() * 4);
     } else {
-      const baseZone = Math.min(9, Math.max(1, Math.round(workout.targetMetrics.intensity / 12)));
+      const baseZone = Math.min(
+        9,
+        Math.max(1, Math.round(workout.targetMetrics.intensity / 12))
+      );
       return baseZone + Math.round((Math.random() - 0.5) * 2);
     }
   }
@@ -10500,8 +12585,13 @@ var StravaFormatter = class extends BaseFormatter {
     ];
   }
   generateStravaGoals(plan) {
-    const totalDistance = plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0);
-    const weeks = Math.ceil((plan.config.targetDate?.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)) || 16;
+    const totalDistance = plan.workouts.reduce(
+      (sum, w) => sum + (w.targetMetrics.distance || 0),
+      0
+    );
+    const weeks = plan.config.targetDate ? Math.ceil(
+      (plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
+    ) : 16;
     return [
       {
         type: "distance",
@@ -10554,7 +12644,9 @@ var GarminFormatter = class extends BaseFormatter {
         planId: `tp-${Date.now()}`,
         planName: plan.config.name || "Training Plan",
         description: plan.config.goal,
-        estimatedDurationInWeeks: Math.ceil((plan.config.targetDate?.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)) || 16,
+        estimatedDurationInWeeks: Math.ceil(
+          ((plan.config.targetDate?.getTime() ?? addDays4(plan.config.startDate, 112).getTime()) - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
+        ),
         startDate: plan.config.startDate.toISOString(),
         endDate: plan.config.targetDate?.toISOString() || addDays4(plan.config.startDate, 112).toISOString(),
         sportType: "RUNNING",
@@ -10563,16 +12655,23 @@ var GarminFormatter = class extends BaseFormatter {
         createdBy: "Training Plan Generator",
         version: "1.0"
       },
-      workouts: plan.workouts.map((workout) => this.formatGarminWorkout(workout, plan)),
+      workouts: plan.workouts.map(
+        (workout) => this.formatGarminWorkout(workout, plan)
+      ),
       schedule: this.generateGarminSchedule(plan),
       phases: plan.blocks.map((block) => this.formatGarminPhase(block)),
       settings: this.generateGarminSettings(plan, options)
     };
   }
   formatGarminWorkout(workout, plan) {
-    const template = Object.values(WORKOUT_TEMPLATES).find((t) => t.type === workout.type);
+    const template = Object.values(WORKOUT_TEMPLATES).find(
+      (t) => t.type === workout.type
+    );
     const zone = TRAINING_ZONES[workout.workout.primaryZone?.name || "EASY"];
-    const segments = this.generateGarminSegments(workout, template);
+    const segments = this.generateGarminSegments(
+      workout,
+      template || workout.workout
+    );
     return {
       workoutId: `workout-${workout.id}`,
       workoutName: workout.name,
@@ -10588,7 +12687,10 @@ var GarminFormatter = class extends BaseFormatter {
       primaryBenefit: this.mapToPrimaryBenefit(workout.type),
       secondaryBenefit: this.mapToSecondaryBenefit(workout.type),
       equipmentRequired: this.getGarminEquipment(workout),
-      instructions: this.generateGarminInstructions(workout, template),
+      instructions: this.generateGarminInstructions(
+        workout,
+        template || workout.workout
+      ),
       tags: [workout.type, zone?.name || "Easy"],
       difficulty: this.calculateWorkoutDifficulty(workout),
       creator: "Training Plan Generator"
@@ -10596,17 +12698,19 @@ var GarminFormatter = class extends BaseFormatter {
   }
   generateGarminSegments(workout, template) {
     if (!template || template.segments.length <= 1) {
-      return [{
-        segmentOrder: 1,
-        segmentType: "INTERVAL",
-        durationType: "TIME",
-        durationValue: workout.targetMetrics.duration * 60,
-        targetType: "PACE",
-        targetValueLow: this.calculatePaceTarget(workout, "low"),
-        targetValueHigh: this.calculatePaceTarget(workout, "high"),
-        intensity: this.mapToGarminIntensity(workout.targetMetrics.intensity),
-        description: workout.description
-      }];
+      return [
+        {
+          segmentOrder: 1,
+          segmentType: "INTERVAL",
+          durationType: "TIME",
+          durationValue: workout.targetMetrics.duration * 60,
+          targetType: "PACE",
+          targetValueLow: this.calculatePaceTarget(workout, "low"),
+          targetValueHigh: this.calculatePaceTarget(workout, "high"),
+          intensity: this.mapToGarminIntensity(workout.targetMetrics.intensity),
+          description: workout.description
+        }
+      ];
     }
     return template.segments.map((segment, index) => ({
       segmentOrder: index + 1,
@@ -10618,7 +12722,10 @@ var GarminFormatter = class extends BaseFormatter {
       targetValueHigh: this.calculateSegmentTargetHigh(segment),
       intensity: this.mapToGarminIntensity(segment.intensity),
       description: segment.description,
-      restDuration: this.calculateRestDuration(segment, template.segments[index + 1])
+      restDuration: this.calculateRestDuration(
+        segment,
+        template.segments[index + 1]
+      )
     }));
   }
   getGarminSegmentType(segment) {
@@ -10648,7 +12755,9 @@ var GarminFormatter = class extends BaseFormatter {
     }
     if (segment.zone.paceRange) {
       const thresholdPace = 5;
-      return Math.round(thresholdPace * (segment.zone.paceRange.min / 100) * 60);
+      return Math.round(
+        thresholdPace * (segment.zone.paceRange.min / 100) * 60
+      );
     }
     return segment.intensity;
   }
@@ -10658,7 +12767,9 @@ var GarminFormatter = class extends BaseFormatter {
     }
     if (segment.zone.paceRange) {
       const thresholdPace = 5;
-      return Math.round(thresholdPace * (segment.zone.paceRange.max / 100) * 60);
+      return Math.round(
+        thresholdPace * (segment.zone.paceRange.max / 100) * 60
+      );
     }
     return segment.intensity;
   }
@@ -10683,47 +12794,48 @@ var GarminFormatter = class extends BaseFormatter {
   }
   mapToPrimaryBenefit(type) {
     const benefitMap = {
-      "recovery": "RECOVERY",
-      "easy": "AEROBIC_BASE",
-      "steady": "AEROBIC_BASE",
-      "tempo": "TEMPO",
-      "threshold": "LACTATE_THRESHOLD",
-      "vo2max": "VO2_MAX",
-      "speed": "NEUROMUSCULAR_POWER",
-      "hill_repeats": "ANAEROBIC_CAPACITY",
-      "fartlek": "VO2_MAX",
-      "progression": "LACTATE_THRESHOLD",
-      "long_run": "AEROBIC_BASE",
-      "race_pace": "LACTATE_THRESHOLD",
-      "time_trial": "VO2_MAX",
-      "cross_training": "RECOVERY",
-      "strength": "MUSCULAR_ENDURANCE"
+      recovery: "RECOVERY",
+      easy: "AEROBIC_BASE",
+      steady: "AEROBIC_BASE",
+      tempo: "TEMPO",
+      threshold: "LACTATE_THRESHOLD",
+      vo2max: "VO2_MAX",
+      speed: "NEUROMUSCULAR_POWER",
+      hill_repeats: "ANAEROBIC_CAPACITY",
+      fartlek: "VO2_MAX",
+      progression: "LACTATE_THRESHOLD",
+      long_run: "AEROBIC_BASE",
+      race_pace: "LACTATE_THRESHOLD",
+      time_trial: "VO2_MAX",
+      cross_training: "RECOVERY",
+      strength: "MUSCULAR_ENDURANCE"
     };
     return benefitMap[type] || "AEROBIC_BASE";
   }
   mapToSecondaryBenefit(type) {
     const benefitMap = {
-      "recovery": "AEROBIC_BASE",
-      "easy": "RECOVERY",
-      "steady": "TEMPO",
-      "tempo": "AEROBIC_BASE",
-      "threshold": "VO2_MAX",
-      "vo2max": "ANAEROBIC_CAPACITY",
-      "speed": "VO2_MAX",
-      "hill_repeats": "MUSCULAR_ENDURANCE",
-      "fartlek": "ANAEROBIC_CAPACITY",
-      "progression": "VO2_MAX",
-      "long_run": "MUSCULAR_ENDURANCE",
-      "race_pace": "VO2_MAX",
-      "time_trial": "LACTATE_THRESHOLD",
-      "cross_training": "AEROBIC_BASE",
-      "strength": "RECOVERY"
+      recovery: "AEROBIC_BASE",
+      easy: "RECOVERY",
+      steady: "TEMPO",
+      tempo: "AEROBIC_BASE",
+      threshold: "VO2_MAX",
+      vo2max: "ANAEROBIC_CAPACITY",
+      speed: "VO2_MAX",
+      hill_repeats: "MUSCULAR_ENDURANCE",
+      fartlek: "ANAEROBIC_CAPACITY",
+      progression: "VO2_MAX",
+      long_run: "MUSCULAR_ENDURANCE",
+      race_pace: "VO2_MAX",
+      time_trial: "LACTATE_THRESHOLD",
+      cross_training: "AEROBIC_BASE",
+      strength: "RECOVERY"
     };
     return benefitMap[type] || "RECOVERY";
   }
   getGarminEquipment(workout) {
     const equipment = [];
-    if (workout.targetMetrics.intensity >= 80) equipment.push("HEART_RATE_MONITOR");
+    if (workout.targetMetrics.intensity >= 80)
+      equipment.push("HEART_RATE_MONITOR");
     if (workout.type === "speed") equipment.push("GPS_WATCH");
     if (workout.type === "strength") equipment.push("GYM_EQUIPMENT");
     if (workout.targetMetrics.duration >= 90) equipment.push("HYDRATION");
@@ -10732,14 +12844,20 @@ var GarminFormatter = class extends BaseFormatter {
   generateGarminInstructions(workout, template) {
     const instructions = [];
     const zone = TRAINING_ZONES[workout.workout.primaryZone?.name || "EASY"];
-    instructions.push(`Primary Zone: ${zone?.name || "Easy"} (RPE ${zone?.rpe || 2}/10)`);
+    instructions.push(
+      `Primary Zone: ${zone?.name || "Easy"} (RPE ${zone?.rpe || 2}/10)`
+    );
     if (zone?.heartRateRange) {
-      instructions.push(`Target Heart Rate: ${zone.heartRateRange.min}-${zone.heartRateRange.max}% Max HR`);
+      instructions.push(
+        `Target Heart Rate: ${zone.heartRateRange.min}-${zone.heartRateRange.max}% Max HR`
+      );
     }
     if (template && template.segments.length > 1) {
       instructions.push("Workout Structure:");
       template.segments.filter((seg) => seg.duration > 2).forEach((seg, index) => {
-        instructions.push(`${index + 1}. ${seg.duration}min @ ${seg.zone.name} - ${seg.description}`);
+        instructions.push(
+          `${index + 1}. ${seg.duration}min @ ${seg.zone.name} - ${seg.description}`
+        );
       });
     }
     if (template?.adaptationTarget) {
@@ -10752,10 +12870,15 @@ var GarminFormatter = class extends BaseFormatter {
     const intensityFactor = workout.targetMetrics.intensity / 100;
     const durationFactor = Math.min(workout.targetMetrics.duration / 120, 1);
     const tssFactor = Math.min(workout.targetMetrics.tss / 150, 1);
-    return Math.round((intensityFactor * 0.4 + durationFactor * 0.3 + tssFactor * 0.3) * 10);
+    return Math.round(
+      (intensityFactor * 0.4 + durationFactor * 0.3 + tssFactor * 0.3) * 10
+    );
   }
   calculateGarminDifficulty(plan) {
-    const avgDifficulty = plan.workouts.reduce((sum, w) => sum + this.calculateWorkoutDifficulty(w), 0) / plan.workouts.length;
+    const avgDifficulty = plan.workouts.reduce(
+      (sum, w) => sum + this.calculateWorkoutDifficulty(w),
+      0
+    ) / plan.workouts.length;
     if (avgDifficulty >= 7) return "ADVANCED";
     if (avgDifficulty >= 5) return "INTERMEDIATE";
     return "BEGINNER";
@@ -10783,8 +12906,10 @@ var GarminFormatter = class extends BaseFormatter {
     return startTime.toISOString();
   }
   getGarminPriority(workout) {
-    if (["vo2max", "threshold", "race_pace", "time_trial"].includes(workout.type)) return "HIGH";
-    if (["tempo", "long_run", "speed", "hill_repeats"].includes(workout.type)) return "MEDIUM";
+    if (["vo2max", "threshold", "race_pace", "time_trial"].includes(workout.type))
+      return "HIGH";
+    if (["tempo", "long_run", "speed", "hill_repeats"].includes(workout.type))
+      return "MEDIUM";
     return "LOW";
   }
   formatGarminPhase(block) {
@@ -10809,13 +12934,7 @@ var GarminFormatter = class extends BaseFormatter {
         phaseTransitions: true,
         restDayReminders: false
       },
-      dataFields: [
-        "TIME",
-        "DISTANCE",
-        "PACE",
-        "HEART_RATE",
-        "TRAINING_EFFECT"
-      ],
+      dataFields: ["TIME", "DISTANCE", "PACE", "HEART_RATE", "TRAINING_EFFECT"],
       autoLap: {
         enabled: true,
         distance: 1e3
@@ -10859,15 +12978,26 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
         sport: "running",
         difficulty: this.calculateAPIDifficulty(plan),
         duration: {
-          weeks: Math.ceil((plan.config.targetDate?.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)) || 16,
+          weeks: Math.ceil(
+            ((plan.config.targetDate?.getTime() ?? addDays4(plan.config.startDate, 112).getTime()) - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
+          ),
           startDate: plan.config.startDate.toISOString(),
           endDate: plan.config.targetDate?.toISOString() || addDays4(plan.config.startDate, 112).toISOString()
         },
         metrics: {
           totalWorkouts: plan.workouts.length,
-          totalDistance: plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0),
-          totalTSS: plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.tss || 0), 0),
-          totalDuration: plan.workouts.reduce((sum, w) => sum + w.targetMetrics.duration, 0),
+          totalDistance: plan.workouts.reduce(
+            (sum, w) => sum + (w.targetMetrics.distance || 0),
+            0
+          ),
+          totalTSS: plan.workouts.reduce(
+            (sum, w) => sum + (w.targetMetrics.tss || 0),
+            0
+          ),
+          totalDuration: plan.workouts.reduce(
+            (sum, w) => sum + w.targetMetrics.duration,
+            0
+          ),
           averageWeeklyDistance: this.calculateAverageWeeklyDistance(plan),
           peakWeeklyDistance: this.calculatePeakWeeklyDistance(plan),
           intensityDistribution: this.calculateIntensityDistribution(plan)
@@ -10881,13 +13011,19 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
         endDate: block.endDate.toISOString(),
         duration: {
           weeks: block.weeks,
-          days: Math.ceil((block.endDate.getTime() - block.startDate.getTime()) / (24 * 60 * 60 * 1e3))
+          days: Math.ceil(
+            (block.endDate.getTime() - block.startDate.getTime()) / (24 * 60 * 60 * 1e3)
+          )
         },
         objectives: block.focusAreas,
         description: `${block.phase} phase focusing on ${block.focusAreas.join(", ")}`,
-        workoutCount: plan.workouts.filter((w) => w.date >= block.startDate && w.date <= block.endDate).length
+        workoutCount: plan.workouts.filter(
+          (w) => w.date >= block.startDate && w.date <= block.endDate
+        ).length
       })),
-      workouts: plan.workouts.map((workout) => this.formatAPIWorkout(workout, plan)),
+      workouts: plan.workouts.map(
+        (workout) => this.formatAPIWorkout(workout, plan)
+      ),
       trainingZones: this.exportTrainingZones(),
       analytics: this.generateAnalytics(plan),
       integrations: {
@@ -10911,8 +13047,12 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
   }
   formatAPIWorkout(workout, plan) {
     const zone = TRAINING_ZONES[workout.workout.primaryZone?.name || "EASY"];
-    const template = Object.values(WORKOUT_TEMPLATES).find((t) => t.type === workout.type);
-    const block = plan.blocks.find((b) => workout.date >= b.startDate && b.date <= b.endDate);
+    const template = Object.values(WORKOUT_TEMPLATES).find(
+      (t) => t.type === workout.type
+    );
+    const block = plan.blocks.find(
+      (b) => workout.date >= b.startDate && workout.date <= b.endDate
+    );
     return {
       id: workout.id,
       date: workout.date.toISOString(),
@@ -10941,7 +13081,10 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
         primary: template?.adaptationTarget || "General fitness",
         recoveryTime: workout.workout.recoveryTime || 24
       },
-      instructions: this.generateAPIInstructions(workout, template),
+      instructions: this.generateAPIInstructions(
+        workout,
+        template || workout.workout
+      ),
       tags: this.generateAPITags(workout),
       difficulty: this.calculateWorkoutDifficulty(workout),
       equipment: this.getRequiredEquipment(workout)
@@ -10949,22 +13092,27 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
   }
   formatWorkoutStructure(template) {
     return {
-      segments: template.segments.map((segment, index) => ({
-        order: index + 1,
-        duration: segment.duration,
-        intensity: segment.intensity,
-        zone: {
-          name: segment.zone.name,
-          rpe: segment.zone.rpe,
-          description: segment.zone.description
-        },
-        description: segment.description,
-        targets: {
-          heartRate: segment.zone.heartRateRange || null,
-          pace: segment.zone.paceRange || null
-        }
-      })),
-      totalDuration: template.segments.reduce((sum, seg) => sum + seg.duration, 0),
+      segments: template.segments.map(
+        (segment, index) => ({
+          order: index + 1,
+          duration: segment.duration,
+          intensity: segment.intensity,
+          zone: {
+            name: segment.zone.name,
+            rpe: segment.zone.rpe,
+            description: segment.zone.description
+          },
+          description: segment.description,
+          targets: {
+            heartRate: segment.zone.heartRateRange || null,
+            pace: segment.zone.paceRange || null
+          }
+        })
+      ),
+      totalDuration: template.segments.reduce(
+        (sum, seg) => sum + seg.duration,
+        0
+      ),
       estimatedTSS: template.estimatedTSS
     };
   }
@@ -10990,10 +13138,10 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
   }
   generateAPITags(workout) {
     const tags = [workout.type];
-    if (workout.targetMetrics.intensity >= 85) tags.push("high-intensity");
-    if (workout.targetMetrics.tss >= 100) tags.push("key-workout");
-    if (workout.targetMetrics.duration >= 90) tags.push("long-session");
-    if (workout.type.includes("race")) tags.push("race-specific");
+    if (workout.targetMetrics.intensity >= 85) tags.push("vo2max");
+    if (workout.targetMetrics.tss >= 100) tags.push("threshold");
+    if (workout.targetMetrics.duration >= 90) tags.push("long_run");
+    if (workout.type.includes("race")) tags.push("race_pace");
     const zone = TRAINING_ZONES[workout.workout.primaryZone?.name || "EASY"];
     if (zone) tags.push(zone.name.toLowerCase().replace(/\s+/g, "-"));
     return tags;
@@ -11019,8 +13167,13 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
     };
   }
   calculateAverageWeeklyDistance(plan) {
-    const weeks = Math.ceil((plan.config.targetDate?.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)) || 16;
-    const totalDistance = plan.workouts.reduce((sum, w) => sum + (w.targetMetrics.distance || 0), 0);
+    const weeks = plan.config.targetDate ? Math.ceil(
+      (plan.config.targetDate.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
+    ) : 16;
+    const totalDistance = plan.workouts.reduce(
+      (sum, w) => sum + (w.targetMetrics.distance || 0),
+      0
+    );
     return Math.round(totalDistance / weeks);
   }
   calculatePeakWeeklyDistance(plan) {
@@ -11030,7 +13183,9 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
   calculateIntensityDistribution(plan) {
     const zones = {
       easy: plan.workouts.filter((w) => w.targetMetrics.intensity < 70).length,
-      moderate: plan.workouts.filter((w) => w.targetMetrics.intensity >= 70 && w.targetMetrics.intensity < 85).length,
+      moderate: plan.workouts.filter(
+        (w) => w.targetMetrics.intensity >= 70 && w.targetMetrics.intensity < 85
+      ).length,
       hard: plan.workouts.filter((w) => w.targetMetrics.intensity >= 85).length
     };
     const total = plan.workouts.length;
@@ -11046,7 +13201,11 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
       const weekNumber = Math.floor(
         (workout.date.getTime() - plan.config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1e3)
       ) + 1;
-      const current = weeks.get(weekNumber) || { distance: 0, tss: 0, workouts: 0 };
+      const current = weeks.get(weekNumber) || {
+        distance: 0,
+        tss: 0,
+        workouts: 0
+      };
       weeks.set(weekNumber, {
         distance: current.distance + (workout.targetMetrics.distance || 0),
         tss: current.tss + workout.targetMetrics.tss,
@@ -11079,7 +13238,9 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
           workouts: week.workouts
         })),
         peakWeek: {
-          week: weeklyData.findIndex((w) => w.tss === Math.max(...weeklyData.map((w2) => w2.tss))) + 1,
+          week: weeklyData.findIndex(
+            (w) => w.tss === Math.max(...weeklyData.map((w2) => w2.tss))
+          ) + 1,
           tss: Math.max(...weeklyData.map((w) => w.tss))
         },
         totalLoad: weeklyData.reduce((sum, week) => sum + week.tss, 0)
@@ -11096,8 +13257,14 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
         return {
           phase: block.phase,
           workoutCount: blockWorkouts.length,
-          totalTSS: blockWorkouts.reduce((sum, w) => sum + w.targetMetrics.tss, 0),
-          averageIntensity: blockWorkouts.reduce((sum, w) => sum + w.targetMetrics.intensity, 0) / blockWorkouts.length,
+          totalTSS: blockWorkouts.reduce(
+            (sum, w) => sum + w.targetMetrics.tss,
+            0
+          ),
+          averageIntensity: blockWorkouts.reduce(
+            (sum, w) => sum + w.targetMetrics.intensity,
+            0
+          ) / blockWorkouts.length,
           focusAreas: block.focusAreas
         };
       })
@@ -11115,9 +13282,15 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
     }));
   }
   calculateDurationDistribution(plan) {
-    const short = plan.workouts.filter((w) => w.targetMetrics.duration < 45).length;
-    const medium = plan.workouts.filter((w) => w.targetMetrics.duration >= 45 && w.targetMetrics.duration < 90).length;
-    const long = plan.workouts.filter((w) => w.targetMetrics.duration >= 90).length;
+    const short = plan.workouts.filter(
+      (w) => w.targetMetrics.duration < 45
+    ).length;
+    const medium = plan.workouts.filter(
+      (w) => w.targetMetrics.duration >= 45 && w.targetMetrics.duration < 90
+    ).length;
+    const long = plan.workouts.filter(
+      (w) => w.targetMetrics.duration >= 90
+    ).length;
     const total = plan.workouts.length;
     return {
       short: { count: short, percentage: Math.round(short / total * 100) },
@@ -11129,23 +13302,29 @@ var EnhancedJSONFormatter = class extends BaseFormatter {
     const intensityFactor = workout.targetMetrics.intensity / 100;
     const durationFactor = Math.min(workout.targetMetrics.duration / 120, 1);
     const tssFactor = Math.min(workout.targetMetrics.tss / 150, 1);
-    return Math.round((intensityFactor * 0.4 + durationFactor * 0.3 + tssFactor * 0.3) * 10);
+    return Math.round(
+      (intensityFactor * 0.4 + durationFactor * 0.3 + tssFactor * 0.3) * 10
+    );
   }
   getRequiredEquipment(workout) {
     const equipment = ["running-shoes"];
     if (workout.type === "speed") equipment.push("track-access");
     if (workout.type === "hill_repeats") equipment.push("hilly-terrain");
-    if (workout.type === "cross_training") equipment.push("cross-training-equipment");
+    if (workout.type === "cross_training")
+      equipment.push("cross-training-equipment");
     if (workout.type === "strength") equipment.push("gym-access");
-    if (workout.targetMetrics.intensity >= 80) equipment.push("heart-rate-monitor");
-    if (workout.targetMetrics.duration >= 90) equipment.push("hydration-system");
+    if (workout.targetMetrics.intensity >= 80)
+      equipment.push("heart-rate-monitor");
+    if (workout.targetMetrics.duration >= 90)
+      equipment.push("hydration-system");
     return equipment;
   }
 };
 var TCXFormatter = class extends BaseFormatter {
   constructor() {
     super(...arguments);
-    this.format = "tcx";
+    this.format = "json";
+    // Use closest standard format for compatibility
     this.mimeType = "application/vnd.garmin.tcx+xml";
     this.fileExtension = "tcx";
   }
@@ -11198,374 +13377,37 @@ var ExportUtils = {
   /**
    * Generate filename with timestamp
    */
-  generateFilename(baseName, format4) {
-    const timestamp = format4(/* @__PURE__ */ new Date(), "yyyy-MM-dd-HHmm");
-    const extension = this.getFileExtension(format4);
+  generateFilename(baseName, format2) {
+    const timestamp = formatDate(/* @__PURE__ */ new Date(), "yyyy-MM-dd-HHmm");
+    const extension = this.getFileExtension(format2);
     const safeName = baseName.replace(/[^a-zA-Z0-9-_]/g, "-");
     return `${safeName}-${timestamp}.${extension}`;
   },
   /**
    * Get file extension for format
    */
-  getFileExtension(format4) {
+  getFileExtension(format2) {
     const extensions = {
       json: "json",
       csv: "csv",
       ical: "ics",
-      pdf: "pdf",
-      tcx: "tcx"
+      pdf: "pdf"
     };
-    return extensions[format4] || "txt";
+    return extensions[format2] || "txt";
   },
   /**
    * Get MIME type for format
    */
-  getMimeType(format4) {
+  getMimeType(format2) {
     const mimeTypes = {
       json: "application/json",
       csv: "text/csv",
       ical: "text/calendar",
-      pdf: "application/pdf",
-      tcx: "application/vnd.garmin.tcx+xml"
+      pdf: "application/pdf"
     };
-    return mimeTypes[format4] || "text/plain";
+    return mimeTypes[format2] || "text/plain";
   }
 };
-
-// src/types/base-types.ts
-var TypeValidationError = class _TypeValidationError extends Error {
-  constructor(message, expectedType, actualValue, validationContext) {
-    super(message);
-    this.expectedType = expectedType;
-    this.actualValue = actualValue;
-    this.validationContext = validationContext;
-    this.name = "TypeValidationError";
-  }
-  /**
-   * Create an error for a missing required field
-   */
-  static missingField(field) {
-    return new _TypeValidationError(
-      `Missing required field: ${field}`,
-      "required",
-      void 0,
-      field
-    );
-  }
-  /**
-   * Create an error for an incorrect type
-   */
-  static incorrectType(field, expected, actual) {
-    return new _TypeValidationError(
-      `Field '${field}' expected ${expected}, got ${typeof actual}`,
-      expected,
-      actual,
-      field
-    );
-  }
-  /**
-   * Create an error for an invalid value
-   */
-  static invalidValue(field, value, constraint) {
-    return new _TypeValidationError(
-      `Field '${field}' has invalid value: ${constraint}`,
-      constraint,
-      value,
-      field
-    );
-  }
-};
-
-// src/types/type-guards.ts
-var primitiveGuards = {
-  isString: (value) => typeof value === "string",
-  isNumber: (value) => typeof value === "number" && !isNaN(value),
-  isBoolean: (value) => typeof value === "boolean",
-  isDate: (value) => value instanceof Date && !isNaN(value.getTime()),
-  isArray: (value, elementGuard) => {
-    if (!Array.isArray(value)) return false;
-    if (!elementGuard) return true;
-    return value.every(elementGuard);
-  },
-  isObject: (value) => typeof value === "object" && value !== null && !Array.isArray(value),
-  isNonEmptyString: (value) => typeof value === "string" && value.trim().length > 0,
-  isPositiveNumber: (value) => typeof value === "number" && !isNaN(value) && value > 0,
-  isNonNegativeNumber: (value) => typeof value === "number" && !isNaN(value) && value >= 0
-};
-function createSchemaGuard(typeName, requiredProperties, optionalProperties = [], propertyValidators = {}) {
-  const typeGuard = (value) => {
-    if (!primitiveGuards.isObject(value)) return false;
-    for (const prop of requiredProperties) {
-      if (!(prop in value)) return false;
-      const validator = propertyValidators[prop];
-      if (validator && !validator(value[prop])) return false;
-    }
-    for (const prop of optionalProperties) {
-      if (prop in value) {
-        const validator = propertyValidators[prop];
-        if (validator && !validator(value[prop])) return false;
-      }
-    }
-    return true;
-  };
-  const getValidationErrors = (value) => {
-    const errors = [];
-    if (!primitiveGuards.isObject(value)) {
-      errors.push(`Expected object, got ${typeof value}`);
-      return errors;
-    }
-    for (const prop of requiredProperties) {
-      if (!(prop in value)) {
-        errors.push(`Missing required property: ${String(prop)}`);
-      } else {
-        const validator = propertyValidators[prop];
-        if (validator && !validator(value[prop])) {
-          errors.push(`Invalid value for property: ${String(prop)}`);
-        }
-      }
-    }
-    for (const prop of optionalProperties) {
-      if (prop in value) {
-        const validator = propertyValidators[prop];
-        if (validator && !validator(value[prop])) {
-          errors.push(`Invalid value for optional property: ${String(prop)}`);
-        }
-      }
-    }
-    return errors;
-  };
-  return {
-    check: typeGuard,
-    name: typeName,
-    requiredProperties,
-    optionalProperties,
-    propertyValidators,
-    validateWithContext: (value, context) => {
-      if (typeGuard(value)) {
-        return { success: true, data: value };
-      }
-      const errors = getValidationErrors(value);
-      const errorMessage = errors.join("; ");
-      const validationError = new TypeValidationError(
-        errorMessage,
-        typeName,
-        value,
-        context
-      );
-      return { success: false, error: validationError };
-    },
-    isValid: typeGuard,
-    getValidationErrors
-  };
-}
-var isFitnessAssessment = createSchemaGuard(
-  "FitnessAssessment",
-  ["vdot", "criticalSpeed", "lactateThreshold", "runningEconomy", "weeklyMileage", "longestRecentRun", "trainingAge", "injuryHistory", "recoveryRate"],
-  [],
-  {
-    vdot: primitiveGuards.isPositiveNumber,
-    criticalSpeed: primitiveGuards.isPositiveNumber,
-    lactateThreshold: primitiveGuards.isPositiveNumber,
-    runningEconomy: primitiveGuards.isPositiveNumber,
-    weeklyMileage: primitiveGuards.isNonNegativeNumber,
-    longestRecentRun: primitiveGuards.isNonNegativeNumber,
-    trainingAge: primitiveGuards.isNonNegativeNumber,
-    injuryHistory: (value) => primitiveGuards.isArray(value, primitiveGuards.isString),
-    recoveryRate: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100
-  }
-);
-var isTrainingPreferences = createSchemaGuard(
-  "TrainingPreferences",
-  ["availableDays", "preferredIntensity", "crossTraining", "strengthTraining", "timeConstraints"],
-  [],
-  {
-    availableDays: (value) => primitiveGuards.isArray(value, primitiveGuards.isNumber),
-    preferredIntensity: (value) => typeof value === "string" && ["low", "moderate", "high"].includes(value),
-    crossTraining: primitiveGuards.isBoolean,
-    strengthTraining: primitiveGuards.isBoolean,
-    timeConstraints: (value) => {
-      if (!primitiveGuards.isObject(value)) return false;
-      return Object.values(value).every(primitiveGuards.isNumber);
-    }
-  }
-);
-var isEnvironmentalFactors = createSchemaGuard(
-  "EnvironmentalFactors",
-  ["altitude", "typicalTemperature", "humidity", "terrain"],
-  [],
-  {
-    altitude: primitiveGuards.isNumber,
-    typicalTemperature: primitiveGuards.isNumber,
-    humidity: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100,
-    terrain: (value) => typeof value === "string" && ["flat", "hilly", "mixed", "mountainous"].includes(value)
-  }
-);
-var isTrainingPlanConfig = createSchemaGuard(
-  "TrainingPlanConfig",
-  ["name", "goal", "startDate", "targetDate", "currentFitness", "preferences", "environment"],
-  ["description"],
-  {
-    name: primitiveGuards.isNonEmptyString,
-    description: primitiveGuards.isString,
-    goal: primitiveGuards.isNonEmptyString,
-    startDate: primitiveGuards.isDate,
-    targetDate: primitiveGuards.isDate,
-    currentFitness: (value) => isFitnessAssessment.check(value),
-    preferences: (value) => isTrainingPreferences.check(value),
-    environment: (value) => isEnvironmentalFactors.check(value)
-  }
-);
-var isTargetRace = createSchemaGuard(
-  "TargetRace",
-  ["distance", "date", "goalTime", "priority", "location", "terrain", "conditions"],
-  [],
-  {
-    distance: primitiveGuards.isNonEmptyString,
-    date: primitiveGuards.isDate,
-    goalTime: (value) => {
-      if (!primitiveGuards.isObject(value)) return false;
-      const time = value;
-      return primitiveGuards.isNonNegativeNumber(time.hours) && primitiveGuards.isNonNegativeNumber(time.minutes) && primitiveGuards.isNonNegativeNumber(time.seconds);
-    },
-    priority: (value) => typeof value === "string" && ["A", "B", "C"].includes(value),
-    location: primitiveGuards.isString,
-    terrain: (value) => typeof value === "string" && ["road", "trail", "track", "mixed"].includes(value),
-    conditions: (value) => isEnvironmentalFactors.check(value)
-  }
-);
-var isAdvancedPlanConfig = createSchemaGuard(
-  "AdvancedPlanConfig",
-  ["name", "goal", "startDate", "targetDate", "currentFitness", "preferences", "environment", "methodology", "intensityDistribution", "periodization", "targetRaces"],
-  ["description", "seasonGoals", "adaptationEnabled", "recoveryMonitoring", "progressTracking", "exportFormats", "platformIntegrations", "multiRaceConfig", "adaptationSettings"],
-  {
-    ...isTrainingPlanConfig.propertyValidators,
-    methodology: (value) => typeof value === "string" && ["daniels", "lydiard", "pfitzinger", "hanson", "custom"].includes(value),
-    intensityDistribution: (value) => {
-      if (!primitiveGuards.isObject(value)) return false;
-      const dist = value;
-      return primitiveGuards.isNumber(dist.easy) && primitiveGuards.isNumber(dist.moderate) && primitiveGuards.isNumber(dist.hard);
-    },
-    periodization: (value) => typeof value === "string" && ["linear", "block", "undulating"].includes(value),
-    targetRaces: (value) => primitiveGuards.isArray(value, (item) => isTargetRace.check(item)),
-    adaptationEnabled: primitiveGuards.isBoolean,
-    recoveryMonitoring: primitiveGuards.isBoolean,
-    progressTracking: primitiveGuards.isBoolean,
-    exportFormats: (value) => primitiveGuards.isArray(value, (item) => typeof item === "string" && ["pdf", "ical", "csv", "json"].includes(item))
-  }
-);
-var isPlannedWorkout = createSchemaGuard(
-  "PlannedWorkout",
-  ["id", "date", "type", "name", "targetMetrics", "workout"],
-  ["description"],
-  {
-    id: primitiveGuards.isNonEmptyString,
-    date: primitiveGuards.isDate,
-    type: primitiveGuards.isNonEmptyString,
-    name: primitiveGuards.isNonEmptyString,
-    description: primitiveGuards.isString,
-    targetMetrics: (value) => {
-      if (!primitiveGuards.isObject(value)) return false;
-      const metrics = value;
-      return primitiveGuards.isPositiveNumber(metrics.duration) && primitiveGuards.isPositiveNumber(metrics.distance) && primitiveGuards.isPositiveNumber(metrics.intensity);
-    },
-    workout: primitiveGuards.isObject
-  }
-);
-var isCompletedWorkout = createSchemaGuard(
-  "CompletedWorkout",
-  ["plannedWorkout", "actualDuration", "actualDistance", "actualPace", "avgHeartRate", "maxHeartRate", "completionRate", "adherence", "difficultyRating"],
-  [],
-  {
-    plannedWorkout: (value) => isPlannedWorkout.check(value),
-    actualDuration: primitiveGuards.isPositiveNumber,
-    actualDistance: primitiveGuards.isPositiveNumber,
-    actualPace: primitiveGuards.isPositiveNumber,
-    avgHeartRate: primitiveGuards.isPositiveNumber,
-    maxHeartRate: primitiveGuards.isPositiveNumber,
-    completionRate: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 1,
-    adherence: (value) => typeof value === "string" && ["none", "partial", "complete"].includes(value),
-    difficultyRating: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10
-  }
-);
-var isRecoveryMetrics = createSchemaGuard(
-  "RecoveryMetrics",
-  ["recoveryScore", "sleepQuality", "sleepDuration", "stressLevel", "muscleSoreness", "energyLevel", "motivation"],
-  [],
-  {
-    recoveryScore: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100,
-    sleepQuality: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100,
-    sleepDuration: primitiveGuards.isPositiveNumber,
-    stressLevel: (value) => primitiveGuards.isNumber(value) && value >= 0 && value <= 100,
-    muscleSoreness: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10,
-    energyLevel: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10,
-    motivation: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10
-  }
-);
-var isProgressData = createSchemaGuard(
-  "ProgressData",
-  ["date", "perceivedExertion", "heartRateData", "performanceMetrics"],
-  ["completedWorkouts", "notes"],
-  {
-    date: primitiveGuards.isDate,
-    perceivedExertion: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10,
-    heartRateData: (value) => {
-      if (!primitiveGuards.isObject(value)) return false;
-      const hrData = value;
-      return primitiveGuards.isPositiveNumber(hrData.resting) && primitiveGuards.isPositiveNumber(hrData.average) && primitiveGuards.isPositiveNumber(hrData.maximum);
-    },
-    performanceMetrics: (value) => {
-      if (!primitiveGuards.isObject(value)) return false;
-      const metrics = value;
-      return primitiveGuards.isPositiveNumber(metrics.vo2max) && primitiveGuards.isPositiveNumber(metrics.lactateThreshold) && primitiveGuards.isPositiveNumber(metrics.runningEconomy);
-    },
-    completedWorkouts: (value) => primitiveGuards.isArray(value, (item) => isCompletedWorkout.check(item)),
-    notes: primitiveGuards.isString
-  }
-);
-var isRunData = createSchemaGuard(
-  "RunData",
-  ["date", "distance", "duration", "avgPace", "avgHeartRate", "maxHeartRate", "elevation", "effortLevel", "notes", "temperature", "isRace"],
-  [],
-  {
-    date: primitiveGuards.isDate,
-    distance: primitiveGuards.isPositiveNumber,
-    duration: primitiveGuards.isPositiveNumber,
-    avgPace: primitiveGuards.isPositiveNumber,
-    avgHeartRate: primitiveGuards.isPositiveNumber,
-    maxHeartRate: primitiveGuards.isPositiveNumber,
-    elevation: primitiveGuards.isNumber,
-    effortLevel: (value) => primitiveGuards.isNumber(value) && value >= 1 && value <= 10,
-    notes: primitiveGuards.isString,
-    temperature: primitiveGuards.isNumber,
-    isRace: primitiveGuards.isBoolean
-  }
-);
-var isTrainingBlock = createSchemaGuard(
-  "TrainingBlock",
-  ["id", "phase", "startDate", "endDate", "weeks", "focusAreas", "microcycles"],
-  [],
-  {
-    id: primitiveGuards.isNonEmptyString,
-    phase: (value) => typeof value === "string" && ["base", "build", "peak", "taper", "recovery"].includes(value),
-    startDate: primitiveGuards.isDate,
-    endDate: primitiveGuards.isDate,
-    weeks: primitiveGuards.isPositiveNumber,
-    focusAreas: (value) => primitiveGuards.isArray(value, primitiveGuards.isString),
-    microcycles: primitiveGuards.isArray
-  }
-);
-var isTrainingPlan = createSchemaGuard(
-  "TrainingPlan",
-  ["config", "blocks", "summary", "workouts"],
-  ["id"],
-  {
-    id: primitiveGuards.isString,
-    config: (value) => isTrainingPlanConfig.check(value),
-    blocks: (value) => primitiveGuards.isArray(value, (item) => isTrainingBlock.check(item)),
-    summary: primitiveGuards.isObject,
-    workouts: (value) => primitiveGuards.isArray(value, (item) => isPlannedWorkout.check(item))
-  }
-);
 
 // src/methodology-workout-selector.ts
 var MethodologyWorkoutSelector = class {
@@ -11612,12 +13454,18 @@ var MethodologyWorkoutSelector = class {
       const availableTime = criteria.preferences.timeConstraints?.[dayOfWeek];
       if (availableTime && !criteria.timeConstraints) {
         criteria.timeConstraints = availableTime;
-        const totalDuration = workout.segments.reduce((sum, seg) => sum + seg.duration, 0);
+        const totalDuration = workout.segments.reduce(
+          (sum, seg) => sum + seg.duration,
+          0
+        );
         if (totalDuration > availableTime) {
           workout = this.applyContextModifications(workout, criteria, warnings);
         }
       }
-      const conflicts = this.checkPreferenceConflicts(workout, criteria.preferences);
+      const conflicts = this.checkPreferenceConflicts(
+        workout,
+        criteria.preferences
+      );
       warnings.push(...conflicts);
     }
     return {
@@ -11634,8 +13482,14 @@ var MethodologyWorkoutSelector = class {
    * Requirement 4.3: When workout templates are insufficient, create custom workouts
    */
   createMethodologySpecificWorkout(criteria) {
-    const baseIntensity = this.getMethodologyIntensity(criteria.workoutType, criteria.phase);
-    const duration = this.getMethodologyDuration(criteria.workoutType, criteria.phase);
+    const baseIntensity = this.getMethodologyIntensity(
+      criteria.workoutType,
+      criteria.phase
+    );
+    const duration = this.getMethodologyDuration(
+      criteria.workoutType,
+      criteria.phase
+    );
     switch (this.methodology) {
       case "daniels":
         return this.createDanielsWorkout(criteria, baseIntensity, duration);
@@ -11644,7 +13498,11 @@ var MethodologyWorkoutSelector = class {
       case "pfitzinger":
         return this.createPfitsingerWorkout(criteria, baseIntensity, duration);
       default:
-        return createCustomWorkout(criteria.workoutType, duration, baseIntensity);
+        return createCustomWorkout(
+          criteria.workoutType,
+          duration,
+          baseIntensity
+        );
     }
   }
   /**
@@ -11656,40 +13514,75 @@ var MethodologyWorkoutSelector = class {
       case "tempo":
       case "threshold":
         segments.push(
-          { duration: 10, intensity: 65, zone: { name: "EASY" }, description: "Warm-up" },
-          { duration: 20, intensity: 88, zone: { name: "THRESHOLD" }, description: "Tempo at T pace" },
-          { duration: 10, intensity: 60, zone: { name: "RECOVERY" }, description: "Cool-down" }
+          {
+            duration: 10,
+            intensity: 65,
+            zone: TRAINING_ZONES.EASY,
+            description: "Warm-up"
+          },
+          {
+            duration: 20,
+            intensity: 88,
+            zone: TRAINING_ZONES.THRESHOLD,
+            description: "Tempo at T pace"
+          },
+          {
+            duration: 10,
+            intensity: 60,
+            zone: TRAINING_ZONES.RECOVERY,
+            description: "Cool-down"
+          }
         );
         break;
       case "vo2max":
-        segments.push(
-          { duration: 15, intensity: 65, zone: { name: "EASY" }, description: "Warm-up" }
-        );
+        segments.push({
+          duration: 15,
+          intensity: 65,
+          zone: TRAINING_ZONES.EASY,
+          description: "Warm-up"
+        });
         for (let i = 0; i < 5; i++) {
           segments.push(
-            { duration: 3, intensity: 95, zone: { name: "VO2_MAX" }, description: `Interval ${i + 1} at I pace` },
-            { duration: 2, intensity: 60, zone: { name: "RECOVERY" }, description: "Recovery jog" }
+            {
+              duration: 3,
+              intensity: 95,
+              zone: TRAINING_ZONES.VO2_MAX,
+              description: `Interval ${i + 1} at I pace`
+            },
+            {
+              duration: 2,
+              intensity: 60,
+              zone: TRAINING_ZONES.RECOVERY,
+              description: "Recovery jog"
+            }
           );
         }
-        segments.push(
-          { duration: 10, intensity: 60, zone: { name: "RECOVERY" }, description: "Cool-down" }
-        );
+        segments.push({
+          duration: 10,
+          intensity: 60,
+          zone: TRAINING_ZONES.RECOVERY,
+          description: "Cool-down"
+        });
         break;
       default:
         segments.push({
           duration,
           intensity: baseIntensity,
-          zone: { name: this.getZoneName(baseIntensity) },
+          zone: this.getZoneFromIntensity(baseIntensity),
           description: `${criteria.workoutType} workout`
         });
     }
     return {
       type: criteria.workoutType,
-      primaryZone: { name: this.getZoneName(baseIntensity) },
+      primaryZone: this.getZoneFromIntensity(baseIntensity),
       segments,
       adaptationTarget: this.getDanielsAdaptationTarget(criteria.workoutType),
       estimatedTSS: this.calculateTSS(segments),
-      recoveryTime: this.getRecoveryTime(criteria.workoutType, duration, baseIntensity)
+      recoveryTime: this.getRecoveryTime(
+        criteria.workoutType,
+        duration,
+        baseIntensity
+      )
     };
   }
   /**
@@ -11703,41 +13596,61 @@ var MethodologyWorkoutSelector = class {
           duration: Math.min(duration, 180),
           // Cap at 3 hours
           intensity: 65,
-          zone: { name: "EASY" },
+          zone: TRAINING_ZONES.EASY,
           description: "Aerobic long run - conversation pace"
         });
         break;
       case "hill_repeats":
-        segments.push(
-          { duration: 15, intensity: 65, zone: { name: "EASY" }, description: "Warm-up to hills" }
-        );
+        segments.push({
+          duration: 15,
+          intensity: 65,
+          zone: TRAINING_ZONES.EASY,
+          description: "Warm-up to hills"
+        });
         const reps = criteria.phase === "base" ? 6 : 8;
         for (let i = 0; i < reps; i++) {
           segments.push(
-            { duration: 3, intensity: 85, zone: { name: "TEMPO" }, description: `Hill repeat ${i + 1} - strong effort` },
-            { duration: 2, intensity: 50, zone: { name: "RECOVERY" }, description: "Walk/jog down" }
+            {
+              duration: 3,
+              intensity: 85,
+              zone: TRAINING_ZONES.TEMPO,
+              description: `Hill repeat ${i + 1} - strong effort`
+            },
+            {
+              duration: 2,
+              intensity: 50,
+              zone: TRAINING_ZONES.RECOVERY,
+              description: "Walk/jog down"
+            }
           );
         }
-        segments.push(
-          { duration: 10, intensity: 60, zone: { name: "RECOVERY" }, description: "Cool-down" }
-        );
+        segments.push({
+          duration: 10,
+          intensity: 60,
+          zone: TRAINING_ZONES.RECOVERY,
+          description: "Cool-down"
+        });
         break;
       default:
         segments.push({
           duration,
           intensity: Math.min(baseIntensity, 75),
           // Keep intensity moderate
-          zone: { name: this.getZoneName(Math.min(baseIntensity, 75)) },
+          zone: this.getZoneFromIntensity(Math.min(baseIntensity, 75)),
           description: `${criteria.workoutType} workout - aerobic emphasis`
         });
     }
     return {
       type: criteria.workoutType,
-      primaryZone: { name: this.getZoneName(baseIntensity) },
+      primaryZone: this.getZoneFromIntensity(baseIntensity),
       segments,
       adaptationTarget: this.getLydiardAdaptationTarget(criteria.workoutType),
       estimatedTSS: this.calculateTSS(segments),
-      recoveryTime: this.getRecoveryTime(criteria.workoutType, duration, baseIntensity)
+      recoveryTime: this.getRecoveryTime(
+        criteria.workoutType,
+        duration,
+        baseIntensity
+      )
     };
   }
   /**
@@ -11748,37 +13661,88 @@ var MethodologyWorkoutSelector = class {
     switch (criteria.workoutType) {
       case "threshold":
         if (criteria.phase === "build" || criteria.phase === "peak") {
+          segments.push({
+            duration: 15,
+            intensity: 65,
+            zone: TRAINING_ZONES.EASY,
+            description: "Warm-up"
+          });
           segments.push(
-            { duration: 15, intensity: 65, zone: { name: "EASY" }, description: "Warm-up" }
+            {
+              duration: 15,
+              intensity: 88,
+              zone: TRAINING_ZONES.THRESHOLD,
+              description: "LT interval 1"
+            },
+            {
+              duration: 3,
+              intensity: 65,
+              zone: TRAINING_ZONES.EASY,
+              description: "Recovery"
+            },
+            {
+              duration: 15,
+              intensity: 88,
+              zone: TRAINING_ZONES.THRESHOLD,
+              description: "LT interval 2"
+            }
           );
-          segments.push(
-            { duration: 15, intensity: 88, zone: { name: "THRESHOLD" }, description: "LT interval 1" },
-            { duration: 3, intensity: 65, zone: { name: "EASY" }, description: "Recovery" },
-            { duration: 15, intensity: 88, zone: { name: "THRESHOLD" }, description: "LT interval 2" }
-          );
-          segments.push(
-            { duration: 10, intensity: 60, zone: { name: "RECOVERY" }, description: "Cool-down" }
-          );
+          segments.push({
+            duration: 10,
+            intensity: 60,
+            zone: TRAINING_ZONES.RECOVERY,
+            description: "Cool-down"
+          });
         } else {
           segments.push(
-            { duration: 10, intensity: 65, zone: { name: "EASY" }, description: "Warm-up" },
-            { duration: 25, intensity: 86, zone: { name: "THRESHOLD" }, description: "Continuous LT run" },
-            { duration: 10, intensity: 60, zone: { name: "RECOVERY" }, description: "Cool-down" }
+            {
+              duration: 10,
+              intensity: 65,
+              zone: TRAINING_ZONES.EASY,
+              description: "Warm-up"
+            },
+            {
+              duration: 25,
+              intensity: 86,
+              zone: TRAINING_ZONES.THRESHOLD,
+              description: "Continuous LT run"
+            },
+            {
+              duration: 10,
+              intensity: 60,
+              zone: TRAINING_ZONES.RECOVERY,
+              description: "Cool-down"
+            }
           );
         }
         break;
       case "long_run":
         if (criteria.phase === "build" && criteria.weekNumber > 4) {
           segments.push(
-            { duration: 40, intensity: 70, zone: { name: "EASY" }, description: "Easy start" },
-            { duration: 20, intensity: 85, zone: { name: "TEMPO" }, description: "Tempo segment" },
-            { duration: 30, intensity: 70, zone: { name: "EASY" }, description: "Easy finish" }
+            {
+              duration: 40,
+              intensity: 70,
+              zone: TRAINING_ZONES.EASY,
+              description: "Easy start"
+            },
+            {
+              duration: 20,
+              intensity: 85,
+              zone: TRAINING_ZONES.TEMPO,
+              description: "Tempo segment"
+            },
+            {
+              duration: 30,
+              intensity: 70,
+              zone: TRAINING_ZONES.EASY,
+              description: "Easy finish"
+            }
           );
         } else {
           segments.push({
             duration,
             intensity: 70,
-            zone: { name: "EASY" },
+            zone: TRAINING_ZONES.EASY,
             description: "Long run at steady pace"
           });
         }
@@ -11787,17 +13751,23 @@ var MethodologyWorkoutSelector = class {
         segments.push({
           duration,
           intensity: baseIntensity,
-          zone: { name: this.getZoneName(baseIntensity) },
+          zone: this.getZoneFromIntensity(baseIntensity),
           description: `${criteria.workoutType} workout`
         });
     }
     return {
       type: criteria.workoutType,
-      primaryZone: { name: this.getZoneName(baseIntensity) },
+      primaryZone: this.getZoneFromIntensity(baseIntensity),
       segments,
-      adaptationTarget: this.getPfitsingerAdaptationTarget(criteria.workoutType),
+      adaptationTarget: this.getPfitsingerAdaptationTarget(
+        criteria.workoutType
+      ),
       estimatedTSS: this.calculateTSS(segments),
-      recoveryTime: this.getRecoveryTime(criteria.workoutType, duration, baseIntensity)
+      recoveryTime: this.getRecoveryTime(
+        criteria.workoutType,
+        duration,
+        baseIntensity
+      )
     };
   }
   /**
@@ -11808,10 +13778,18 @@ var MethodologyWorkoutSelector = class {
   applyContextModifications(workout, criteria, warnings) {
     const modified = { ...workout };
     if (criteria.timeConstraints) {
-      const totalDuration = workout.segments.reduce((sum, seg) => sum + seg.duration, 0);
+      const totalDuration = workout.segments.reduce(
+        (sum, seg) => sum + seg.duration,
+        0
+      );
       if (totalDuration > criteria.timeConstraints) {
-        modified.segments = this.adjustWorkoutDuration(workout.segments, criteria.timeConstraints);
-        warnings.push(`Workout shortened from ${totalDuration} to ${criteria.timeConstraints} minutes due to time constraints`);
+        modified.segments = this.adjustWorkoutDuration(
+          workout.segments,
+          criteria.timeConstraints
+        );
+        warnings.push(
+          `Workout shortened from ${totalDuration} to ${criteria.timeConstraints} minutes due to time constraints`
+        );
       }
     }
     if (criteria.environmentalFactors) {
@@ -11835,7 +13813,7 @@ var MethodologyWorkoutSelector = class {
           modified.segments.unshift({
             duration: 5,
             intensity: 60,
-            zone: { name: "RECOVERY" },
+            zone: TRAINING_ZONES.RECOVERY,
             description: "Extra warm-up for cold conditions"
           });
         }
@@ -11874,7 +13852,9 @@ var MethodologyWorkoutSelector = class {
           );
           if (!hasCorrectIntensity) {
             score -= 20;
-            deductions.push("Tempo/threshold intensity outside Daniels T-pace range");
+            deductions.push(
+              "Tempo/threshold intensity outside Daniels T-pace range"
+            );
           }
         }
         if (criteria.phase === "base" && workout.type === "vo2max") {
@@ -11883,7 +13863,9 @@ var MethodologyWorkoutSelector = class {
         }
         break;
       case "lydiard":
-        const hardSegments = workout.segments.filter((seg) => seg.intensity > 85);
+        const hardSegments = workout.segments.filter(
+          (seg) => seg.intensity > 85
+        );
         const hardPercentage = hardSegments.reduce((sum, seg) => sum + seg.duration, 0) / workout.segments.reduce((sum, seg) => sum + seg.duration, 0);
         if (hardPercentage > 0.15) {
           score -= 25;
@@ -11891,7 +13873,9 @@ var MethodologyWorkoutSelector = class {
         }
         if (criteria.phase === "base" && ["vo2max", "speed"].includes(workout.type)) {
           score -= 60;
-          deductions.push("Anaerobic work inappropriate for Lydiard base phase");
+          deductions.push(
+            "Anaerobic work inappropriate for Lydiard base phase"
+          );
         }
         if (criteria.phase === "base" && workout.type === "speed") {
           score = Math.min(score, 40);
@@ -11908,9 +13892,14 @@ var MethodologyWorkoutSelector = class {
           }
         }
         if (workout.type === "long_run" && criteria.phase === "build") {
-          const totalDuration = workout.segments.reduce((sum, seg) => sum + seg.duration, 0);
+          const totalDuration = workout.segments.reduce(
+            (sum, seg) => sum + seg.duration,
+            0
+          );
           if (totalDuration >= 90 && totalDuration <= 150) {
-            const hasQualitySegment = workout.segments.some((seg) => seg.intensity >= 82);
+            const hasQualitySegment = workout.segments.some(
+              (seg) => seg.intensity >= 82
+            );
             if (!hasQualitySegment) {
               score -= 15;
               deductions.push("Medium-long run missing quality segment");
@@ -11955,7 +13944,11 @@ var MethodologyWorkoutSelector = class {
         break;
       case "hill_repeats":
         if (this.methodology === "lydiard") {
-          alternatives.push("LYDIARD_HILL_BASE", "LYDIARD_HILL_BUILD", "LYDIARD_HILL_PEAK");
+          alternatives.push(
+            "LYDIARD_HILL_BASE",
+            "LYDIARD_HILL_BUILD",
+            "LYDIARD_HILL_PEAK"
+          );
         } else {
           alternatives.push("HILL_REPEATS_6X2");
         }
@@ -11971,18 +13964,29 @@ var MethodologyWorkoutSelector = class {
     const conflicts = [];
     const avgIntensity = this.calculateAverageIntensity(workout.segments);
     if (preferences.preferredIntensity === "low" && avgIntensity > 75) {
-      conflicts.push(`Workout intensity (${avgIntensity}%) exceeds your low intensity preference. Consider adjusting expectations or methodology.`);
+      conflicts.push(
+        `Workout intensity (${avgIntensity}%) exceeds your low intensity preference. Consider adjusting expectations or methodology.`
+      );
     } else if (preferences.preferredIntensity === "high" && avgIntensity < 70) {
-      conflicts.push(`Workout intensity (${avgIntensity}%) is lower than your high intensity preference. ${this.methodology} methodology emphasizes controlled efforts.`);
+      conflicts.push(
+        `Workout intensity (${avgIntensity}%) is lower than your high intensity preference. ${this.methodology} methodology emphasizes controlled efforts.`
+      );
     }
     if (preferences.preferredIntensity === "low" && (workout.type === "tempo" || workout.type === "threshold")) {
-      conflicts.push("Tempo/threshold workouts have higher intensity than your preference indicates.");
+      conflicts.push(
+        "Tempo/threshold workouts have higher intensity than your preference indicates."
+      );
     }
-    const totalDuration = workout.segments.reduce((sum, seg) => sum + seg.duration, 0);
+    const totalDuration = workout.segments.reduce(
+      (sum, seg) => sum + seg.duration,
+      0
+    );
     const dayOfWeek = (/* @__PURE__ */ new Date()).getDay();
     const availableTime = preferences.timeConstraints?.[dayOfWeek];
     if (availableTime && totalDuration > availableTime) {
-      conflicts.push(`Workout duration (${totalDuration} min) exceeds available time (${availableTime} min). Workout has been adjusted.`);
+      conflicts.push(
+        `Workout duration (${totalDuration} min) exceeds available time (${availableTime} min). Workout has been adjusted.`
+      );
     }
     return conflicts;
   }
@@ -11990,14 +13994,20 @@ var MethodologyWorkoutSelector = class {
    * Adjust workout duration to fit time constraints
    */
   adjustWorkoutDuration(segments, targetDuration) {
-    const currentDuration = segments.reduce((sum, seg) => sum + seg.duration, 0);
+    const currentDuration = segments.reduce(
+      (sum, seg) => sum + seg.duration,
+      0
+    );
     const ratio = targetDuration / currentDuration;
     let adjustedSegments = segments.map((seg) => ({
       ...seg,
       duration: Math.floor(seg.duration * ratio)
       // Use floor to avoid exceeding
     }));
-    const adjustedTotal = adjustedSegments.reduce((sum, seg) => sum + seg.duration, 0);
+    const adjustedTotal = adjustedSegments.reduce(
+      (sum, seg) => sum + seg.duration,
+      0
+    );
     const difference = targetDuration - adjustedTotal;
     if (difference > 0) {
       const maxSegmentIndex = adjustedSegments.reduce(
@@ -12012,7 +14022,10 @@ var MethodologyWorkoutSelector = class {
    * Calculate average intensity across segments
    */
   calculateAverageIntensity(segments) {
-    const totalWeightedIntensity = segments.reduce((sum, seg) => sum + seg.intensity * seg.duration, 0);
+    const totalWeightedIntensity = segments.reduce(
+      (sum, seg) => sum + seg.intensity * seg.duration,
+      0
+    );
     const totalDuration = segments.reduce((sum, seg) => sum + seg.duration, 0);
     return Math.round(totalWeightedIntensity / totalDuration);
   }
@@ -12153,16 +14166,16 @@ var MethodologyWorkoutSelector = class {
     return Math.round(duration);
   }
   /**
-   * Get zone name from intensity
+   * Get training zone from intensity
    */
-  getZoneName(intensity) {
-    if (intensity < 60) return "RECOVERY";
-    if (intensity < 70) return "EASY";
-    if (intensity < 80) return "STEADY";
-    if (intensity < 87) return "TEMPO";
-    if (intensity < 92) return "THRESHOLD";
-    if (intensity < 97) return "VO2_MAX";
-    return "NEUROMUSCULAR";
+  getZoneFromIntensity(intensity) {
+    if (intensity < 60) return TRAINING_ZONES.RECOVERY;
+    if (intensity < 70) return TRAINING_ZONES.EASY;
+    if (intensity < 80) return TRAINING_ZONES.STEADY;
+    if (intensity < 87) return TRAINING_ZONES.TEMPO;
+    if (intensity < 92) return TRAINING_ZONES.THRESHOLD;
+    if (intensity < 97) return TRAINING_ZONES.VO2_MAX;
+    return TRAINING_ZONES.NEUROMUSCULAR;
   }
   /**
    * Get recovery time based on workout
@@ -12351,13 +14364,15 @@ var MethodologyWorkoutSelector = class {
       return {
         workout: {
           type: "recovery",
-          primaryZone: { name: "RECOVERY" },
-          segments: [{
-            duration: 0,
-            intensity: 0,
-            zone: { name: "RECOVERY" },
-            description: "Complete rest day - no running"
-          }],
+          primaryZone: TRAINING_ZONES.RECOVERY,
+          segments: [
+            {
+              duration: 0,
+              intensity: 0,
+              zone: TRAINING_ZONES.RECOVERY,
+              description: "Complete rest day - no running"
+            }
+          ],
           adaptationTarget: "Full recovery and adaptation",
           estimatedTSS: 0,
           recoveryTime: 0
@@ -12400,8 +14415,15 @@ var CustomWorkoutGenerator = class {
       constraints = {},
       preferences
     } = parameters;
-    const adjustedDuration = this.applyDurationConstraints(targetDuration, constraints);
-    const adjustedIntensity = this.applyIntensityConstraints(targetIntensity, constraints, environmentalFactors);
+    const adjustedDuration = this.applyDurationConstraints(
+      targetDuration,
+      constraints
+    );
+    const adjustedIntensity = this.applyIntensityConstraints(
+      targetIntensity,
+      constraints,
+      environmentalFactors
+    );
     const segments = this.generateMethodologySegments(
       type,
       phase,
@@ -12414,10 +14436,22 @@ var CustomWorkoutGenerator = class {
       equipment
     );
     const workout = this.createWorkoutFromSegments(type, modifiedSegments);
-    const compliance = this.calculateMethodologyCompliance(workout, type, phase);
+    const compliance = this.calculateMethodologyCompliance(
+      workout,
+      type,
+      phase
+    );
     const alternatives = compliance < 80 ? this.generateAlternatives(parameters) : void 0;
-    const rationale = this.buildRationale(type, phase, constraints, environmentalFactors);
-    const constraintWarnings = this.collectConstraintWarnings(parameters, workout);
+    const rationale = this.buildRationale(
+      type,
+      phase,
+      constraints,
+      environmentalFactors
+    );
+    const constraintWarnings = this.collectConstraintWarnings(
+      parameters,
+      workout
+    );
     return {
       workout,
       rationale,
@@ -12433,11 +14467,26 @@ var CustomWorkoutGenerator = class {
   generateMethodologySegments(type, phase, duration, targetIntensity) {
     switch (this.methodology) {
       case "daniels":
-        return this.generateDanielsSegments(type, phase, duration, targetIntensity);
+        return this.generateDanielsSegments(
+          type,
+          phase,
+          duration,
+          targetIntensity
+        );
       case "lydiard":
-        return this.generateLydiardSegments(type, phase, duration, targetIntensity);
+        return this.generateLydiardSegments(
+          type,
+          phase,
+          duration,
+          targetIntensity
+        );
       case "pfitzinger":
-        return this.generatePfitsingerSegments(type, phase, duration, targetIntensity);
+        return this.generatePfitsingerSegments(
+          type,
+          phase,
+          duration,
+          targetIntensity
+        );
       default:
         return this.generateDefaultSegments(type, duration, targetIntensity);
     }
@@ -12689,7 +14738,9 @@ var CustomWorkoutGenerator = class {
           });
           const intervalDuration = Math.min(20, workTime / 2.5);
           const recoveryDuration = 3;
-          const numIntervals = Math.floor(workTime / (intervalDuration + recoveryDuration));
+          const numIntervals = Math.floor(
+            workTime / (intervalDuration + recoveryDuration)
+          );
           for (let i = 0; i < numIntervals; i++) {
             segments.push({
               duration: intervalDuration,
@@ -12844,7 +14895,10 @@ var CustomWorkoutGenerator = class {
       }
     }
     if (environmentalFactors?.altitude && environmentalFactors.altitude > 1500) {
-      const altitudeReduction = Math.min(5, Math.floor(environmentalFactors.altitude / 1e3));
+      const altitudeReduction = Math.min(
+        5,
+        Math.floor(environmentalFactors.altitude / 1e3)
+      );
       modifiedSegments = modifiedSegments.map((seg) => ({
         ...seg,
         intensity: Math.max(seg.intensity - altitudeReduction, 50),
@@ -12877,7 +14931,11 @@ var CustomWorkoutGenerator = class {
       segments,
       adaptationTarget: this.getAdaptationTarget(type),
       estimatedTSS: this.calculateTSS(segments),
-      recoveryTime: this.calculateRecoveryTime(type, totalDuration, avgIntensity)
+      recoveryTime: this.calculateRecoveryTime(
+        type,
+        totalDuration,
+        avgIntensity
+      )
     };
   }
   /**
@@ -12888,17 +14946,24 @@ var CustomWorkoutGenerator = class {
     switch (this.methodology) {
       case "daniels":
         if (type === "tempo" || type === "threshold") {
-          const hasTPace = workout.segments.some((seg) => seg.intensity >= 86 && seg.intensity <= 90);
+          const hasTPace = workout.segments.some(
+            (seg) => seg.intensity >= 86 && seg.intensity <= 90
+          );
           if (!hasTPace) score -= 20;
         }
         if (type === "vo2max") {
-          const hasIPace = workout.segments.some((seg) => seg.intensity >= 93 && seg.intensity <= 97);
+          const hasIPace = workout.segments.some(
+            (seg) => seg.intensity >= 93 && seg.intensity <= 97
+          );
           if (!hasIPace) score -= 20;
         }
         break;
       case "lydiard":
         const hardTime = workout.segments.filter((seg) => seg.intensity > 85).reduce((sum, seg) => sum + seg.duration, 0);
-        const totalTime = workout.segments.reduce((sum, seg) => sum + seg.duration, 0);
+        const totalTime = workout.segments.reduce(
+          (sum, seg) => sum + seg.duration,
+          0
+        );
         const hardPercentage = hardTime / totalTime;
         if (hardPercentage > 0.2) score -= 30;
         if (phase === "base" && hardPercentage > 0.1) score -= 20;
@@ -12908,7 +14973,9 @@ var CustomWorkoutGenerator = class {
         break;
       case "pfitzinger":
         if ((type === "tempo" || type === "threshold") && phase !== "base") {
-          const hasLTWork = workout.segments.some((seg) => seg.intensity >= 84 && seg.intensity <= 88);
+          const hasLTWork = workout.segments.some(
+            (seg) => seg.intensity >= 84 && seg.intensity <= 88
+          );
           if (!hasLTWork) score -= 25;
         }
         break;
@@ -12981,18 +15048,27 @@ var CustomWorkoutGenerator = class {
   collectConstraintWarnings(parameters, workout) {
     const warnings = [];
     if (parameters.constraints?.maxDuration) {
-      const totalDuration = workout.segments.reduce((sum, seg) => sum + seg.duration, 0);
+      const totalDuration = workout.segments.reduce(
+        (sum, seg) => sum + seg.duration,
+        0
+      );
       if (totalDuration > parameters.constraints.maxDuration) {
-        warnings.push(`Workout duration (${totalDuration}min) exceeds maximum constraint (${parameters.constraints.maxDuration}min)`);
+        warnings.push(
+          `Workout duration (${totalDuration}min) exceeds maximum constraint (${parameters.constraints.maxDuration}min)`
+        );
       }
     }
     if (parameters.environmentalFactors?.altitude && parameters.environmentalFactors.altitude > 2500) {
       warnings.push("High altitude may significantly impact performance");
     }
     if (parameters.preferences?.preferredIntensity === "low") {
-      const hasHighIntensity = workout.segments.some((seg) => seg.intensity > 80);
+      const hasHighIntensity = workout.segments.some(
+        (seg) => seg.intensity > 80
+      );
       if (hasHighIntensity && parameters.type === "tempo") {
-        warnings.push("Workout contains high intensity segments despite low intensity preference");
+        warnings.push(
+          "Workout contains high intensity segments despite low intensity preference"
+        );
       }
     }
     return warnings;
@@ -13237,7 +15313,9 @@ var CustomWorkoutGenerator = class {
     const base = baseRecovery[type] || 24;
     const intensityMultiplier = Math.max(1, avgIntensity / 80);
     const durationMultiplier = Math.max(0.5, duration / 60);
-    const calculatedRecovery = Math.round(base * intensityMultiplier * durationMultiplier);
+    const calculatedRecovery = Math.round(
+      base * intensityMultiplier * durationMultiplier
+    );
     return Math.max(base, calculatedRecovery);
   }
 };
@@ -13262,19 +15340,37 @@ var WorkoutProgressionSystem = class {
     if (!rule) {
       return { ...baseWorkout };
     }
-    const progressionMultiplier = this.calculateProgressionMultiplier(rule, parameters);
+    const progressionMultiplier = this.calculateProgressionMultiplier(
+      rule,
+      parameters
+    );
     const progressedSegments = baseWorkout.segments.map((segment) => {
-      const newDuration = this.progressDuration(segment.duration, progressionMultiplier, rule);
-      const newIntensity = this.progressIntensity(segment.intensity, progressionMultiplier, rule, parameters.phase);
+      const newDuration = this.progressDuration(
+        segment.duration,
+        progressionMultiplier,
+        rule
+      );
+      const newIntensity = this.progressIntensity(
+        segment.intensity,
+        progressionMultiplier,
+        rule,
+        parameters.phase
+      );
       return {
         ...segment,
         duration: newDuration,
         intensity: newIntensity,
-        description: this.updateProgressionDescription(segment.description, progressionMultiplier)
+        description: this.updateProgressionDescription(
+          segment.description,
+          progressionMultiplier
+        )
       };
     });
     const newTSS = this.calculateProgressedTSS(progressedSegments);
-    const newRecoveryTime = this.calculateProgressedRecoveryTime(baseWorkout.type, progressedSegments);
+    const newRecoveryTime = this.calculateProgressedRecoveryTime(
+      baseWorkout.type,
+      progressedSegments
+    );
     return {
       ...baseWorkout,
       segments: progressedSegments,
@@ -13317,7 +15413,10 @@ var WorkoutProgressionSystem = class {
     }
     const baseTemplate = WORKOUT_TEMPLATES[this.getWorkoutTemplateKey(suitableSubstitution.type)];
     if (!baseTemplate) {
-      const originalDuration = originalWorkout.segments.reduce((sum, seg) => sum + seg.duration, 0);
+      const originalDuration = originalWorkout.segments.reduce(
+        (sum, seg) => sum + seg.duration,
+        0
+      );
       const targetDuration = constraints?.availableTime ? Math.min(originalDuration, constraints.availableTime) : originalDuration;
       const customResult = this.customGenerator.generateWorkout({
         type: suitableSubstitution.type,
@@ -13336,10 +15435,16 @@ var WorkoutProgressionSystem = class {
     }
     let adjustedWorkout = { ...baseTemplate };
     if (suitableSubstitution.intensityAdjustment) {
-      adjustedWorkout = this.adjustWorkoutIntensity(adjustedWorkout, suitableSubstitution.intensityAdjustment);
+      adjustedWorkout = this.adjustWorkoutIntensity(
+        adjustedWorkout,
+        suitableSubstitution.intensityAdjustment
+      );
     }
     if (constraints?.availableTime) {
-      const totalDuration = adjustedWorkout.segments.reduce((sum, seg) => sum + seg.duration, 0);
+      const totalDuration = adjustedWorkout.segments.reduce(
+        (sum, seg) => sum + seg.duration,
+        0
+      );
       if (totalDuration > constraints.availableTime) {
         const scaleFactor = constraints.availableTime / totalDuration;
         adjustedWorkout = {
@@ -13377,7 +15482,11 @@ var WorkoutProgressionSystem = class {
           recommendedDuration: Math.min(30, baseRecommendation.maxDuration),
           workoutTypes: ["recovery", "cross_training"],
           rationale: `Low recovery state requires gentle movement. ${methodology} methodology emphasizes ${this.getRecoveryPhilosophy(methodology)}.`,
-          restrictions: ["Avoid all high-intensity work", "Keep effort conversational", "Stop if fatigue increases"]
+          restrictions: [
+            "Avoid all high-intensity work",
+            "Keep effort conversational",
+            "Stop if fatigue increases"
+          ]
         };
       case "medium":
         return {
@@ -13385,7 +15494,11 @@ var WorkoutProgressionSystem = class {
           recommendedDuration: Math.min(60, baseRecommendation.maxDuration),
           workoutTypes: ["easy", "recovery", "steady"],
           rationale: `Medium recovery allows for easy aerobic work. Focus on maintaining movement quality.`,
-          restrictions: ["No tempo or harder efforts", "Monitor fatigue levels", "Shorten if needed"]
+          restrictions: [
+            "No tempo or harder efforts",
+            "Monitor fatigue levels",
+            "Shorten if needed"
+          ]
         };
       case "high":
         return {
@@ -13427,7 +15540,7 @@ var WorkoutProgressionSystem = class {
           build: 1,
           // Normal progression
           peak: 1.2,
-          // Faster progression  
+          // Faster progression
           taper: 0,
           // No progression
           recovery: 0
@@ -13523,7 +15636,7 @@ var WorkoutProgressionSystem = class {
     });
   }
   /**
-   * Initialize methodology-specific substitution rules  
+   * Initialize methodology-specific substitution rules
    */
   initializeSubstitutionRules(methodology) {
     const substitutionRules = [
@@ -13540,7 +15653,10 @@ var WorkoutProgressionSystem = class {
           {
             type: "threshold",
             priority: 2,
-            conditions: { phase: ["build", "peak"], methodology: ["pfitzinger"] }
+            conditions: {
+              phase: ["build", "peak"],
+              methodology: ["pfitzinger"]
+            }
           },
           {
             type: "easy",
@@ -13643,17 +15759,24 @@ var WorkoutProgressionSystem = class {
     if (parameters.phase === "taper" || parameters.phase === "recovery") {
       return 1;
     }
-    const fitnessModifier = this.getFitnessProgressionModifier(parameters.fitnessLevel);
+    const fitnessModifier = this.getFitnessProgressionModifier(
+      parameters.fitnessLevel
+    );
     let progressionMultiplier;
     switch (rule.progressionType) {
       case "linear":
         progressionMultiplier = 1 + rule.parameters.baseIncrease * parameters.currentWeek;
         break;
       case "exponential":
-        progressionMultiplier = Math.pow(1 + rule.parameters.baseIncrease, parameters.currentWeek);
+        progressionMultiplier = Math.pow(
+          1 + rule.parameters.baseIncrease,
+          parameters.currentWeek
+        );
         break;
       case "stepped":
-        const stepCount = Math.floor(parameters.currentWeek / (rule.parameters.stepSize || 2));
+        const stepCount = Math.floor(
+          parameters.currentWeek / (rule.parameters.stepSize || 2)
+        );
         progressionMultiplier = 1 + rule.parameters.baseIncrease * stepCount;
         break;
       case "plateau":
@@ -13668,7 +15791,10 @@ var WorkoutProgressionSystem = class {
         progressionMultiplier = 1;
     }
     progressionMultiplier *= phaseModifier * fitnessModifier;
-    progressionMultiplier = Math.min(progressionMultiplier, 1 + rule.parameters.maxIncrease);
+    progressionMultiplier = Math.min(
+      progressionMultiplier,
+      1 + rule.parameters.maxIncrease
+    );
     return Math.max(progressionMultiplier, 1);
   }
   /**
@@ -13728,10 +15854,6 @@ var WorkoutProgressionSystem = class {
     if (fitness.trainingAge) {
       score += Math.min(fitness.trainingAge / 10 * 2, 2);
     }
-    if (fitness.recentRecoveryMetrics) {
-      const avgRecovery = fitness.recentRecoveryMetrics.reduce((sum, m) => sum + m.overallScore, 0) / fitness.recentRecoveryMetrics.length;
-      score += Math.min(avgRecovery / 10, 1);
-    }
     return Math.round(score * 10) / 10;
   }
   /**
@@ -13753,7 +15875,9 @@ var WorkoutProgressionSystem = class {
     const baseRecovery = RECOVERY_MULTIPLIERS[type] || 1;
     const intensityMultiplier = avgIntensity / 80;
     const durationMultiplier = totalDuration / 60;
-    return Math.round(24 * baseRecovery * intensityMultiplier * durationMultiplier);
+    return Math.round(
+      24 * baseRecovery * intensityMultiplier * durationMultiplier
+    );
   }
   /**
    * Update workout description to reflect progression
@@ -13864,21 +15988,37 @@ var WorkoutProgressionSystem = class {
 export {
   ADAPTATION_TIMELINE,
   AdvancedTrainingPlanGenerator,
+  ArrayTypeAssertions,
+  ArrayUtils,
   BaseTrainingPhilosophy,
   CSVFormatter,
   CacheManager,
   CalculationProfiler,
+  CollectionBuilder,
   CustomWorkoutGenerator,
+  DEFAULT_EXPORT_OPTIONS,
+  DEFAULT_LOGGING_CONFIG,
+  DEVELOPMENT_LOGGING_CONFIG,
   ENVIRONMENTAL_FACTORS,
+  EXPORT_OPTION_VALIDATORS,
+  EXPORT_VALIDATORS,
   EnhancedJSONFormatter,
   ExportUtils,
+  FunctionalArrayUtils,
   GarminFormatter,
   INTENSITY_MODELS,
   JSONFormatter,
   LOAD_THRESHOLDS,
+  LOGGING_PRESETS,
+  LazyMethodologyLoader,
   METHODOLOGY_INTENSITY_DISTRIBUTIONS,
   METHODOLOGY_PHASE_TARGETS,
   MemoryMonitor,
+  MethodologyAdaptationEngine,
+  MethodologyAdaptationUtils,
+  MethodologyCacheWarmer,
+  MethodologyCustomizationEngine,
+  MethodologyRecommendationEngine,
   MethodologyWorkoutSelector,
   MultiFormatExporter,
   OptimizationAnalyzer,
@@ -13887,8 +16027,10 @@ export {
   PROGRESSION_RATES,
   PhilosophyFactory,
   PhilosophyUtils,
+  ProgressiveEnhancementManager,
   RACE_DISTANCES,
   RECOVERY_MULTIPLIERS,
+  SILENT_LOGGING_CONFIG,
   SmartAdaptationEngine,
   StravaFormatter,
   TCXFormatter,
@@ -13896,12 +16038,20 @@ export {
   TRAINING_ZONES,
   TrainingPeaksFormatter,
   TrainingPlanGenerator,
+  TypeSafeErrorHandler,
+  TypeValidationError,
+  TypeValidationErrorFactory,
+  TypedArray,
+  TypedResultUtils,
+  TypedValidationResultBuilder,
+  ValidationErrorAggregator,
   WORKOUT_DURATIONS,
   WORKOUT_EMPHASIS,
   WORKOUT_TEMPLATES,
   WorkoutProgressionSystem,
   analyzeWeeklyPatterns,
   batchCalculateVDOT,
+  batchSelectWorkoutsCached,
   cacheInstances,
   calculateCriticalSpeed,
   calculateCriticalSpeedCached,
@@ -13909,6 +16059,7 @@ export {
   calculateFitnessMetricsCached,
   calculateInjuryRisk,
   calculateLactateThreshold,
+  calculateMethodologyPacesCached,
   calculatePersonalizedZones,
   calculateRecoveryScore,
   calculateTSS,
@@ -13917,10 +16068,80 @@ export {
   calculateTrainingPacesCached,
   calculateVDOT,
   calculateVDOTCached,
+  comparePhilosophiesCached,
+  compareSeverity,
   createAdaptationEngine,
   createCustomWorkout,
+  createEmptyScores,
   createExportManager,
+  createExportOptions,
+  createExportTypeGuard,
+  createExportValidator,
+  createExtendedCompletedWorkout,
+  createExtendedProgressData,
+  createExtendedRecoveryMetrics,
+  createInvalidDataAssertion,
+  createLogger,
+  createMockConfig,
+  createSchemaGuard,
+  createTestAssertion,
+  createValidationGuard,
+  defaultLogger,
+  developmentLogger,
   estimateRunningEconomy,
+  generatePlanCached,
+  getHighestSeverity,
+  getIntensityConfig,
+  getLoggerFromOptions,
+  getMethodologyConfigCached,
+  getRecoveryConfig,
+  getVolumeConfig,
   getZoneByIntensity,
-  iCalFormatter
+  hasIntensityConfig,
+  hasRecoveryConfig,
+  hasVolumeConfig,
+  iCalFormatter,
+  isAdvancedPlanConfig,
+  isBaseExportOptions,
+  isCSVOptions,
+  isCompletedWorkout,
+  isEnvironmentalFactors,
+  isExtendedCompletedWorkout,
+  isExtendedProgressData,
+  isExtendedRecoveryMetrics,
+  isFitnessAssessment,
+  isJSONOptions,
+  isLogger,
+  isOptionsForFormat,
+  isPDFOptions,
+  isPlannedWorkout,
+  isProgressData,
+  isRecoveryMetrics,
+  isRunData,
+  isTargetRace,
+  isTestableGenerator,
+  isTrainingBlock,
+  isTrainingPlan,
+  isTrainingPlanConfig,
+  isTrainingPreferences,
+  isValidPlannedWorkout,
+  isValidTrainingPlan,
+  isiCalOptions,
+  methodologyCacheInstances,
+  methodologyLoader,
+  primitiveGuards,
+  safeTestCast,
+  selectWorkoutCached,
+  silentLogger,
+  testOptionsFactory,
+  testWorkoutFactory,
+  validateExport,
+  validateExportOptions,
+  validateLoggingConfig,
+  validateTestResult,
+  validationGuards,
+  validationUtils,
+  withAsyncPerformanceMonitoring,
+  withLogging,
+  withPerformanceMonitoring
 };

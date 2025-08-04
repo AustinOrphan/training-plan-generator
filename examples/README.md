@@ -24,6 +24,7 @@ This directory contains practical examples demonstrating how to use the Training
 - [**adaptive-training.ts**](./adaptive-training.ts) - Implement adaptive plan modifications
 - [**season-planning.ts**](./season-planning.ts) - Multi-race season management
 - [**performance-monitoring.ts**](./performance-monitoring.ts) - Track and optimize performance
+- [**logging-integration-examples.ts**](./logging-integration-examples.ts) - Configurable logging system integration patterns
 
 ## Integration Examples
 
@@ -55,6 +56,9 @@ npx ts-node examples/pfitzinger-plan-examples.ts
 npx ts-node examples/interactive-methodology-demo.ts
 npx ts-node examples/methodology-customization-showcase.ts
 
+# Run logging integration examples
+npx ts-node examples/logging-integration-examples.ts
+
 # Or compile and run
 npm run build
 node dist/examples/basic-plan-generation.js
@@ -76,6 +80,16 @@ The interactive examples provide:
 - Customization options demonstration
 - Export format examples
 - Research validation insights
+
+## System Integration Examples
+
+The logging integration examples demonstrate:
+
+- **LoggableOptions Usage**: Custom options with configurable logging for any system
+- **Export System Integration**: Automatic logging capabilities through BaseExportOptions  
+- **Error Handling Integration**: Options-aware error handlers with consistent logging
+- **Environment Configurations**: Preset-based logging for development, production, and testing
+- **Migration Patterns**: Best practices for moving from console statements to configurable logging
 
 ## Example Data
 

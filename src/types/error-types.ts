@@ -13,6 +13,7 @@ import {
   SchemaValidationError,
   TypedResult,
 } from "./base-types";
+import { defaultLogger, getLoggerFromOptions, type Logger, type LoggingConfig } from "./logging";
 import type { ValidationError, ValidationWarning } from "../validation";
 
 /**
@@ -110,6 +111,7 @@ export class TypeValidationErrorFactory {
       schemaName,
       failedProperties,
       actualValue,
+      context,
     );
   }
 
@@ -461,21 +463,25 @@ export class ValidationErrorAggregator {
 
 /**
  * Type-safe error handler for common error scenarios
- * Provides standardized error handling patterns
+ * Provides standardized error handling patterns with configurable logging
  */
 export class TypeSafeErrorHandler {
   /**
    * Handle type validation errors with proper logging and user feedback
+   * 
+   * @param error The type validation error to handle
+   * @param context Context string for the error (default: "validation")
+   * @param logger Optional logger instance (default: defaultLogger)
    */
   static handleValidationError(
     error: TypeValidationError,
     context: string = "validation",
+    logger: Logger = defaultLogger,
   ): TypedResult<never, string> {
     const userMessage = `${context}: ${error.message}`;
 
     // Log detailed error information for debugging
-    // eslint-disable-next-line no-console
-    console.error("Type validation error:", {
+    logger.error("Type validation error:", {
       message: error.message,
       expectedType: error.expectedType,
       actualValue: error.actualValue,
@@ -488,15 +494,19 @@ export class TypeSafeErrorHandler {
 
   /**
    * Handle schema validation errors with detailed feedback
+   * 
+   * @param error The schema validation error to handle
+   * @param context Context string for the error (default: "schema-validation")
+   * @param logger Optional logger instance (default: defaultLogger)
    */
   static handleSchemaError(
     error: SchemaValidationError,
     context: string = "schema-validation",
+    logger: Logger = defaultLogger,
   ): TypedResult<never, string> {
     const userMessage = `${context}: Schema '${error.schemaName}' validation failed. Issues with: ${error.failedProperties.join(", ")}`;
 
-    // eslint-disable-next-line no-console
-    console.error("Schema validation error:", {
+    logger.error("Schema validation error:", {
       schemaName: error.schemaName,
       failedProperties: error.failedProperties,
       actualValue: error.actualValue,
@@ -525,6 +535,170 @@ export class TypeSafeErrorHandler {
       }
 
       const message = error instanceof Error ? error.message : String(error);
+      return TypedResultUtils.error(`${context}: ${message}`);
+    }
+  }
+
+  /**
+   * Handle validation error using logger from options
+   * 
+   * Delegates to the existing handleValidationError method while using the logger
+   * configuration from the provided options object. This method provides consistent
+   * error handling that respects the logging configuration used throughout the operation.
+   * 
+   * @param error The type validation error to handle
+   * @param context Context string for the error (default: "validation")
+   * @param options Options object that may contain logging configuration
+   * @returns TypedResult with error message for user feedback
+   * 
+   * @example
+   * ```typescript
+   * // Basic usage with options
+   * const options: BaseExportOptions = {
+   *   includePaces: true,
+   *   logging: { level: 'debug', backend: 'console' }
+   * };
+   * 
+   * const result = TypeSafeErrorHandler.handleValidationErrorWithOptions(
+   *   error,
+   *   "export-validation",
+   *   options
+   * );
+   * 
+   * // Without logging config - uses default logger
+   * const result2 = TypeSafeErrorHandler.handleValidationErrorWithOptions(
+   *   error,
+   *   "validation",
+   *   { customField: "value" }
+   * );
+   * 
+   * // No options - uses default logger
+   * const result3 = TypeSafeErrorHandler.handleValidationErrorWithOptions(error);
+   * ```
+   */
+  static handleValidationErrorWithOptions(
+    error: TypeValidationError,
+    context: string = "validation",
+    options?: { logging?: LoggingConfig }
+  ): TypedResult<never, string> {
+    const logger = getLoggerFromOptions(options);
+    return this.handleValidationError(error, context, logger);
+  }
+
+  /**
+   * Handle schema error using logger from options
+   * 
+   * Delegates to the existing handleSchemaError method while using the logger
+   * configuration from the provided options object. This ensures that schema
+   * validation errors are logged using the same configuration as the rest of the operation.
+   * 
+   * @param error The schema validation error to handle
+   * @param context Context string for the error (default: "schema-validation")
+   * @param options Options object that may contain logging configuration
+   * @returns TypedResult with error message for user feedback
+   * 
+   * @example
+   * ```typescript
+   * // With export options containing logging config
+   * const exportOptions: BaseExportOptions = {
+   *   includePaces: true,
+   *   logging: { level: 'info', backend: 'console' }
+   * };
+   * 
+   * const result = TypeSafeErrorHandler.handleSchemaErrorWithOptions(
+   *   schemaError,
+   *   "export-schema-validation",
+   *   exportOptions
+   * );
+   * 
+   * // With custom options
+   * const customOptions = {
+   *   customField: "value",
+   *   logging: { level: 'warn', backend: 'console' }
+   * };
+   * 
+   * const result2 = TypeSafeErrorHandler.handleSchemaErrorWithOptions(
+   *   schemaError,
+   *   "custom-validation",
+   *   customOptions
+   * );
+   * ```
+   */
+  static handleSchemaErrorWithOptions(
+    error: SchemaValidationError,
+    context: string = "schema-validation",
+    options?: { logging?: LoggingConfig }
+  ): TypedResult<never, string> {
+    const logger = getLoggerFromOptions(options);
+    return this.handleSchemaError(error, context, logger);
+  }
+
+  /**
+   * Handle any error with options-based logging
+   * 
+   * Provides general error handling for operations that may throw various types of errors,
+   * using the logger configuration from the provided options object. This method catches
+   * and handles TypeValidationError, SchemaValidationError, and generic Error instances
+   * with consistent logging behavior.
+   * 
+   * @template T The return type of the operation
+   * @param operation Function to execute that may throw errors
+   * @param context Context string for error reporting (default: "operation")
+   * @param options Options object that may contain logging configuration
+   * @returns TypedResult with success data or error message
+   * 
+   * @example
+   * ```typescript
+   * // Export operation with logging configuration
+   * const exportOptions: BaseExportOptions = {
+   *   includePaces: true,
+   *   logging: { level: 'debug', backend: 'console' }
+   * };
+   * 
+   * const result = TypeSafeErrorHandler.handleErrorWithOptions(
+   *   () => exportPlan(plan, exportOptions),
+   *   "pdf-export",
+   *   exportOptions
+   * );
+   * 
+   * // Database operation with custom logging
+   * const dbOptions = {
+   *   timeout: 5000,
+   *   logging: { level: 'error', backend: 'console' }
+   * };
+   * 
+   * const dbResult = TypeSafeErrorHandler.handleErrorWithOptions(
+   *   () => database.save(data),
+   *   "database-save",
+   *   dbOptions
+   * );
+   * 
+   * // No options - uses default logger
+   * const simpleResult = TypeSafeErrorHandler.handleErrorWithOptions(
+   *   () => riskyOperation(),
+   *   "simple-operation"
+   * );
+   * ```
+   */
+  static handleErrorWithOptions<T>(
+    operation: () => T,
+    context: string = "operation",
+    options?: { logging?: LoggingConfig }
+  ): TypedResult<T, string> {
+    try {
+      const result = operation();
+      return TypedResultUtils.success(result);
+    } catch (error) {
+      if (error instanceof TypeValidationError) {
+        return this.handleValidationErrorWithOptions(error, context, options);
+      }
+      if (error instanceof SchemaValidationError) {
+        return this.handleSchemaErrorWithOptions(error, context, options);
+      }
+      
+      const logger = getLoggerFromOptions(options);
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`${context}: ${message}`);
       return TypedResultUtils.error(`${context}: ${message}`);
     }
   }

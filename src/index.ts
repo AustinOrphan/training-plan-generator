@@ -28,6 +28,26 @@ export * from "./types/export-validation-types";
 export * from "./types/array-utilities";
 export * from "./types/type-guards";
 
+// Logging System
+export {
+  Logger,
+  LoggingConfig,
+  LogLevel,
+  LogBackend,
+  createLogger,
+  defaultLogger,
+  silentLogger,
+  developmentLogger,
+  validateLoggingConfig,
+  isLogger,
+  getLoggerFromOptions,
+  withLogging,
+  LOGGING_PRESETS,
+  DEFAULT_LOGGING_CONFIG,
+  SILENT_LOGGING_CONFIG,
+  DEVELOPMENT_LOGGING_CONFIG,
+} from "./types/logging";
+
 // Test Types (conditional export for development/testing)
 export * from "./types/test-types";
 export * from "./types/test-extensions";
